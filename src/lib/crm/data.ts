@@ -336,6 +336,20 @@ export async function deleteCompany(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.companies, id);
 }
 
+/** Write the app-generated AI fields (not settable via the CRUD whitelist). */
+export async function saveCompanyBrief(
+  id: string,
+  brief: string,
+  nextBestAction: string,
+): Promise<Company> {
+  const F = FIELDS.companies;
+  const rec = await updateRecord(AIRTABLE_BASE_ID, TABLES.companies, id, {
+    [F.aiBrief]: brief,
+    [F.nextBestAction]: nextBestAction,
+  });
+  return toCompany(rec);
+}
+
 // --- contacts ---------------------------------------------------------------
 
 export async function listContacts(opts: { q?: string; limit?: number } = {}): Promise<Contact[]> {

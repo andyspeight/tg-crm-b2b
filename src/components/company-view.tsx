@@ -16,6 +16,7 @@ import {
   Phone,
   Plus,
   Radar,
+  Sparkles,
   Star,
   StickyNote,
   Trash2,
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Activity, ActivityType, Company, Contact, Deal, Task } from "@/lib/crm/types";
-import { Button, EmptyState, IconButton, Modal } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { HealthBadge, LifecycleBadge, StageBadge } from "@/components/badges";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -78,6 +79,8 @@ export function CompanyView({
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [loggingActivity, setLoggingActivity] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState("");
 
   const contactOptions = contacts.map((c) => ({ id: c.id, name: c.name }));
   const dealOptions = deals.map((d) => ({ id: d.id, name: d.name }));
@@ -182,6 +185,22 @@ export function CompanyView({
   async function removeTask(t: Task) {
     await api(`/api/tasks/${t.id}`, { method: "DELETE" });
     await refreshTasks();
+  }
+
+  async function generateBrief() {
+    setBriefError("");
+    setBriefLoading(true);
+    try {
+      const data = await api<{ brief: string; nextBestAction: string }>(
+        `/api/ai/brief/${company.id}`,
+        { method: "POST" },
+      );
+      setCompany((c) => ({ ...c, aiBrief: data.brief, nextBestAction: data.nextBestAction }));
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : "Could not generate the brief");
+    } finally {
+      setBriefLoading(false);
+    }
   }
 
   return (
@@ -444,8 +463,41 @@ export function CompanyView({
             )}
           </Section>
 
-          <Section title="AI brief">
-            <EmptyState title="No brief yet" hint="The AI Account Brief lands in Stage 3." />
+          <Section
+            title="AI brief"
+            action={
+              company.aiBrief ? (
+                <Button variant="secondary" size="sm" onClick={generateBrief} disabled={briefLoading}>
+                  {briefLoading ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Refresh
+                </Button>
+              ) : null
+            }
+          >
+            {company.aiBrief ? (
+              <div className="space-y-3">
+                <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-fg-muted">
+                  {company.aiBrief}
+                </p>
+                {company.nextBestAction ? (
+                  <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
+                      Next best action
+                    </p>
+                    <p className="mt-0.5 text-[13px] text-fg">{company.nextBestAction}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="text-center">
+                <Button onClick={generateBrief} disabled={briefLoading}>
+                  {briefLoading ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Generate brief
+                </Button>
+                <p className="mt-2 text-[12px] text-fg-subtle">
+                  Summarises the account, deal state and the next move.
+                </p>
+              </div>
+            )}
+            {briefError ? <p className="mt-2 text-[13px] text-danger">{briefError}</p> : null}
           </Section>
 
           <button
