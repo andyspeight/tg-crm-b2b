@@ -27,6 +27,7 @@ import type { Activity, ActivityType, Company, Contact, Deal, Task } from "@/lib
 import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { HealthBadge, LifecycleBadge, StageBadge } from "@/components/badges";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
+import { OutreachModal } from "@/components/outreach-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 
 function isOverdue(dateStr?: string): boolean {
@@ -81,6 +82,7 @@ export function CompanyView({
   const [addingTask, setAddingTask] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState("");
+  const [outreachOpen, setOutreachOpen] = useState(false);
 
   const contactOptions = contacts.map((c) => ({ id: c.id, name: c.name }));
   const dealOptions = deals.map((d) => ({ id: d.id, name: d.name }));
@@ -254,6 +256,9 @@ export function CompanyView({
                 className={company.watchlist ? "fill-current text-warning" : ""}
               />
               {company.watchlist ? "Watching" : "Watch"}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setOutreachOpen(true)}>
+              <Mail size={15} strokeWidth={1.75} /> Outreach
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setEditingCompany(true)}>
               <Pencil size={15} strokeWidth={1.75} /> Edit
@@ -577,6 +582,13 @@ export function CompanyView({
           onCancel={() => setAddingTask(false)}
         />
       </Modal>
+
+      <OutreachModal
+        open={outreachOpen}
+        onClose={() => setOutreachOpen(false)}
+        company={{ id: company.id, name: company.name }}
+        contacts={contacts.map((c) => ({ id: c.id, name: c.name, email: c.email, role: c.role }))}
+      />
     </div>
   );
 }
