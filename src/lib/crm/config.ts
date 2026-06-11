@@ -98,6 +98,17 @@ export const MEANINGFUL_ACTIVITY_TYPES = ["Note", "Email", "Call", "Meeting", "D
 export const TASK_STATUSES = ["Open", "In Progress", "Done"] as const;
 export const TASK_CREATED_BY = ["Manual", "AI-Suggested"] as const;
 
+export const TOUCH_TYPES = [
+  "Check-In Call",
+  "QBR",
+  "Training Nudge",
+  "Feature Announcement",
+  "Renewal Conversation",
+  "Win-Back",
+] as const;
+
+export const CARE_STATUSES = ["Scheduled", "Completed", "Skipped"] as const;
+
 // --- Field-name maps (Airtable addresses fields by name; names are stable in our schema) ---
 export const FIELDS = {
   companies: {
@@ -174,5 +185,13 @@ export const FIELDS = {
     createdBy: "Created By",
     company: "Company",
     deal: "Deal",
+  },
+  careTouches: {
+    name: "Name",
+    touchType: "Touch Type",
+    dueDate: "Due Date",
+    status: "Status",
+    outcomeNotes: "Outcome Notes",
+    company: "Company",
   },
 } as const;

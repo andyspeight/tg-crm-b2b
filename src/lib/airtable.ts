@@ -105,6 +105,24 @@ export function createRecord<T = Record<string, unknown>>(
   });
 }
 
+/** Create many records, chunked to Airtable's 10-per-request limit. */
+export async function createRecords<T = Record<string, unknown>>(
+  baseId: string,
+  tableId: string,
+  fieldsList: Record<string, unknown>[],
+): Promise<AirtableRecord<T>[]> {
+  const out: AirtableRecord<T>[] = [];
+  for (let i = 0; i < fieldsList.length; i += 10) {
+    const chunk = fieldsList.slice(i, i + 10).map((fields) => ({ fields }));
+    const data = await request<{ records: AirtableRecord<T>[] }>(`${baseId}/${tableId}`, {
+      method: "POST",
+      body: JSON.stringify({ records: chunk }),
+    });
+    out.push(...(data.records || []));
+  }
+  return out;
+}
+
 export function updateRecord<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,

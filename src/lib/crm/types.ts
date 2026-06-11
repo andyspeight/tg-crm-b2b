@@ -12,6 +12,8 @@ import {
   ACTIVITY_SOURCES,
   TASK_STATUSES,
   TASK_CREATED_BY,
+  TOUCH_TYPES,
+  CARE_STATUSES,
 } from "./config";
 
 export type CompanyType = (typeof COMPANY_TYPES)[number];
@@ -122,6 +124,21 @@ export interface Task {
   dealId?: string;
   createdTime?: string;
 }
+
+export type TouchType = (typeof TOUCH_TYPES)[number];
+export type CareStatus = (typeof CARE_STATUSES)[number];
+
+export interface CareTouch {
+  id: string;
+  name: string;
+  touchType?: TouchType;
+  dueDate?: string;
+  status?: CareStatus;
+  outcomeNotes?: string;
+  companyId?: string;
+  createdTime?: string;
+}
+export type CareTouchInput = Partial<Omit<CareTouch, "id" | "createdTime">>;
 
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">

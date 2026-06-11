@@ -24,10 +24,14 @@ import {
   MEANINGFUL_ACTIVITY_TYPES,
   TASK_STATUSES,
   TASK_CREATED_BY,
+  TOUCH_TYPES,
+  CARE_STATUSES,
 } from "./config";
 import type {
   Activity,
   ActivityInput,
+  CareTouch,
+  CareTouchInput,
   Company,
   CompanyInput,
   Contact,
@@ -40,6 +44,7 @@ import type {
 import {
   AirtableRecord,
   createRecord,
+  createRecords,
   deleteRecord,
   getRecord,
   listRecords,
@@ -600,6 +605,151 @@ export async function updateTask(id: string, input: TaskInput): Promise<Task> {
 
 export async function deleteTask(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.tasks, id);
+}
+
+// --- care touches + cadence engine -----------------------------------------
+
+function toCareTouch(rec: AirtableRecord): CareTouch {
+  const f = rec.fields;
+  const F = FIELDS.careTouches;
+  return {
+    id: rec.id,
+    name: str(f[F.name]) ?? "",
+    touchType: str(f[F.touchType]) as CareTouch["touchType"],
+    dueDate: str(f[F.dueDate]),
+    status: str(f[F.status]) as CareTouch["status"],
+    outcomeNotes: str(f[F.outcomeNotes]),
+    companyId: firstId(f[F.company]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildCareTouchFields(input: CareTouchInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.careTouches;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof CareTouchInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (!partial || has("name")) f[F.name] = requiredText(input.name, "Name");
+  if (has("touchType")) f[F.touchType] = enumOrNull(input.touchType, TOUCH_TYPES, "touch type");
+  if (has("dueDate")) f[F.dueDate] = text(input.dueDate);
+  if (has("status")) f[F.status] = enumOrNull(input.status, CARE_STATUSES, "status");
+  if (has("outcomeNotes")) f[F.outcomeNotes] = text(input.outcomeNotes);
+  if (has("companyId")) {
+    const id = text(input.companyId);
+    f[F.company] = id ? [id] : [];
+  }
+  return f;
+}
+
+/** Care cadence in months. Top-tier monthly, standard quarterly (brief §4). */
+export function cadenceMonths(cadence?: string): number | null {
+  if (cadence === "Monthly") return 1;
+  if (cadence === "Quarterly") return 3;
+  return null;
+}
+
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
+export interface CareRow {
+  company: Company;
+  nextTouch?: CareTouch;
+}
+
+/** All customers with their next open (Scheduled) care touch, soonest-due first. */
+export async function listCareBoard(): Promise<CareRow[]> {
+  const F = FIELDS.careTouches;
+  const [companies, touchRecs] = await Promise.all([
+    listCompanies(),
+    listRecords(AIRTABLE_BASE_ID, TABLES.careTouches, {
+      filterByFormula: `{${F.status}}='Scheduled'`,
+      maxRecords: 2000,
+    }),
+  ]);
+  const customers = companies.filter((c) => c.lifecycleStage === "Customer");
+  const nextByCompany = new Map<string, CareTouch>();
+  for (const rec of touchRecs) {
+    const t = toCareTouch(rec);
+    if (!t.companyId) continue;
+    const cur = nextByCompany.get(t.companyId);
+    if (!cur || (t.dueDate || "9999-99-99") < (cur.dueDate || "9999-99-99")) {
+      nextByCompany.set(t.companyId, t);
+    }
+  }
+  return customers
+    .map((company) => ({ company, nextTouch: nextByCompany.get(company.id) }))
+    .sort((a, b) =>
+      (a.nextTouch?.dueDate || "9999-99-99").localeCompare(b.nextTouch?.dueDate || "9999-99-99"),
+    );
+}
+
+export async function createCareTouch(input: CareTouchInput): Promise<CareTouch> {
+  const F = FIELDS.careTouches;
+  const fields = buildCareTouchFields(input, false);
+  if (fields[F.status] == null) fields[F.status] = "Scheduled";
+  return toCareTouch(await createRecord(AIRTABLE_BASE_ID, TABLES.careTouches, fields));
+}
+
+export async function deleteCareTouch(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.careTouches, id);
+}
+
+/** Ensure every cadenced customer with no open Scheduled touch has one. Idempotent. */
+export async function generateDueTouches(): Promise<number> {
+  const board = await listCareBoard();
+  const today = new Date().toISOString().slice(0, 10);
+  const F = FIELDS.careTouches;
+  const toCreate: Record<string, unknown>[] = [];
+  for (const { company, nextTouch } of board) {
+    const months = cadenceMonths(company.careCadence);
+    if (!months || nextTouch) continue;
+    const due = addMonths(company.lastMeaningfulContact || today, months);
+    toCreate.push({
+      [F.name]: `Check-In Call · ${company.name}`,
+      [F.touchType]: "Check-In Call",
+      [F.dueDate]: due,
+      [F.status]: "Scheduled",
+      [F.company]: [company.id],
+    });
+  }
+  if (toCreate.length === 0) return 0;
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.careTouches, toCreate);
+  return created.length;
+}
+
+/** Complete a touch with an outcome, then schedule the next per the company cadence. */
+export async function logCareTouch(
+  touchId: string,
+  input: { outcomeNotes?: string; touchType?: string },
+): Promise<CareTouch> {
+  const completeFields: CareTouchInput = { status: "Completed" };
+  if (input.outcomeNotes !== undefined) completeFields.outcomeNotes = input.outcomeNotes;
+  if (input.touchType) completeFields.touchType = input.touchType as CareTouch["touchType"];
+  const updated = toCareTouch(
+    await updateRecord(
+      AIRTABLE_BASE_ID,
+      TABLES.careTouches,
+      touchId,
+      buildCareTouchFields(completeFields, true),
+    ),
+  );
+  if (updated.companyId) {
+    const company = await getCompany(updated.companyId);
+    const months = cadenceMonths(company.careCadence);
+    if (months) {
+      await createCareTouch({
+        companyId: company.id,
+        touchType: "Check-In Call",
+        dueDate: addMonths(new Date().toISOString().slice(0, 10), months),
+        status: "Scheduled",
+        name: `Check-In Call · ${company.name}`,
+      });
+    }
+  }
+  return updated;
 }
 
 // --- search -----------------------------------------------------------------
