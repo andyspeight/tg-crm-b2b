@@ -1,0 +1,91 @@
+import {
+  COMPANY_TYPES,
+  REGIONS,
+  LIFECYCLE_STAGES,
+  ACCOUNT_HEALTH,
+  CARE_CADENCES,
+  SIZE_BANDS,
+  DEAL_STAGES,
+  DEAL_SOURCES,
+  MARKETING_OPT_IN,
+} from "./config";
+
+export type CompanyType = (typeof COMPANY_TYPES)[number];
+export type Region = (typeof REGIONS)[number];
+export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];
+export type AccountHealth = (typeof ACCOUNT_HEALTH)[number];
+export type CareCadence = (typeof CARE_CADENCES)[number];
+export type SizeBand = (typeof SIZE_BANDS)[number];
+export type DealStage = (typeof DEAL_STAGES)[number];
+export type DealSource = (typeof DEAL_SOURCES)[number];
+export type MarketingOptIn = (typeof MARKETING_OPT_IN)[number];
+
+export interface Company {
+  id: string;
+  name: string;
+  website?: string;
+  type?: CompanyType;
+  country?: string;
+  region?: Region;
+  linkedin?: string;
+  socials?: string;
+  lifecycleStage?: LifecycleStage;
+  planTier?: string;
+  mrr?: number;
+  goLiveDate?: string;
+  renewalDate?: string;
+  accountHealth?: AccountHealth;
+  careCadence?: CareCadence;
+  lastMeaningfulContact?: string;
+  productsUsed?: string;
+  description?: string;
+  sizeBand?: SizeBand;
+  enrichedAt?: string;
+  enrichmentSource?: string;
+  watchlist?: boolean;
+  aiBrief?: string;
+  nextBestAction?: string;
+  contactIds: string[];
+  dealIds: string[];
+  createdTime?: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+  marketingOptIn?: MarketingOptIn;
+  notes?: string;
+  headline?: string;
+  location?: string;
+  enrichedAt?: string;
+  source?: string;
+  companyId?: string;
+  /** Resolved from the linked company where available (convenience for list views). */
+  companyName?: string;
+  createdTime?: string;
+}
+
+export interface Deal {
+  id: string;
+  name: string;
+  stage?: DealStage;
+  mrr?: number;
+  setupFee?: number;
+  source?: DealSource;
+  expectedCloseDate?: string;
+  lostReason?: string;
+  owner?: string;
+  nextStep?: string;
+  nextStepDate?: string;
+  companyId?: string;
+  companyName?: string;
+  createdTime?: string;
+}
+
+export type CompanyInput = Partial<Omit<Company, "id" | "contactIds" | "dealIds" | "createdTime">>;
+export type ContactInput = Partial<Omit<Contact, "id" | "companyName" | "createdTime">>;
+export type DealInput = Partial<Omit<Deal, "id" | "companyName" | "createdTime">>;
