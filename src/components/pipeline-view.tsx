@@ -6,20 +6,10 @@ import { AlertTriangle, CircleDashed, Plus } from "lucide-react";
 import { api } from "@/lib/client";
 import { DEAL_STAGES } from "@/lib/crm/config";
 import type { Deal, DealStage } from "@/lib/crm/types";
+import { dealFlag } from "@/lib/deal-flags";
 import { Button, ErrorText, IconButton, Modal } from "@/components/ui";
 import { DealForm, type CompanyOption } from "@/components/forms";
 import { formatMoney } from "@/lib/format";
-
-const CLOSED: DealStage[] = ["Won", "Lost"];
-
-function isOverdue(dateStr?: string): boolean {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return d < today;
-}
 
 export function PipelineView({
   initial,
@@ -174,13 +164,6 @@ export function PipelineView({
   );
 }
 
-function daysSince(s?: string): number {
-  if (!s) return Infinity;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return Infinity;
-  return Math.floor((Date.now() - d.getTime()) / 86_400_000);
-}
-
 function DealCard({
   deal,
   lastActivity,
@@ -196,22 +179,7 @@ function DealCard({
   onDragEnd: () => void;
   onStageChange: (stage: DealStage) => void;
 }) {
-  const closed = deal.stage ? CLOSED.includes(deal.stage) : false;
-  const stale = closed ? 0 : daysSince(lastActivity);
-
-  // One priority flag per card: missing next step and 30-day staleness are red,
-  // overdue next step and 14-day staleness are amber.
-  const flag: { label: string; danger: boolean } | null = closed
-    ? null
-    : !deal.nextStep && !deal.nextStepDate
-      ? { label: "No next step", danger: true }
-      : stale >= 30
-        ? { label: "Stale 30d+", danger: true }
-        : isOverdue(deal.nextStepDate)
-          ? { label: "Overdue", danger: false }
-          : stale >= 14
-            ? { label: "Stale 14d+", danger: false }
-            : null;
+  const flag = dealFlag(deal, lastActivity);
 
   return (
     <div

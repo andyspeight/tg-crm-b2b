@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, LogOut, Search, Users } from "lucide-react";
+import { Briefcase, Building2, Columns3, Home, LogOut, Search, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, IconButton, Spinner } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { QuickAdd } from "@/components/quick-add";
 
 const NAV = [
+  { href: "/today", label: "Today", icon: Home },
   { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/deals", label: "Deals", icon: Briefcase },
@@ -28,7 +30,7 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5">
-        <Link href="/companies" className="flex shrink-0 items-baseline gap-2">
+        <Link href="/today" className="flex shrink-0 items-baseline gap-2">
           <span className="text-base font-semibold tracking-tight text-navy">Luna Desk</span>
           <span className="hidden text-[11px] font-medium uppercase tracking-wide text-fg-subtle sm:inline">
             TG B2B CRM
@@ -59,6 +61,7 @@ export function TopBar() {
 
         <div className="ml-auto flex items-center gap-1">
           <GlobalSearch />
+          <QuickAdd />
           <ThemeToggle />
           <IconButton label="Sign out" onClick={logout}>
             <LogOut size={18} strokeWidth={1.75} />

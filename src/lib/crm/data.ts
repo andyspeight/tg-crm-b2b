@@ -570,6 +570,22 @@ export async function listTasksByCompany(companyId: string): Promise<Task[]> {
   return listTasksByIds(idList(company.fields[FIELDS.companies.tasks]));
 }
 
+/** All not-Done tasks across every company, with company names, for the Today view. */
+export async function listOpenTasks(): Promise<Task[]> {
+  const F = FIELDS.tasks;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.tasks, {
+    filterByFormula: `NOT({${F.status}}='Done')`,
+    maxRecords: 1000,
+  });
+  const tasks = records.map(toTask).sort(taskSort);
+  const ids = tasks.map((t) => t.companyId).filter((x): x is string => !!x);
+  if (ids.length) {
+    const map = await companyNameMap(ids);
+    for (const t of tasks) if (t.companyId) t.companyName = map.get(t.companyId);
+  }
+  return tasks;
+}
+
 export async function createTask(input: TaskInput): Promise<Task> {
   const F = FIELDS.tasks;
   const fields = buildTaskFields(input, false);
