@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, LogOut, Search, Users } from "lucide-react";
+import { Briefcase, Building2, Columns3, LogOut, Search, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, IconButton, Spinner } from "@/components/ui";
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/deals", label: "Deals", icon: Briefcase },
+  { href: "/pipeline", label: "Pipeline", icon: Columns3 },
 ];
 
 export function TopBar() {
