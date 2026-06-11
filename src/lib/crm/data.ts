@@ -252,8 +252,10 @@ function buildCompanyFields(input: CompanyInput, partial: boolean): Record<strin
   if (has("description")) f[F.description] = text(input.description);
   if (has("sizeBand")) f[F.sizeBand] = enumOrNull(input.sizeBand, SIZE_BANDS, "size band");
   if (has("watchlist")) f[F.watchlist] = boolean(input.watchlist);
-  // Note: AI Brief, Next Best Action, enrichment + last-meaningful-contact are written
-  // by later-stage jobs, not by the CRUD forms, so they are intentionally not settable here.
+  if (has("enrichedAt")) f[F.enrichedAt] = text(input.enrichedAt);
+  if (has("enrichmentSource")) f[F.enrichmentSource] = text(input.enrichmentSource);
+  // AI Brief, Next Best Action and Last Meaningful Contact are written by app jobs,
+  // not the CRUD forms, so they remain not settable here.
   return f;
 }
 
@@ -273,6 +275,7 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
   if (has("headline")) f[F.headline] = text(input.headline);
   if (has("location")) f[F.location] = text(input.location);
   if (has("source")) f[F.source] = text(input.source);
+  if (has("enrichedAt")) f[F.enrichedAt] = text(input.enrichedAt);
   if (has("companyId")) {
     const id = text(input.companyId);
     f[F.company] = id ? [id] : [];
@@ -778,6 +781,37 @@ export async function searchAll(
     listContacts({ q, limit }),
   ]);
   return { companies, contacts };
+}
+
+// --- dedupe lookups (LinkedIn import) --------------------------------------
+
+export async function findContactByLinkedin(url: string): Promise<Contact | null> {
+  const needle = formulaSafe(url);
+  if (!needle) return null;
+  const F = FIELDS.contacts;
+  const recs = await listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
+    filterByFormula: `FIND("${needle}", LOWER({${F.linkedin}}&""))`,
+    maxRecords: 1,
+  });
+  return recs[0] ? toContact(recs[0]) : null;
+}
+
+export async function findCompanyByLinkedinOrName(
+  url: string,
+  name?: string,
+): Promise<Company | null> {
+  const F = FIELDS.companies;
+  const clauses: string[] = [];
+  const u = formulaSafe(url);
+  if (u) clauses.push(`FIND("${u}", LOWER({${F.linkedin}}&""))`);
+  const n = name ? formulaSafe(name) : "";
+  if (n) clauses.push(`LOWER({${F.name}}&"")="${n}"`);
+  if (clauses.length === 0) return null;
+  const recs = await listRecords(AIRTABLE_BASE_ID, TABLES.companies, {
+    filterByFormula: clauses.length === 1 ? clauses[0] : `OR(${clauses.join(",")})`,
+    maxRecords: 1,
+  });
+  return recs[0] ? toCompany(recs[0]) : null;
 }
 
 // --- helpers: fetch by id, resolve linked company names --------------------

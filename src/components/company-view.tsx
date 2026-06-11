@@ -16,6 +16,7 @@ import {
   Phone,
   Plus,
   Radar,
+  RefreshCw,
   Sparkles,
   Star,
   StickyNote,
@@ -83,6 +84,8 @@ export function CompanyView({
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState("");
   const [outreachOpen, setOutreachOpen] = useState(false);
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [enrichError, setEnrichError] = useState("");
 
   const contactOptions = contacts.map((c) => ({ id: c.id, name: c.name }));
   const dealOptions = deals.map((d) => ({ id: d.id, name: d.name }));
@@ -202,6 +205,21 @@ export function CompanyView({
       setBriefError(err instanceof Error ? err.message : "Could not generate the brief");
     } finally {
       setBriefLoading(false);
+    }
+  }
+
+  async function enrich() {
+    setEnrichError("");
+    setEnrichLoading(true);
+    try {
+      const data = await api<{ company: Company }>(`/api/intel/enrich/company/${company.id}`, {
+        method: "POST",
+      });
+      setCompany(data.company);
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : "Could not enrich this company");
+    } finally {
+      setEnrichLoading(false);
     }
   }
 
@@ -390,7 +408,14 @@ export function CompanyView({
 
         {/* Side column */}
         <div className="space-y-5">
-          <Section title="Details">
+          <Section
+            title="Details"
+            action={
+              <Button variant="secondary" size="sm" onClick={enrich} disabled={enrichLoading}>
+                {enrichLoading ? <Spinner /> : <RefreshCw size={14} strokeWidth={1.75} />} Enrich
+              </Button>
+            }
+          >
             <dl className="divide-y divide-border-soft">
               <KV label="Region">{company.region ?? "—"}</KV>
               <KV label="Plan / tier">{company.planTier ?? "—"}</KV>
@@ -414,6 +439,13 @@ export function CompanyView({
                 {company.description}
               </p>
             ) : null}
+            {company.enrichedAt ? (
+              <p className="mt-2 text-[11px] text-fg-subtle">
+                Enriched {formatDate(company.enrichedAt)}
+                {company.enrichmentSource ? ` · ${company.enrichmentSource}` : ""}
+              </p>
+            ) : null}
+            {enrichError ? <p className="mt-2 text-[13px] text-danger">{enrichError}</p> : null}
           </Section>
 
           <Section
