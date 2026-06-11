@@ -8,6 +8,10 @@ import {
   DEAL_STAGES,
   DEAL_SOURCES,
   MARKETING_OPT_IN,
+  ACTIVITY_TYPES,
+  ACTIVITY_SOURCES,
+  TASK_STATUSES,
+  TASK_CREATED_BY,
 } from "./config";
 
 export type CompanyType = (typeof COMPANY_TYPES)[number];
@@ -47,6 +51,8 @@ export interface Company {
   nextBestAction?: string;
   contactIds: string[];
   dealIds: string[];
+  activityIds: string[];
+  taskIds: string[];
   createdTime?: string;
 }
 
@@ -86,6 +92,41 @@ export interface Deal {
   createdTime?: string;
 }
 
-export type CompanyInput = Partial<Omit<Company, "id" | "contactIds" | "dealIds" | "createdTime">>;
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
+export type ActivitySource = (typeof ACTIVITY_SOURCES)[number];
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type TaskCreatedBy = (typeof TASK_CREATED_BY)[number];
+
+export interface Activity {
+  id: string;
+  summary: string;
+  type?: ActivityType;
+  date?: string;
+  rawContent?: string;
+  source?: ActivitySource;
+  companyId?: string;
+  contactId?: string;
+  dealId?: string;
+  createdTime?: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  dueDate?: string;
+  status?: TaskStatus;
+  owner?: string;
+  createdBy?: TaskCreatedBy;
+  companyId?: string;
+  companyName?: string;
+  dealId?: string;
+  createdTime?: string;
+}
+
+export type CompanyInput = Partial<
+  Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">
+>;
 export type ContactInput = Partial<Omit<Contact, "id" | "companyName" | "createdTime">>;
 export type DealInput = Partial<Omit<Deal, "id" | "companyName" | "createdTime">>;
+export type ActivityInput = Partial<Omit<Activity, "id" | "createdTime">>;
+export type TaskInput = Partial<Omit<Task, "id" | "companyName" | "createdTime">>;

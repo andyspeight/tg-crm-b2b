@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ACCOUNT_HEALTH,
+  ACTIVITY_TYPES,
   CARE_CADENCES,
   COMPANY_TYPES,
   DEAL_SOURCES,
@@ -11,8 +12,9 @@ import {
   MARKETING_OPT_IN,
   REGIONS,
   SIZE_BANDS,
+  TASK_STATUSES,
 } from "@/lib/crm/config";
-import type { Company, Contact, Deal } from "@/lib/crm/types";
+import type { Activity, Company, Contact, Deal, Task } from "@/lib/crm/types";
 import { Button, ErrorText, Field, Input, Select, Textarea } from "@/components/ui";
 
 export type CompanyOption = { id: string; name: string };
@@ -159,7 +161,7 @@ export function CompanyForm({
         </Field>
       </div>
 
-      <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
         Customer details
       </p>
       <div className="grid grid-cols-2 gap-3">
@@ -409,6 +411,180 @@ export function DealForm({
           <Textarea value={f.lostReason} onChange={set("lostReason")} />
         </Field>
       )}
+    </FormShell>
+  );
+}
+
+// --- Activity ---------------------------------------------------------------
+
+export function ActivityForm({
+  initial,
+  lockedCompanyId,
+  contacts,
+  deals,
+  onSave,
+  onCancel,
+  submitLabel = "Log activity",
+}: {
+  initial?: Partial<Activity>;
+  lockedCompanyId: string;
+  contacts?: CompanyOption[];
+  deals?: CompanyOption[];
+  onSave: (payload: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+  submitLabel?: string;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [f, setF] = useState({
+    type: initial?.type ?? "Note",
+    summary: initial?.summary ?? "",
+    date: (initial?.date ?? today).slice(0, 10),
+    contactId: initial?.contactId ?? "",
+    dealId: initial?.dealId ?? "",
+    rawContent: initial?.rawContent ?? "",
+  });
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
+    setF((p) => ({ ...p, [k]: e.target.value }));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!f.summary.trim()) {
+      setError("Summary is required");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ ...f, companyId: lockedCompanyId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <FormShell onSubmit={submit} onCancel={onCancel} submitLabel={submitLabel} error={error} saving={saving}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Type">
+          <Select value={f.type} onChange={set("type")}>
+            {options(ACTIVITY_TYPES)}
+          </Select>
+        </Field>
+        <Field label="Date">
+          <Input type="date" value={f.date} onChange={set("date")} />
+        </Field>
+      </div>
+      <Field label="Summary">
+        <Input value={f.summary} onChange={set("summary")} autoFocus placeholder="Intro call with Hannah" />
+      </Field>
+      {(contacts?.length || deals?.length) ? (
+        <div className="grid grid-cols-2 gap-3">
+          {contacts?.length ? (
+            <Field label="Contact">
+              <Select value={f.contactId} onChange={set("contactId")}>
+                {blankOption("None")}
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          {deals?.length ? (
+            <Field label="Deal">
+              <Select value={f.dealId} onChange={set("dealId")}>
+                {blankOption("None")}
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+        </div>
+      ) : null}
+      <Field label="Notes">
+        <Textarea value={f.rawContent} onChange={set("rawContent")} placeholder="Paste-dump is fine." />
+      </Field>
+    </FormShell>
+  );
+}
+
+// --- Task -------------------------------------------------------------------
+
+export function TaskForm({
+  initial,
+  lockedCompanyId,
+  deals,
+  onSave,
+  onCancel,
+  submitLabel = "Add task",
+}: {
+  initial?: Partial<Task>;
+  lockedCompanyId?: string;
+  deals?: CompanyOption[];
+  onSave: (payload: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+  submitLabel?: string;
+}) {
+  const [f, setF] = useState({
+    title: initial?.title ?? "",
+    dueDate: initial?.dueDate ?? "",
+    dealId: initial?.dealId ?? "",
+    status: initial?.status ?? "Open",
+  });
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
+    setF((p) => ({ ...p, [k]: e.target.value }));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!f.title.trim()) {
+      setError("Task title is required");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const payload: Record<string, unknown> = { ...f };
+      if (lockedCompanyId) payload.companyId = lockedCompanyId;
+      await onSave(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <FormShell onSubmit={submit} onCancel={onCancel} submitLabel={submitLabel} error={error} saving={saving}>
+      <Field label="Title">
+        <Input value={f.title} onChange={set("title")} autoFocus placeholder="Send revised proposal" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Due date">
+          <Input type="date" value={f.dueDate} onChange={set("dueDate")} />
+        </Field>
+        <Field label="Status">
+          <Select value={f.status} onChange={set("status")}>
+            {options(TASK_STATUSES)}
+          </Select>
+        </Field>
+        {deals?.length ? (
+          <Field label="Deal">
+            <Select value={f.dealId} onChange={set("dealId")}>
+              {blankOption("None")}
+              {deals.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
+      </div>
     </FormShell>
   );
 }

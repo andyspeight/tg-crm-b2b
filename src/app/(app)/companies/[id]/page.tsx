@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 import { AirtableError } from "@/lib/airtable";
-import { getCompany, listContactsByIds, listDealsByIds } from "@/lib/crm/data";
+import {
+  getCompany,
+  listActivitiesByIds,
+  listContactsByIds,
+  listDealsByIds,
+  listTasksByIds,
+} from "@/lib/crm/data";
 import { CompanyView } from "@/components/company-view";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +22,20 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     throw e;
   }
 
-  const [contacts, deals] = await Promise.all([
+  const [contacts, deals, activities, tasks] = await Promise.all([
     listContactsByIds(company.contactIds),
     listDealsByIds(company.dealIds),
+    listActivitiesByIds(company.activityIds),
+    listTasksByIds(company.taskIds),
   ]);
 
-  return <CompanyView company={company} initialContacts={contacts} initialDeals={deals} />;
+  return (
+    <CompanyView
+      company={company}
+      initialContacts={contacts}
+      initialDeals={deals}
+      initialActivities={activities}
+      initialTasks={tasks}
+    />
+  );
 }

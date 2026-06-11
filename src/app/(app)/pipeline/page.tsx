@@ -1,10 +1,14 @@
-import { listCompanies, listDeals } from "@/lib/crm/data";
+import { activityRecency, listCompanies, listDeals } from "@/lib/crm/data";
 import { PipelineView } from "@/components/pipeline-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage() {
-  const [deals, companies] = await Promise.all([listDeals(), listCompanies()]);
+  const [deals, companies, recency] = await Promise.all([
+    listDeals(),
+    listCompanies(),
+    activityRecency(),
+  ]);
   const companyOptions = companies.map((c) => ({ id: c.id, name: c.name }));
-  return <PipelineView initial={deals} companies={companyOptions} />;
+  return <PipelineView initial={deals} companies={companyOptions} recency={recency} />;
 }

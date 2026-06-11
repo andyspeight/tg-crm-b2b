@@ -21,7 +21,15 @@ function isOverdue(dateStr?: string): boolean {
   return d < today;
 }
 
-export function PipelineView({ initial, companies }: { initial: Deal[]; companies: CompanyOption[] }) {
+export function PipelineView({
+  initial,
+  companies,
+  recency,
+}: {
+  initial: Deal[];
+  companies: CompanyOption[];
+  recency: { byDeal: Record<string, string>; byCompany: Record<string, string> };
+}) {
   const [deals, setDeals] = useState<Deal[]>(initial);
   const [dragOver, setDragOver] = useState<DealStage | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -125,6 +133,11 @@ export function PipelineView({ initial, companies }: { initial: Deal[]; companie
                     <DealCard
                       key={d.id}
                       deal={d}
+                      lastActivity={
+                        recency.byDeal[d.id] ||
+                        (d.companyId ? recency.byCompany[d.companyId] : undefined) ||
+                        d.createdTime
+                      }
                       dragging={dragging === d.id}
                       onDragStart={(e) => {
                         e.dataTransfer.setData("text/plain", d.id);
@@ -161,22 +174,44 @@ export function PipelineView({ initial, companies }: { initial: Deal[]; companie
   );
 }
 
+function daysSince(s?: string): number {
+  if (!s) return Infinity;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return Infinity;
+  return Math.floor((Date.now() - d.getTime()) / 86_400_000);
+}
+
 function DealCard({
   deal,
+  lastActivity,
   dragging,
   onDragStart,
   onDragEnd,
   onStageChange,
 }: {
   deal: Deal;
+  lastActivity?: string;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onStageChange: (stage: DealStage) => void;
 }) {
   const closed = deal.stage ? CLOSED.includes(deal.stage) : false;
-  const missing = !closed && !deal.nextStep && !deal.nextStepDate;
-  const overdue = !closed && isOverdue(deal.nextStepDate);
+  const stale = closed ? 0 : daysSince(lastActivity);
+
+  // One priority flag per card: missing next step and 30-day staleness are red,
+  // overdue next step and 14-day staleness are amber.
+  const flag: { label: string; danger: boolean } | null = closed
+    ? null
+    : !deal.nextStep && !deal.nextStepDate
+      ? { label: "No next step", danger: true }
+      : stale >= 30
+        ? { label: "Stale 30d+", danger: true }
+        : isOverdue(deal.nextStepDate)
+          ? { label: "Overdue", danger: false }
+          : stale >= 14
+            ? { label: "Stale 14d+", danger: false }
+            : null;
 
   return (
     <div
@@ -197,15 +232,20 @@ function DealCard({
         </Link>
       ) : null}
 
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-2 flex items-center justify-between gap-2">
         <span className="tnum text-[13px] font-medium text-fg">{formatMoney(deal.mrr)}</span>
-        {missing ? (
-          <span className="inline-flex items-center gap-1 text-[11px] text-danger">
-            <CircleDashed size={12} strokeWidth={2} /> No next step
-          </span>
-        ) : overdue ? (
-          <span className="inline-flex items-center gap-1 text-[11px] text-warning">
-            <AlertTriangle size={12} strokeWidth={2} /> Overdue
+        {flag ? (
+          <span
+            className={`inline-flex items-center gap-1 text-[11px] ${
+              flag.danger ? "text-danger" : "text-warning"
+            }`}
+          >
+            {flag.danger ? (
+              <CircleDashed size={12} strokeWidth={2} />
+            ) : (
+              <AlertTriangle size={12} strokeWidth={2} />
+            )}
+            {flag.label}
           </span>
         ) : null}
       </div>

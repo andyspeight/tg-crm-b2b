@@ -72,6 +72,32 @@ export const DEAL_SOURCES = [
 
 export const MARKETING_OPT_IN = ["Opted In", "Opted Out", "Unknown"] as const;
 
+export const ACTIVITY_TYPES = [
+  "Note",
+  "Email",
+  "Call",
+  "Meeting",
+  "Demo",
+  "Care Touch",
+  "Campaign",
+  "Signal",
+] as const;
+
+export const ACTIVITY_SOURCES = [
+  "Manual",
+  "Gmail",
+  "Calendly",
+  "Luna Marketing",
+  "Signal Monitor",
+  "AI",
+] as const;
+
+// Activity types that count as a meaningful human touch (drive Last Meaningful Contact).
+export const MEANINGFUL_ACTIVITY_TYPES = ["Note", "Email", "Call", "Meeting", "Demo", "Care Touch"] as const;
+
+export const TASK_STATUSES = ["Open", "In Progress", "Done"] as const;
+export const TASK_CREATED_BY = ["Manual", "AI-Suggested"] as const;
+
 // --- Field-name maps (Airtable addresses fields by name; names are stable in our schema) ---
 export const FIELDS = {
   companies: {
@@ -100,6 +126,8 @@ export const FIELDS = {
     nextBestAction: "Next Best Action",
     contacts: "Contacts",
     deals: "Deals",
+    activities: "Activities",
+    tasks: "Tasks",
   },
   contacts: {
     name: "Name",
@@ -127,5 +155,24 @@ export const FIELDS = {
     nextStep: "Next Step",
     nextStepDate: "Next Step Date",
     company: "Company",
+  },
+  activities: {
+    summary: "Summary",
+    type: "Type",
+    date: "Date",
+    rawContent: "Raw Content",
+    source: "Source",
+    company: "Company",
+    contact: "Contact",
+    deal: "Deal",
+  },
+  tasks: {
+    title: "Title",
+    dueDate: "Due Date",
+    status: "Status",
+    owner: "Owner",
+    createdBy: "Created By",
+    company: "Company",
+    deal: "Deal",
   },
 } as const;

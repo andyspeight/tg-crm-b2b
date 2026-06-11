@@ -19,8 +19,24 @@ import {
   DEAL_STAGES,
   DEAL_SOURCES,
   MARKETING_OPT_IN,
+  ACTIVITY_TYPES,
+  ACTIVITY_SOURCES,
+  MEANINGFUL_ACTIVITY_TYPES,
+  TASK_STATUSES,
+  TASK_CREATED_BY,
 } from "./config";
-import type { Company, CompanyInput, Contact, ContactInput, Deal, DealInput } from "./types";
+import type {
+  Activity,
+  ActivityInput,
+  Company,
+  CompanyInput,
+  Contact,
+  ContactInput,
+  Deal,
+  DealInput,
+  Task,
+  TaskInput,
+} from "./types";
 import {
   AirtableRecord,
   createRecord,
@@ -123,6 +139,41 @@ function toCompany(rec: AirtableRecord): Company {
     nextBestAction: str(f[F.nextBestAction]),
     contactIds: idList(f[F.contacts]),
     dealIds: idList(f[F.deals]),
+    activityIds: idList(f[F.activities]),
+    taskIds: idList(f[F.tasks]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function toActivity(rec: AirtableRecord): Activity {
+  const f = rec.fields;
+  const F = FIELDS.activities;
+  return {
+    id: rec.id,
+    summary: str(f[F.summary]) ?? "",
+    type: str(f[F.type]) as Activity["type"],
+    date: str(f[F.date]),
+    rawContent: str(f[F.rawContent]),
+    source: str(f[F.source]) as Activity["source"],
+    companyId: firstId(f[F.company]),
+    contactId: firstId(f[F.contact]),
+    dealId: firstId(f[F.deal]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function toTask(rec: AirtableRecord): Task {
+  const f = rec.fields;
+  const F = FIELDS.tasks;
+  return {
+    id: rec.id,
+    title: str(f[F.title]) ?? "",
+    dueDate: str(f[F.dueDate]),
+    status: str(f[F.status]) as Task["status"],
+    owner: str(f[F.owner]),
+    createdBy: str(f[F.createdBy]) as Task["createdBy"],
+    companyId: firstId(f[F.company]),
+    dealId: firstId(f[F.deal]),
     createdTime: rec.createdTime,
   };
 }
@@ -376,6 +427,163 @@ export async function updateDeal(id: string, input: DealInput): Promise<Deal> {
 
 export async function deleteDeal(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.deals, id);
+}
+
+// --- activities (append-only timeline) -------------------------------------
+
+function buildActivityFields(input: ActivityInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.activities;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof ActivityInput) => Object.prototype.hasOwnProperty.call(input, k);
+
+  if (!partial || has("summary")) f[F.summary] = requiredText(input.summary, "Summary");
+  if (has("type")) f[F.type] = enumOrNull(input.type, ACTIVITY_TYPES, "type");
+  if (has("date")) f[F.date] = text(input.date);
+  if (has("rawContent")) f[F.rawContent] = text(input.rawContent);
+  if (has("source")) f[F.source] = enumOrNull(input.source, ACTIVITY_SOURCES, "source");
+  if (has("companyId")) {
+    const id = text(input.companyId);
+    f[F.company] = id ? [id] : [];
+  }
+  if (has("contactId")) {
+    const id = text(input.contactId);
+    f[F.contact] = id ? [id] : [];
+  }
+  if (has("dealId")) {
+    const id = text(input.dealId);
+    f[F.deal] = id ? [id] : [];
+  }
+  return f;
+}
+
+export async function listActivitiesByIds(ids: string[]): Promise<Activity[]> {
+  const records = await recordsByIds(TABLES.activities, ids);
+  return records
+    .map(toActivity)
+    .sort((a, b) => (b.date || b.createdTime || "").localeCompare(a.date || a.createdTime || ""));
+}
+
+export async function listActivitiesByCompany(companyId: string): Promise<Activity[]> {
+  const company = await getRecord(AIRTABLE_BASE_ID, TABLES.companies, companyId);
+  return listActivitiesByIds(idList(company.fields[FIELDS.companies.activities]));
+}
+
+export async function createActivity(input: ActivityInput): Promise<Activity> {
+  const F = FIELDS.activities;
+  const fields = buildActivityFields(input, false);
+  if (fields[F.type] == null) fields[F.type] = "Note";
+  if (fields[F.source] == null) fields[F.source] = "Manual";
+  if (fields[F.date] == null) fields[F.date] = new Date().toISOString();
+
+  const activity = toActivity(await createRecord(AIRTABLE_BASE_ID, TABLES.activities, fields));
+
+  // Maintain Last Meaningful Contact when the activity is a real human touch.
+  if (
+    activity.companyId &&
+    activity.type &&
+    (MEANINGFUL_ACTIVITY_TYPES as readonly string[]).includes(activity.type)
+  ) {
+    await bumpLastMeaningfulContact(activity.companyId, activity.date);
+  }
+  return activity;
+}
+
+export async function deleteActivity(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.activities, id);
+}
+
+async function bumpLastMeaningfulContact(companyId: string, isoDate?: string): Promise<void> {
+  const date = (isoDate || new Date().toISOString()).slice(0, 10); // YYYY-MM-DD
+  try {
+    const rec = await getRecord(AIRTABLE_BASE_ID, TABLES.companies, companyId);
+    const current = str(rec.fields[FIELDS.companies.lastMeaningfulContact]);
+    if (!current || date > current) {
+      await updateRecord(AIRTABLE_BASE_ID, TABLES.companies, companyId, {
+        [FIELDS.companies.lastMeaningfulContact]: date,
+      });
+    }
+  } catch {
+    // Non-fatal: the activity is logged even if the rollup write fails.
+  }
+}
+
+/** Most recent activity date per deal and per company, for stale-deal flagging. */
+export async function activityRecency(): Promise<{
+  byDeal: Record<string, string>;
+  byCompany: Record<string, string>;
+}> {
+  const F = FIELDS.activities;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    fields: [F.date, F.deal, F.company],
+    maxRecords: 5000,
+  });
+  const byDeal: Record<string, string> = {};
+  const byCompany: Record<string, string> = {};
+  for (const rec of records) {
+    const date = str(rec.fields[F.date]) || rec.createdTime;
+    if (!date) continue;
+    const dealId = firstId(rec.fields[F.deal]);
+    const companyId = firstId(rec.fields[F.company]);
+    if (dealId && (!byDeal[dealId] || date > byDeal[dealId])) byDeal[dealId] = date;
+    if (companyId && (!byCompany[companyId] || date > byCompany[companyId])) byCompany[companyId] = date;
+  }
+  return { byDeal, byCompany };
+}
+
+// --- tasks ------------------------------------------------------------------
+
+function buildTaskFields(input: TaskInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.tasks;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof TaskInput) => Object.prototype.hasOwnProperty.call(input, k);
+
+  if (!partial || has("title")) f[F.title] = requiredText(input.title, "Task title");
+  if (has("dueDate")) f[F.dueDate] = text(input.dueDate);
+  if (has("status")) f[F.status] = enumOrNull(input.status, TASK_STATUSES, "status");
+  if (has("owner")) f[F.owner] = text(input.owner);
+  if (has("createdBy")) f[F.createdBy] = enumOrNull(input.createdBy, TASK_CREATED_BY, "created by");
+  if (has("companyId")) {
+    const id = text(input.companyId);
+    f[F.company] = id ? [id] : [];
+  }
+  if (has("dealId")) {
+    const id = text(input.dealId);
+    f[F.deal] = id ? [id] : [];
+  }
+  return f;
+}
+
+function taskSort(a: Task, b: Task): number {
+  const ad = a.status === "Done" ? 1 : 0;
+  const bd = b.status === "Done" ? 1 : 0;
+  if (ad !== bd) return ad - bd;
+  return (a.dueDate || "9999-99-99").localeCompare(b.dueDate || "9999-99-99");
+}
+
+export async function listTasksByIds(ids: string[]): Promise<Task[]> {
+  const records = await recordsByIds(TABLES.tasks, ids);
+  return records.map(toTask).sort(taskSort);
+}
+
+export async function listTasksByCompany(companyId: string): Promise<Task[]> {
+  const company = await getRecord(AIRTABLE_BASE_ID, TABLES.companies, companyId);
+  return listTasksByIds(idList(company.fields[FIELDS.companies.tasks]));
+}
+
+export async function createTask(input: TaskInput): Promise<Task> {
+  const F = FIELDS.tasks;
+  const fields = buildTaskFields(input, false);
+  if (fields[F.status] == null) fields[F.status] = "Open";
+  if (fields[F.createdBy] == null) fields[F.createdBy] = "Manual";
+  return toTask(await createRecord(AIRTABLE_BASE_ID, TABLES.tasks, fields));
+}
+
+export async function updateTask(id: string, input: TaskInput): Promise<Task> {
+  return toTask(await updateRecord(AIRTABLE_BASE_ID, TABLES.tasks, id, buildTaskFields(input, true)));
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.tasks, id);
 }
 
 // --- search -----------------------------------------------------------------
