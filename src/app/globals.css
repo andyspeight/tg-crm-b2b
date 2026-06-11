@@ -1,7 +1,83 @@
 @import "tailwindcss";
 
+/* Dark mode is driven by data-theme on <html> (set before paint in layout.tsx,
+   toggled by ThemeToggle). Light is the default per travelgenix-design. */
+@custom-variant dark (&:where([data-theme="dark"] *));
+
+/* Semantic tokens exposed as Tailwind utilities (bg-card, text-fg, border-border,
+   ring-accent, ...). `inline` so they resolve to the live CSS variable and flip
+   with the theme at runtime. Brand law: travelgenix-design. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-navy: var(--navy);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-btn: var(--btn);
+  --color-btn-fg: var(--btn-fg);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
 :root {
+  /* Brand */
+  --navy: #1b2b5b;
+  --accent: #00b4d8; /* teal — focus rings, active accents, small highlights */
+  --accent-strong: #0e7490; /* darker teal for accent text that needs 4.5:1 */
+  --accent-soft: rgba(0, 180, 216, 0.12);
+  --btn: #0e7490; /* primary CTA bg (white text passes contrast) */
+  --btn-fg: #ffffff;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* Surfaces + text (light, default) */
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --muted: #f1f5f9;
+  --border: #e2e8f0;
+  --border-soft: #eef2f7;
+  --fg: #0f172a;
+  --fg-muted: #475569;
+  --fg-subtle: #94a3b8;
+
   color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --navy: #2a3f7a;
+  --accent: #22c3e6;
+  --accent-strong: #67e8f9;
+  --accent-soft: rgba(34, 195, 230, 0.16);
+  --btn: #22c3e6;
+  --btn-fg: #06283a; /* dark text on bright teal passes contrast */
+
+  --bg: #0b1220;
+  --surface: #101a2e;
+  --card: #131e36;
+  --muted: #1c2942;
+  --border: #2a3650;
+  --border-soft: #1e293b;
+  --fg: #f1f5f9;
+  --fg-muted: #aebed6;
+  --fg-subtle: #6b7a93;
+
+  color-scheme: dark;
 }
 
 html,
@@ -10,16 +86,54 @@ body {
 }
 
 body {
-  background-color: #f8fafc; /* slate-50 */
-  color: #0f172a; /* slate-900 */
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
-    "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Thin, calm scrollbars to match the dense-but-breathable preset. */
+/* Tabular figures for prices, dates and other data columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--border) transparent;
+}
+
+@keyframes lunaFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lunaPop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.luna-fade {
+  animation: lunaFade 160ms ease-out;
+}
+.luna-pop {
+  animation: lunaPop 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -2,20 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Deal } from "@/lib/crm/types";
-import { Button, EmptyState, Modal, Spinner } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { StageBadge } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
 import { formatDate, formatMoney } from "@/lib/format";
 
-export function DealsView({
-  initial,
-  companies,
-}: {
-  initial: Deal[];
-  companies: CompanyOption[];
-}) {
+export function DealsView({ initial, companies }: { initial: Deal[]; companies: CompanyOption[] }) {
   const [deals, setDeals] = useState<Deal[]>(initial);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -66,38 +61,49 @@ export function DealsView({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Deals</h1>
-          <p className="text-xs text-slate-400">
-            {deals.length} open in view · {formatMoney(totalMrr)} MRR
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Deals</h1>
+          <p className="text-[13px] text-fg-subtle">
+            {deals.length} in view · <span className="tnum">{formatMoney(totalMrr)}</span> MRR
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
+            <Search
+              size={15}
+              strokeWidth={1.75}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search deals..."
-              className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-60"
+              aria-label="Search deals"
+              className="w-44 rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
             />
             {loading && (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle">
                 <Spinner />
               </span>
             )}
           </div>
-          <Button onClick={() => setCreating(true)}>New deal</Button>
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={16} strokeWidth={2} /> New deal
+          </Button>
         </div>
       </div>
 
       {deals.length === 0 ? (
-        <EmptyState title={q ? "No deals match your search" : "No deals yet"} />
+        <EmptyState
+          title={q ? "No deals match your search" : "No deals yet"}
+          hint={q ? undefined : "Add a deal to start tracking the new-business pipeline."}
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[720px] text-sm">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[720px] text-[14px]">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-500">
+              <tr className="border-b border-border-soft text-left text-[12px] font-medium text-fg-subtle">
                 <th className="px-4 py-2.5">Deal</th>
                 <th className="px-4 py-2.5">Company</th>
                 <th className="px-4 py-2.5">Stage</th>
@@ -108,43 +114,46 @@ export function DealsView({
             </thead>
             <tbody>
               {deals.map((d) => (
-                <tr key={d.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                  <td className="px-4 py-2.5 font-medium text-slate-900">{d.name || "Untitled"}</td>
+                <tr key={d.id} className="border-b border-border-soft last:border-0 hover:bg-muted/50">
+                  <td className="px-4 py-2.5 font-medium text-fg">{d.name || "Untitled"}</td>
                   <td className="px-4 py-2.5">
                     {d.companyId ? (
-                      <Link
-                        href={`/companies/${d.companyId}`}
-                        className="text-indigo-600 hover:underline"
-                      >
+                      <Link href={`/companies/${d.companyId}`} className="text-fg hover:text-accent-strong">
                         {d.companyName || "Company"}
                       </Link>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-fg-subtle">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
                     <StageBadge value={d.stage} />
                   </td>
-                  <td className="px-4 py-2.5 text-right text-slate-600">{formatMoney(d.mrr)}</td>
-                  <td className="px-4 py-2.5 text-slate-600">
+                  <td className="tnum px-4 py-2.5 text-right text-fg-muted">{formatMoney(d.mrr)}</td>
+                  <td className="px-4 py-2.5 text-fg-muted">
                     {d.nextStep ? (
                       <span>
                         {d.nextStep}
                         {d.nextStepDate ? (
-                          <span className="text-slate-400"> · {formatDate(d.nextStepDate)}</span>
+                          <span className="tnum text-fg-subtle"> · {formatDate(d.nextStepDate)}</span>
                         ) : null}
                       </span>
                     ) : (
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(d)}>
-                      Edit
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => remove(d)} className="text-red-600">
-                      Delete
-                    </Button>
+                  <td className="px-2 py-2">
+                    <div className="flex justify-end gap-0.5">
+                      <IconButton label="Edit deal" onClick={() => setEditing(d)}>
+                        <Pencil size={16} strokeWidth={1.75} />
+                      </IconButton>
+                      <IconButton
+                        label="Delete deal"
+                        onClick={() => remove(d)}
+                        className="hover:text-danger"
+                      >
+                        <Trash2 size={16} strokeWidth={1.75} />
+                      </IconButton>
+                    </div>
                   </td>
                 </tr>
               ))}

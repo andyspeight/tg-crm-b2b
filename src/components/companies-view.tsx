@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company } from "@/lib/crm/types";
-import { Button, EmptyState, Modal, Spinner } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { HealthBadge, LifecycleBadge } from "@/components/badges";
 import { CompanyForm } from "@/components/forms";
 import { formatMoney } from "@/lib/format";
@@ -29,7 +30,6 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
     }
   }
 
-  // Debounced search (skips the initial render — we already have server data).
   useEffect(() => {
     if (first.current) {
       first.current = false;
@@ -45,14 +45,12 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
     setCreating(false);
     await refresh();
   }
-
   async function update(payload: Record<string, unknown>) {
     if (!editing) return;
     await api(`/api/companies/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
     setEditing(null);
     await refresh();
   }
-
   async function remove(c: Company) {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await api(`/api/companies/${c.id}`, { method: "DELETE" });
@@ -61,39 +59,56 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Companies</h1>
-          <p className="text-xs text-slate-400">{companies.length} records</p>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Companies</h1>
+          <p className="text-[13px] text-fg-subtle">
+            {companies.length} {companies.length === 1 ? "record" : "records"}
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
+            <Search
+              size={15}
+              strokeWidth={1.75}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search companies..."
-              className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-60"
+              aria-label="Search companies"
+              className="w-44 rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
             />
             {loading && (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle">
                 <Spinner />
               </span>
             )}
           </div>
-          <Button onClick={() => setCreating(true)}>New company</Button>
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={16} strokeWidth={2} /> New company
+          </Button>
         </div>
       </div>
 
       {companies.length === 0 ? (
         <EmptyState
           title={q ? "No companies match your search" : "No companies yet"}
-          hint={q ? undefined : "Create your first company, or run the Monday import."}
+          hint={q ? undefined : "Add your first account, or run the Monday import to seed the pipeline."}
+          action={
+            q ? undefined : (
+              <Button onClick={() => setCreating(true)}>
+                <Plus size={16} strokeWidth={2} /> New company
+              </Button>
+            )
+          }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[680px] text-sm">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[680px] text-[14px]">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-500">
+              <tr className="border-b border-border-soft text-left text-[12px] font-medium text-fg-subtle">
                 <th className="px-4 py-2.5">Name</th>
                 <th className="px-4 py-2.5">Type</th>
                 <th className="px-4 py-2.5">Lifecycle</th>
@@ -105,31 +120,37 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
             </thead>
             <tbody>
               {companies.map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                <tr key={c.id} className="border-b border-border-soft last:border-0 hover:bg-muted/50">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/companies/${c.id}`}
-                      className="font-medium text-slate-900 hover:text-indigo-600"
+                      className="font-medium text-fg hover:text-accent-strong"
                     >
                       {c.name || "Untitled"}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-600">{c.type ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-fg-muted">{c.type ?? "—"}</td>
                   <td className="px-4 py-2.5">
                     <LifecycleBadge value={c.lifecycleStage} />
                   </td>
                   <td className="px-4 py-2.5">
                     <HealthBadge value={c.accountHealth} />
                   </td>
-                  <td className="px-4 py-2.5 text-slate-600">{c.country ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right text-slate-600">{formatMoney(c.mrr)}</td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(c)}>
-                      Edit
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => remove(c)} className="text-red-600">
-                      Delete
-                    </Button>
+                  <td className="px-4 py-2.5 text-fg-muted">{c.country ?? "—"}</td>
+                  <td className="tnum px-4 py-2.5 text-right text-fg-muted">{formatMoney(c.mrr)}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex justify-end gap-0.5">
+                      <IconButton label="Edit company" onClick={() => setEditing(c)}>
+                        <Pencil size={16} strokeWidth={1.75} />
+                      </IconButton>
+                      <IconButton
+                        label="Delete company"
+                        onClick={() => remove(c)}
+                        className="hover:text-danger"
+                      >
+                        <Trash2 size={16} strokeWidth={1.75} />
+                      </IconButton>
+                    </div>
                   </td>
                 </tr>
               ))}

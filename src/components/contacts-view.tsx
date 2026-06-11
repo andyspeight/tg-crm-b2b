@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact } from "@/lib/crm/types";
-import { Button, EmptyState, Modal, Spinner } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { ContactForm, type CompanyOption } from "@/components/forms";
 
 export function ContactsView({
@@ -62,36 +63,49 @@ export function ContactsView({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Contacts</h1>
-          <p className="text-xs text-slate-400">{contacts.length} records</p>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Contacts</h1>
+          <p className="text-[13px] text-fg-subtle">
+            {contacts.length} {contacts.length === 1 ? "record" : "records"}
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
+            <Search
+              size={15}
+              strokeWidth={1.75}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search contacts..."
-              className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-60"
+              aria-label="Search contacts"
+              className="w-44 rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
             />
             {loading && (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle">
                 <Spinner />
               </span>
             )}
           </div>
-          <Button onClick={() => setCreating(true)}>New contact</Button>
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={16} strokeWidth={2} /> New contact
+          </Button>
         </div>
       </div>
 
       {contacts.length === 0 ? (
-        <EmptyState title={q ? "No contacts match your search" : "No contacts yet"} />
+        <EmptyState
+          title={q ? "No contacts match your search" : "No contacts yet"}
+          hint={q ? undefined : "Add people against their company to build the relationship map."}
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[680px] text-sm">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[680px] text-[14px]">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-500">
+              <tr className="border-b border-border-soft text-left text-[12px] font-medium text-fg-subtle">
                 <th className="px-4 py-2.5">Name</th>
                 <th className="px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Company</th>
@@ -102,38 +116,41 @@ export function ContactsView({
             </thead>
             <tbody>
               {contacts.map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                  <td className="px-4 py-2.5 font-medium text-slate-900">{c.name || "Unnamed"}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{c.role ?? "—"}</td>
+                <tr key={c.id} className="border-b border-border-soft last:border-0 hover:bg-muted/50">
+                  <td className="px-4 py-2.5 font-medium text-fg">{c.name || "Unnamed"}</td>
+                  <td className="px-4 py-2.5 text-fg-muted">{c.role ?? "—"}</td>
                   <td className="px-4 py-2.5">
                     {c.companyId ? (
-                      <Link
-                        href={`/companies/${c.companyId}`}
-                        className="text-indigo-600 hover:underline"
-                      >
+                      <Link href={`/companies/${c.companyId}`} className="text-fg hover:text-accent-strong">
                         {c.companyName || "Company"}
                       </Link>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-fg-subtle">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-600">
+                  <td className="px-4 py-2.5 text-fg-muted">
                     {c.email ? (
-                      <a href={`mailto:${c.email}`} className="hover:text-indigo-600">
+                      <a href={`mailto:${c.email}`} className="hover:text-accent-strong">
                         {c.email}
                       </a>
                     ) : (
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-600">{c.phone ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(c)}>
-                      Edit
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => remove(c)} className="text-red-600">
-                      Delete
-                    </Button>
+                  <td className="tnum px-4 py-2.5 text-fg-muted">{c.phone ?? "—"}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex justify-end gap-0.5">
+                      <IconButton label="Edit contact" onClick={() => setEditing(c)}>
+                        <Pencil size={16} strokeWidth={1.75} />
+                      </IconButton>
+                      <IconButton
+                        label="Delete contact"
+                        onClick={() => remove(c)}
+                        className="hover:text-danger"
+                      >
+                        <Trash2 size={16} strokeWidth={1.75} />
+                      </IconButton>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -33,18 +33,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-[100dvh] items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-semibold text-slate-900">Luna Desk</h1>
-          <p className="mt-1 text-sm text-slate-500">Travelgenix B2B CRM</p>
+          <h1 className="text-xl font-semibold tracking-tight text-navy">Luna Desk</h1>
+          <p className="mt-1 text-[13px] text-fg-subtle">Travelgenix B2B CRM</p>
         </div>
         <form
           onSubmit={submit}
-          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-[0_20px_50px_-20px_rgba(8,15,30,0.25)]"
         >
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="password">
+            <label className="mb-1.5 block text-[13px] font-medium text-fg-muted" htmlFor="password">
               Password
             </label>
             <Input
@@ -62,7 +62,7 @@ export default function LoginPage() {
             {loading ? "Unlocking..." : "Unlock"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-slate-400">
+        <p className="mt-4 text-center text-[13px] text-fg-subtle">
           Internal tool. Authorised access only.
         </p>
       </div>

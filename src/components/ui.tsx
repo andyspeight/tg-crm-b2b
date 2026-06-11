@@ -8,6 +8,7 @@ import {
   TextareaHTMLAttributes,
   useEffect,
 } from "react";
+import { ChevronDown, X } from "lucide-react";
 
 export function cn(...xs: (string | false | null | undefined)[]): string {
   return xs.filter(Boolean).join(" ");
@@ -19,15 +20,15 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700 border border-transparent",
-  secondary: "bg-white text-slate-700 hover:bg-slate-50 border border-slate-300",
-  ghost: "bg-transparent text-slate-600 hover:bg-slate-100 border border-transparent",
-  danger: "bg-white text-red-600 hover:bg-red-50 border border-red-200",
+  primary: "bg-btn text-btn-fg hover:brightness-95 border border-transparent",
+  secondary: "bg-card text-fg border border-border hover:bg-muted",
+  ghost: "bg-transparent text-fg-muted border border-transparent hover:bg-muted hover:text-fg",
+  danger: "bg-transparent text-danger border border-border hover:bg-muted",
 };
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: "text-xs px-2.5 py-1.5 gap-1",
-  md: "text-sm px-3.5 py-2 gap-1.5",
+  sm: "text-[13px] h-9 px-3 gap-1.5",
+  md: "text-[15px] h-11 px-4 gap-2",
 };
 
 export function Button({
@@ -39,8 +40,8 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1",
+        "inline-flex cursor-pointer items-center justify-center rounded-lg font-medium transition-[background-color,filter,transform] active:translate-y-px",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)]",
         "disabled:opacity-50 disabled:pointer-events-none",
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
@@ -51,71 +52,95 @@ export function Button({
   );
 }
 
-// --- Inputs -----------------------------------------------------------------
-
-const FIELD_BASE =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 " +
-  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500";
-
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(FIELD_BASE, className)} {...props} />;
-}
-
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(FIELD_BASE, "min-h-20 resize-y", className)} {...props} />;
-}
-
-export function Select({
+export function IconButton({
   className,
+  label,
   children,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
-    <select className={cn(FIELD_BASE, "appearance-none pr-8", className)} {...props}>
+    <button
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-muted hover:text-fg",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        className,
+      )}
+      {...props}
+    >
       {children}
-    </select>
+    </button>
   );
 }
 
-export function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
+// --- Inputs -----------------------------------------------------------------
+
+const FIELD_BASE =
+  "w-full rounded-lg border border-border bg-surface px-3 text-[15px] text-fg " +
+  "placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent";
+
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={cn(FIELD_BASE, "h-11", className)} {...props} />;
+}
+
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(FIELD_BASE, "min-h-24 resize-y py-2.5", className)} {...props} />;
+}
+
+export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select className={cn(FIELD_BASE, "h-11 appearance-none pr-9", className)} {...props}>
+        {children}
+      </select>
+      <ChevronDown
+        size={16}
+        strokeWidth={1.75}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+      />
+    </div>
+  );
+}
+
+export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-fg-muted">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-slate-400">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-[13px] text-fg-subtle">{hint}</span> : null}
     </label>
   );
 }
 
 // --- Badge ------------------------------------------------------------------
 
-export type BadgeColor = "slate" | "green" | "amber" | "red" | "blue" | "indigo" | "purple";
+export type BadgeColor = "neutral" | "navy" | "accent" | "success" | "warning" | "danger" | "info";
 
-const BADGE_COLORS: Record<BadgeColor, string> = {
-  slate: "bg-slate-100 text-slate-700 ring-slate-200",
-  green: "bg-green-100 text-green-800 ring-green-200",
-  amber: "bg-amber-100 text-amber-800 ring-amber-200",
-  red: "bg-red-100 text-red-800 ring-red-200",
-  blue: "bg-blue-100 text-blue-800 ring-blue-200",
-  indigo: "bg-indigo-100 text-indigo-800 ring-indigo-200",
-  purple: "bg-purple-100 text-purple-800 ring-purple-200",
+const BADGE_TOKEN: Record<Exclude<BadgeColor, "neutral">, string> = {
+  navy: "--color-navy",
+  accent: "--color-accent-strong",
+  success: "--color-success",
+  warning: "--color-warning",
+  danger: "--color-danger",
+  info: "--color-info",
 };
 
-export function Badge({ color = "slate", children }: { color?: BadgeColor; children: ReactNode }) {
+export function Badge({ color = "neutral", children }: { color?: BadgeColor; children: ReactNode }) {
+  const base =
+    "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap";
+  if (color === "neutral") {
+    return <span className={cn(base, "bg-muted text-fg-muted")}>{children}</span>;
+  }
+  const c = `var(${BADGE_TOKEN[color]})`;
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-        BADGE_COLORS[color],
-      )}
+      className={base}
+      style={{
+        color: c,
+        backgroundColor: `color-mix(in srgb, ${c} 14%, transparent)`,
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${c} 26%, transparent)`,
+      }}
     >
       {children}
     </span>
@@ -148,24 +173,18 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-6">
-      <div
-        className="absolute inset-0"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 my-8 w-full max-w-lg rounded-xl bg-white shadow-xl ring-1 ring-slate-200">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 10-1.06-1.06L10 8.94 6.28 5.22z" />
-            </svg>
-          </button>
+    <div
+      className="luna-fade fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(8,15,30,0.55)] p-4 backdrop-blur-sm sm:p-6"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="luna-pop relative z-10 my-8 w-full max-w-lg rounded-2xl border border-border bg-card shadow-[0_24px_60px_-18px_rgba(8,15,30,0.45)]">
+        <div className="flex items-center justify-between border-b border-border-soft px-5 py-3.5">
+          <h2 className="text-[15px] font-semibold text-fg">{title}</h2>
+          <IconButton label="Close" onClick={onClose}>
+            <X size={18} strokeWidth={1.75} />
+          </IconButton>
         </div>
         <div className="px-5 py-4">{children}</div>
       </div>
@@ -177,33 +196,32 @@ export function Modal({
 
 export function Spinner({ className }: { className?: string }) {
   return (
-    <svg
-      className={cn("animate-spin", className)}
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
+    <svg className={cn("animate-spin", className)} width="16" height="16" viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({
+  title,
+  hint,
+  action,
+}: {
+  title: string;
+  hint?: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-10 text-center">
-      <p className="text-sm font-medium text-slate-600">{title}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}
+    <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-10 text-center">
+      <p className="text-[15px] font-medium text-fg-muted">{title}</p>
+      {hint ? <p className="mx-auto mt-1 max-w-sm text-[13px] text-fg-subtle">{hint}</p> : null}
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
   );
 }
 
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
-  return <p className="text-xs text-red-600">{children}</p>;
+  return <p className="text-[13px] text-danger">{children}</p>;
 }

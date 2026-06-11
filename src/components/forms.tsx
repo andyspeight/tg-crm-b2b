@@ -127,7 +127,7 @@ export function CompanyForm({
       saving={saving}
     >
       <Field label="Company name">
-        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Acme Travel Ltd" />
+        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Coastline Travel Group" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Type">
@@ -259,11 +259,11 @@ export function ContactForm({
       saving={saving}
     >
       <Field label="Name">
-        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Jane Smith" />
+        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Priya Nair" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Role">
-          <Input value={f.role} onChange={set("role")} placeholder="Head of Product" />
+          <Input value={f.role} onChange={set("role")} placeholder="Operations Manager" />
         </Field>
         {!lockedCompanyId && (
           <Field label="Company">
@@ -359,7 +359,7 @@ export function DealForm({
       saving={saving}
     >
       <Field label="Deal name">
-        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Acme — new business" />
+        <Input value={f.name} onChange={set("name")} autoFocus placeholder="Coastline Travel - platform switch" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Stage">

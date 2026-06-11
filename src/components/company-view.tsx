@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ReactNode, useState } from "react";
+import { ArrowLeft, ExternalLink, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact, Deal } from "@/lib/crm/types";
-import { Button, EmptyState, Modal } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal } from "@/components/ui";
 import { HealthBadge, LifecycleBadge, StageBadge } from "@/components/badges";
 import { CompanyForm, ContactForm, DealForm } from "@/components/forms";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -47,7 +48,6 @@ export function CompanyView({
     setCompany(data.company);
     setEditingCompany(false);
   }
-
   async function toggleWatchlist() {
     const data = await api<{ company: Company }>(`/api/companies/${company.id}`, {
       method: "PATCH",
@@ -55,7 +55,6 @@ export function CompanyView({
     });
     setCompany(data.company);
   }
-
   async function deleteCompany() {
     if (!confirm(`Delete ${company.name} and unlink its records? This cannot be undone.`)) return;
     await api(`/api/companies/${company.id}`, { method: "DELETE" });
@@ -64,10 +63,7 @@ export function CompanyView({
 
   async function saveContact(payload: Record<string, unknown>) {
     if (editingContact) {
-      await api(`/api/contacts/${editingContact.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
+      await api(`/api/contacts/${editingContact.id}`, { method: "PATCH", body: JSON.stringify(payload) });
       setEditingContact(null);
     } else {
       await api(`/api/contacts`, { method: "POST", body: JSON.stringify(payload) });
@@ -99,20 +95,23 @@ export function CompanyView({
 
   return (
     <div className="space-y-5">
-      <Link href="/companies" className="text-xs text-slate-400 hover:text-slate-600">
-        &larr; Companies
+      <Link
+        href="/companies"
+        className="inline-flex items-center gap-1.5 text-[13px] text-fg-subtle hover:text-fg"
+      >
+        <ArrowLeft size={15} strokeWidth={1.75} /> Companies
       </Link>
 
       {/* Header */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold text-slate-900">{company.name}</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-fg">{company.name}</h1>
               <LifecycleBadge value={company.lifecycleStage} />
               <HealthBadge value={company.accountHealth} />
             </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-fg-muted">
               {company.type && <span>{company.type}</span>}
               {company.country && <span>{company.country}</span>}
               {company.website && (
@@ -120,9 +119,9 @@ export function CompanyView({
                   href={withProtocol(company.website)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-indigo-600 hover:underline"
+                  className="inline-flex items-center gap-1 hover:text-accent-strong"
                 >
-                  Website
+                  Website <ExternalLink size={12} strokeWidth={1.75} />
                 </a>
               )}
               {company.linkedin && (
@@ -130,24 +129,24 @@ export function CompanyView({
                   href={withProtocol(company.linkedin)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-indigo-600 hover:underline"
+                  className="inline-flex items-center gap-1 hover:text-accent-strong"
                 >
-                  LinkedIn
+                  LinkedIn <ExternalLink size={12} strokeWidth={1.75} />
                 </a>
               )}
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={toggleWatchlist}
-              title="Toggle watchlist"
-            >
-              {company.watchlist ? "★ Watching" : "☆ Watch"}
+            <Button variant="secondary" size="sm" onClick={toggleWatchlist}>
+              <Star
+                size={15}
+                strokeWidth={1.75}
+                className={company.watchlist ? "fill-current text-warning" : ""}
+              />
+              {company.watchlist ? "Watching" : "Watch"}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setEditingCompany(true)}>
-              Edit
+              <Pencil size={15} strokeWidth={1.75} /> Edit
             </Button>
           </div>
         </div>
@@ -160,25 +159,29 @@ export function CompanyView({
             title="Deals"
             action={
               <Button size="sm" onClick={() => setAddingDeal(true)}>
-                Add deal
+                <Plus size={15} strokeWidth={2} /> Add deal
               </Button>
             }
           >
             {deals.length === 0 ? (
-              <EmptyState title="No deals yet" />
+              <EmptyState title="No deals yet" hint="Add the first deal to start the pipeline." />
             ) : (
-              <ul className="divide-y divide-slate-50">
+              <ul className="divide-y divide-border-soft">
                 {deals.map((d) => (
                   <li key={d.id} className="flex items-center gap-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">{d.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">
+                      <p className="truncate text-[14px] font-medium text-fg">{d.name}</p>
+                      <p className="mt-0.5 text-[13px] text-fg-subtle">
                         {d.nextStep ? `Next: ${d.nextStep}` : "No next step"}
-                        {d.nextStepDate ? ` · ${formatDate(d.nextStepDate)}` : ""}
+                        {d.nextStepDate ? (
+                          <span className="tnum"> · {formatDate(d.nextStepDate)}</span>
+                        ) : null}
                       </p>
                     </div>
                     <StageBadge value={d.stage} />
-                    <span className="w-20 text-right text-sm text-slate-600">{formatMoney(d.mrr)}</span>
+                    <span className="tnum w-20 text-right text-[14px] text-fg-muted">
+                      {formatMoney(d.mrr)}
+                    </span>
                     <RowActions onEdit={() => setEditingDeal(d)} onRemove={() => removeDeal(d)} />
                   </li>
                 ))}
@@ -190,22 +193,22 @@ export function CompanyView({
             title="Contacts"
             action={
               <Button size="sm" onClick={() => setAddingContact(true)}>
-                Add contact
+                <Plus size={15} strokeWidth={2} /> Add contact
               </Button>
             }
           >
             {contacts.length === 0 ? (
-              <EmptyState title="No contacts yet" />
+              <EmptyState title="No contacts yet" hint="Add the people you deal with at this account." />
             ) : (
-              <ul className="divide-y divide-slate-50">
+              <ul className="divide-y divide-border-soft">
                 {contacts.map((c) => (
                   <li key={c.id} className="flex items-center gap-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">
+                      <p className="truncate text-[14px] font-medium text-fg">
                         {c.name}
-                        {c.role ? <span className="ml-2 font-normal text-slate-400">{c.role}</span> : null}
+                        {c.role ? <span className="ml-2 font-normal text-fg-subtle">{c.role}</span> : null}
                       </p>
-                      <p className="mt-0.5 truncate text-xs text-slate-400">
+                      <p className="mt-0.5 truncate text-[13px] text-fg-subtle">
                         {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact details"}
                       </p>
                     </div>
@@ -217,25 +220,36 @@ export function CompanyView({
           </Section>
 
           <Section title="Activity timeline">
-            <EmptyState title="The timeline arrives in Stage 2" hint="Notes, calls, emails and care touches will appear here." />
+            <EmptyState
+              title="The timeline arrives in Stage 2"
+              hint="Notes, calls, emails and care touches will appear here."
+            />
           </Section>
         </div>
 
         {/* Side column */}
         <div className="space-y-5">
-          <Section title="Details" action={null}>
-            <dl className="divide-y divide-slate-50">
+          <Section title="Details">
+            <dl className="divide-y divide-border-soft">
               <KV label="Region">{company.region ?? "—"}</KV>
               <KV label="Plan / tier">{company.planTier ?? "—"}</KV>
-              <KV label="MRR">{formatMoney(company.mrr)}</KV>
-              <KV label="Go-live">{formatDate(company.goLiveDate)}</KV>
-              <KV label="Renewal">{formatDate(company.renewalDate)}</KV>
+              <KV label="MRR">
+                <span className="tnum">{formatMoney(company.mrr)}</span>
+              </KV>
+              <KV label="Go-live">
+                <span className="tnum">{formatDate(company.goLiveDate)}</span>
+              </KV>
+              <KV label="Renewal">
+                <span className="tnum">{formatDate(company.renewalDate)}</span>
+              </KV>
               <KV label="Size band">{company.sizeBand ?? "—"}</KV>
               <KV label="Care cadence">{company.careCadence ?? "—"}</KV>
-              <KV label="Last contact">{formatDate(company.lastMeaningfulContact)}</KV>
+              <KV label="Last contact">
+                <span className="tnum">{formatDate(company.lastMeaningfulContact)}</span>
+              </KV>
             </dl>
             {company.description ? (
-              <p className="mt-3 border-t border-slate-50 pt-3 text-sm text-slate-600">
+              <p className="mt-3 border-t border-border-soft pt-3 text-[14px] text-fg-muted">
                 {company.description}
               </p>
             ) : null}
@@ -251,9 +265,9 @@ export function CompanyView({
 
           <button
             onClick={deleteCompany}
-            className="text-xs text-slate-400 hover:text-red-600"
+            className="inline-flex items-center gap-1.5 text-[13px] text-fg-subtle transition-colors hover:text-danger"
           >
-            Delete this company
+            <Trash2 size={14} strokeWidth={1.75} /> Delete this company
           </button>
         </div>
       </div>
@@ -311,19 +325,11 @@ export function CompanyView({
   );
 }
 
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+    <section className="rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
+        <h2 className="text-[14px] font-semibold text-fg">{title}</h2>
         {action}
       </div>
       <div className="p-4">{children}</div>
@@ -334,21 +340,21 @@ function Section({
 function KV({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex justify-between gap-4 py-1.5">
-      <dt className="text-xs text-slate-400">{label}</dt>
-      <dd className="text-right text-sm text-slate-700">{children}</dd>
+      <dt className="text-[13px] text-fg-subtle">{label}</dt>
+      <dd className="text-right text-[14px] text-fg">{children}</dd>
     </div>
   );
 }
 
 function RowActions({ onEdit, onRemove }: { onEdit: () => void; onRemove: () => void }) {
   return (
-    <span className="flex shrink-0 items-center">
-      <Button variant="ghost" size="sm" onClick={onEdit}>
-        Edit
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-600">
-        Remove
-      </Button>
+    <span className="flex shrink-0 items-center gap-0.5">
+      <IconButton label="Edit" onClick={onEdit}>
+        <Pencil size={16} strokeWidth={1.75} />
+      </IconButton>
+      <IconButton label="Remove" onClick={onRemove} className="hover:text-danger">
+        <Trash2 size={16} strokeWidth={1.75} />
+      </IconButton>
     </span>
   );
 }

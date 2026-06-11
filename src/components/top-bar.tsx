@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Briefcase, Building2, LogOut, Search, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
-import { cn, Spinner } from "@/components/ui";
+import { cn, IconButton, Spinner } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
-  { href: "/companies", label: "Companies" },
-  { href: "/contacts", label: "Contacts" },
-  { href: "/deals", label: "Deals" },
+  { href: "/companies", label: "Companies", icon: Building2 },
+  { href: "/contacts", label: "Contacts", icon: Users },
+  { href: "/deals", label: "Deals", icon: Briefcase },
 ];
 
 export function TopBar() {
@@ -23,11 +25,11 @@ export function TopBar() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-        <Link href="/companies" className="flex items-baseline gap-2 shrink-0">
-          <span className="text-base font-semibold text-slate-900">Luna Desk</span>
-          <span className="hidden text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+    <header className="sticky top-0 z-20 border-b border-border bg-card/85 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5">
+        <Link href="/companies" className="flex shrink-0 items-baseline gap-2">
+          <span className="text-base font-semibold tracking-tight text-navy">Luna Desk</span>
+          <span className="hidden text-[11px] font-medium uppercase tracking-wide text-fg-subtle sm:inline">
             TG B2B CRM
           </span>
         </Link>
@@ -35,31 +37,31 @@ export function TopBar() {
         <nav className="ml-2 flex items-center gap-1">
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors",
                   active
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-700",
+                    ? "bg-muted text-fg"
+                    : "text-fg-muted hover:bg-muted hover:text-fg",
                 )}
               >
-                {item.label}
+                <Icon size={16} strokeWidth={1.75} />
+                <span className="hidden sm:inline">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1">
           <GlobalSearch />
-          <button
-            onClick={logout}
-            className="rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-          >
-            Sign out
-          </button>
+          <ThemeToggle />
+          <IconButton label="Sign out" onClick={logout}>
+            <LogOut size={18} strokeWidth={1.75} />
+          </IconButton>
         </div>
       </div>
     </header>
@@ -96,7 +98,7 @@ function GlobalSearch() {
       } finally {
         setLoading(false);
       }
-    }, 200);
+    }, 250);
     return () => clearTimeout(t);
   }, [q]);
 
@@ -118,6 +120,11 @@ function GlobalSearch() {
 
   return (
     <div ref={boxRef} className="relative">
+      <Search
+        size={15}
+        strokeWidth={1.75}
+        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+      />
       <input
         value={q}
         onChange={(e) => {
@@ -126,50 +133,49 @@ function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         placeholder="Search..."
-        className="w-36 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm placeholder:text-slate-400 focus:w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-48"
+        aria-label="Search companies and contacts"
+        className="w-36 rounded-lg border border-border bg-surface py-1.5 pl-8 pr-3 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:w-52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-44"
       />
       {open && q.trim().length >= 2 && (
-        <div className="absolute right-0 mt-1.5 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="luna-fade absolute right-0 mt-1.5 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-[0_16px_40px_-12px_rgba(8,15,30,0.3)]">
           {loading && (
-            <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-400">
+            <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-fg-subtle">
               <Spinner /> Searching...
             </div>
           )}
           {!loading && !hasResults && (
-            <div className="px-4 py-3 text-sm text-slate-400">No matches</div>
+            <div className="px-4 py-3 text-[13px] text-fg-subtle">No matches</div>
           )}
           {!loading && results.companies.length > 0 && (
-            <div className="border-b border-slate-100 py-1">
-              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <div className="border-b border-border-soft py-1">
+              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                 Companies
               </p>
               {results.companies.slice(0, 6).map((c) => (
                 <button
                   key={c.id}
                   onClick={() => go(`/companies/${c.id}`)}
-                  className="block w-full px-4 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  className="block w-full px-4 py-1.5 text-left text-[13px] text-fg hover:bg-muted"
                 >
                   {c.name}
-                  {c.type ? <span className="ml-2 text-xs text-slate-400">{c.type}</span> : null}
+                  {c.type ? <span className="ml-2 text-fg-subtle">{c.type}</span> : null}
                 </button>
               ))}
             </div>
           )}
           {!loading && results.contacts.length > 0 && (
             <div className="py-1">
-              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                 Contacts
               </p>
               {results.contacts.slice(0, 6).map((c) => (
                 <button
                   key={c.id}
                   onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
-                  className="block w-full px-4 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  className="block w-full px-4 py-1.5 text-left text-[13px] text-fg hover:bg-muted"
                 >
                   {c.name}
-                  {c.companyName ? (
-                    <span className="ml-2 text-xs text-slate-400">{c.companyName}</span>
-                  ) : null}
+                  {c.companyName ? <span className="ml-2 text-fg-subtle">{c.companyName}</span> : null}
                 </button>
               ))}
             </div>
