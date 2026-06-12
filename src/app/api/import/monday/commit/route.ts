@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { planCompanies } from "@/lib/monday/mapping";
 import { createCompaniesBatch } from "@/lib/crm/data";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
+import { AirtableError } from "@/lib/airtable";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -45,6 +46,19 @@ export async function POST(req: NextRequest) {
     if (e instanceof MondayError) {
       const status = e.status >= 400 && e.status < 500 ? e.status : 502;
       return NextResponse.json({ error: e.message }, { status });
+    }
+    if (e instanceof AirtableError) {
+      console.error("[import] airtable write failed", e.status);
+      if (e.status === 403) {
+        return NextResponse.json(
+          {
+            error:
+              "Airtable refused the write — the API token is read-only. Add the 'data.records:write' scope to your Airtable token, then run the import again.",
+          },
+          { status: 403 },
+        );
+      }
+      return NextResponse.json({ error: `Airtable rejected the write (status ${e.status}).` }, { status: 502 });
     }
     return errorResponse(e);
   }
