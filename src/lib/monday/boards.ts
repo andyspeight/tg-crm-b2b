@@ -32,8 +32,25 @@ export async function listBoards(): Promise<MondayBoard[]> {
     }));
 }
 
-type RawItem = { id: string; name: string; column_values: { id: string; text: string | null }[] };
-const ITEM_QUERY_FIELDS = "items { id name column_values { id text } }";
+type RawItem = {
+  id: string;
+  name: string;
+  column_values: { id: string; text: string | null; value: string | null }[];
+};
+const ITEM_QUERY_FIELDS = "items { id name column_values { id text value } }";
+
+/** Pull a URL out of a Monday link/url column's JSON value when its text is blank. */
+function parseLinkValue(raw: string | null): string {
+  if (!raw) return "";
+  try {
+    const o = JSON.parse(raw);
+    if (typeof o?.url === "string" && o.url) return o.url;
+    if (o?.url && typeof o.url.url === "string") return o.url.url;
+  } catch {
+    /* not JSON */
+  }
+  return "";
+}
 
 /**
  * Read a board's items (with their column text values) via cursor pagination.
@@ -60,15 +77,23 @@ export async function getBoardItems(
 
   const columns = (board.columns ?? []).map((c) => ({ id: c.id, title: c.title, type: c.type }));
   const titleById: Record<string, string> = {};
-  for (const c of columns) titleById[c.id] = (c.title ?? "").toLowerCase().trim();
+  const typeById: Record<string, string> = {};
+  for (const c of columns) {
+    titleById[c.id] = (c.title ?? "").toLowerCase().trim();
+    typeById[c.id] = c.type;
+  }
 
   const items: MondayItem[] = [];
   const push = (raws: RawItem[]) => {
     for (const it of raws) {
       const values: Record<string, string> = {};
       for (const cv of it.column_values ?? []) {
-        if (cv.text == null || cv.text === "") continue;
-        values[titleById[cv.id] || cv.id] = cv.text;
+        let v = cv.text && cv.text.trim() ? cv.text.trim() : "";
+        if (!v) {
+          const t = typeById[cv.id];
+          if (t === "link" || t === "url") v = parseLinkValue(cv.value);
+        }
+        if (v) values[titleById[cv.id] || cv.id] = v;
       }
       items.push({ id: it.id, name: it.name, values });
     }

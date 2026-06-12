@@ -1,12 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Building2, RefreshCw, Table2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Building2, Download, RefreshCw, Table2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
 import { Button, Modal, Spinner } from "@/components/ui";
 
+/** Board names Luna Desk knows how to import, and the Luna object they map to. */
+function inferTarget(name: string): "companies" | null {
+  const n = name.toLowerCase().trim();
+  if (n === "companies") return "companies";
+  return null;
+}
+
+type PlanResult = {
+  target: string;
+  total: number;
+  willCreate: number;
+  duplicates: number;
+  skipped: number;
+  sample: {
+    name: string;
+    website: string | null;
+    country: string | null;
+    sizeBand: string | null;
+    lifecycleStage: string | null;
+  }[];
+};
+type CommitResult = { target: string; created: number; duplicates: number; skipped: number };
+
 export function MondayImport() {
+  const router = useRouter();
   const [boards, setBoards] = useState<MondayBoard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -15,6 +40,14 @@ export function MondayImport() {
   const [preview, setPreview] = useState<BoardPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
+
+  const [importing, setImporting] = useState<MondayBoard | null>(null);
+  const [plan, setPlan] = useState<PlanResult | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState("");
+  const [committing, setCommitting] = useState(false);
+  const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
+  const [commitError, setCommitError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,15 +84,52 @@ export function MondayImport() {
     }
   }
 
+  async function openImport(board: MondayBoard) {
+    setImporting(board);
+    setPlan(null);
+    setPlanError("");
+    setCommitResult(null);
+    setCommitError("");
+    setPlanLoading(true);
+    try {
+      const data = await api<PlanResult>("/api/import/monday/plan", {
+        method: "POST",
+        body: JSON.stringify({ boardId: board.id, target: inferTarget(board.name) }),
+      });
+      setPlan(data);
+    } catch (e) {
+      setPlanError(e instanceof Error ? e.message : "Could not prepare the import");
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
+  async function runCommit() {
+    if (!importing) return;
+    setCommitting(true);
+    setCommitError("");
+    try {
+      const data = await api<CommitResult>("/api/import/monday/commit", {
+        method: "POST",
+        body: JSON.stringify({ boardId: importing.id, target: inferTarget(importing.name) }),
+      });
+      setCommitResult(data);
+    } catch (e) {
+      setCommitError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setCommitting(false);
+    }
+  }
+
   return (
     <div>
       <header className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Import from Monday</h1>
           <p className="mt-1 max-w-2xl text-[13px] text-fg-muted">
-            These are the boards Luna Desk can see in your Monday account. Nothing is written —
-            use <strong>Preview</strong> on a board to sample its rows and see the actual values in
-            each column, so the import maps onto Luna Desk correctly.
+            <strong>Preview</strong> samples a board's rows (writes nothing).{" "}
+            <strong>Import</strong> shows you a count and only writes when you confirm. Companies is
+            ready first; the other boards follow.
           </p>
         </div>
         <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
@@ -75,8 +145,7 @@ export function MondayImport() {
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-[13px] font-medium text-danger">{error}</p>
           <p className="mt-1.5 text-[12px] text-fg-muted">
-            If you have just added the token in Vercel, give the deploy a minute to go live, then hit
-            Refresh.
+            If you have just added the token in Vercel, give the deploy a minute, then hit Refresh.
           </p>
         </div>
       ) : boards.length === 0 ? (
@@ -86,45 +155,54 @@ export function MondayImport() {
           <p className="text-[12px] text-fg-subtle">
             {boards.length} board{boards.length === 1 ? "" : "s"} found
           </p>
-          {boards.map((b) => (
-            <div key={b.id} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Building2 size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" />
-                  <h2 className="truncate text-[14px] font-semibold text-fg">{b.name}</h2>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="tnum text-[12px] text-fg-subtle">
-                    {b.itemsCount ?? "?"} item{b.itemsCount === 1 ? "" : "s"}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => openPreview(b)}
-                    disabled={!b.itemsCount}
-                  >
-                    <Table2 size={14} strokeWidth={1.75} /> Preview
-                  </Button>
-                </div>
-              </div>
-              {b.columns.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {b.columns.map((c) => (
-                    <span
-                      key={c.id}
-                      className="inline-flex items-center gap-1 rounded-md border border-border-soft bg-surface px-2 py-0.5 text-[11px] text-fg-muted"
-                    >
-                      {c.title}
-                      <span className="text-fg-subtle">· {c.type}</span>
+          {boards.map((b) => {
+            const target = inferTarget(b.name);
+            return (
+              <div key={b.id} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Building2 size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" />
+                    <h2 className="truncate text-[14px] font-semibold text-fg">{b.name}</h2>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="tnum mr-1 text-[12px] text-fg-subtle">
+                      {b.itemsCount ?? "?"} item{b.itemsCount === 1 ? "" : "s"}
                     </span>
-                  ))}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openPreview(b)}
+                      disabled={!b.itemsCount}
+                    >
+                      <Table2 size={14} strokeWidth={1.75} /> Preview
+                    </Button>
+                    {target && b.itemsCount ? (
+                      <Button size="sm" onClick={() => openImport(b)}>
+                        <Download size={14} strokeWidth={1.9} /> Import
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
-            </div>
-          ))}
+                {b.columns.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {b.columns.map((c) => (
+                      <span
+                        key={c.id}
+                        className="inline-flex items-center gap-1 rounded-md border border-border-soft bg-surface px-2 py-0.5 text-[11px] text-fg-muted"
+                      >
+                        {c.title}
+                        <span className="text-fg-subtle">· {c.type}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
 
+      {/* Preview (read-only) */}
       <Modal
         open={!!previewing}
         onClose={() => setPreviewing(null)}
@@ -153,13 +231,13 @@ export function MondayImport() {
                     <div key={col.title}>
                       <p className="text-[12px] font-medium text-fg">{col.title}</p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
-                        {col.values.map((v) => (
+                        {col.values.map((val) => (
                           <span
-                            key={v.value}
+                            key={val.value}
                             className="inline-flex items-center gap-1 rounded-md border border-border-soft bg-surface px-2 py-0.5 text-[11px] text-fg-muted"
                           >
-                            {v.value}
-                            <span className="tnum text-fg-subtle">× {v.count}</span>
+                            {val.value}
+                            <span className="tnum text-fg-subtle">× {val.count}</span>
                           </span>
                         ))}
                       </div>
@@ -193,6 +271,91 @@ export function MondayImport() {
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* Import (confirm before write) */}
+      <Modal
+        open={!!importing}
+        onClose={() => setImporting(null)}
+        title={importing ? `Import: ${importing.name}` : "Import"}
+      >
+        {planLoading ? (
+          <p className="flex items-center gap-2 text-[13px] text-fg-subtle">
+            <Spinner /> Preparing the import...
+          </p>
+        ) : planError ? (
+          <p className="text-[13px] text-danger">{planError}</p>
+        ) : commitResult ? (
+          <div className="space-y-4">
+            <p className="text-[14px] text-fg">
+              Imported <strong>{commitResult.created}</strong>{" "}
+              {commitResult.created === 1 ? "company" : "companies"}.
+            </p>
+            <p className="text-[13px] text-fg-muted">
+              {commitResult.duplicates} already in Luna Desk (skipped); {commitResult.skipped} had no
+              name.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setImporting(null)}>
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setImporting(null);
+                  router.push("/companies");
+                  router.refresh();
+                }}
+              >
+                View companies
+              </Button>
+            </div>
+          </div>
+        ) : plan ? (
+          <div className="space-y-4">
+            <p className="text-[14px] text-fg">
+              <strong>{plan.willCreate}</strong> new{" "}
+              {plan.willCreate === 1 ? "company" : "companies"} will be created as customers (Green
+              health, quarterly care).
+            </p>
+            <p className="text-[13px] text-fg-muted">
+              From {plan.total} rows: {plan.duplicates} already in Luna Desk (skipped),{" "}
+              {plan.skipped} had no name.
+            </p>
+
+            {plan.sample.length > 0 ? (
+              <div>
+                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-fg-subtle">
+                  First few
+                </h3>
+                <div className="space-y-1.5">
+                  {plan.sample.map((c) => (
+                    <div
+                      key={c.name}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border-soft bg-surface px-2.5 py-1.5"
+                    >
+                      <span className="truncate text-[13px] text-fg">{c.name}</span>
+                      <span className="shrink-0 text-[11px] text-fg-subtle">
+                        {[c.website, c.country, c.sizeBand].filter(Boolean).join(" · ") || "name only"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {commitError ? <p className="text-[13px] text-danger">{commitError}</p> : null}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setImporting(null)} disabled={committing}>
+                Cancel
+              </Button>
+              <Button onClick={runCommit} disabled={committing || plan.willCreate === 0}>
+                {committing ? <Spinner /> : <Download size={15} strokeWidth={1.9} />} Import{" "}
+                {plan.willCreate} {plan.willCreate === 1 ? "company" : "companies"}
+              </Button>
+            </div>
           </div>
         ) : null}
       </Modal>

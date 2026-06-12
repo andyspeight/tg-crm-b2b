@@ -330,6 +330,14 @@ export async function createCompany(input: CompanyInput): Promise<Company> {
   return toCompany(await createRecord(AIRTABLE_BASE_ID, TABLES.companies, fields));
 }
 
+/** Bulk-create companies (Monday import), chunked to Airtable's 10-per-request limit. */
+export async function createCompaniesBatch(inputs: CompanyInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const fieldsList = inputs.map((i) => buildCompanyFields(i, false));
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.companies, fieldsList);
+  return created.length;
+}
+
 export async function updateCompany(id: string, input: CompanyInput): Promise<Company> {
   const fields = buildCompanyFields(input, true);
   return toCompany(await updateRecord(AIRTABLE_BASE_ID, TABLES.companies, id, fields));
