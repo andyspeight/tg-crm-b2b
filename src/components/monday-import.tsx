@@ -8,26 +8,22 @@ import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
 import { Button, Modal, Spinner } from "@/components/ui";
 
 /** Board names Luna Desk knows how to import, and the Luna object they map to. */
-function inferTarget(name: string): "companies" | "contacts" | "deals" | null {
+function inferTarget(name: string): "companies" | "contacts" | "deals" | "leads" | null {
   const n = name.toLowerCase().trim();
   if (n === "companies") return "companies";
   if (n === "contacts" || n === "contacts type") return "contacts";
   if (n === "deals") return "deals";
+  if (n === "leads") return "leads";
   return null;
 }
 
-const nounFor = (target: string, n: number) =>
-  target === "contacts"
-    ? n === 1
-      ? "contact"
-      : "contacts"
-    : target === "deals"
-      ? n === 1
-        ? "deal"
-        : "deals"
-      : n === 1
-        ? "company"
-        : "companies";
+const NOUNS: Record<string, [string, string]> = {
+  contacts: ["contact", "contacts"],
+  deals: ["deal", "deals"],
+  leads: ["lead", "leads"],
+  companies: ["company", "companies"],
+};
+const nounFor = (target: string, n: number) => (NOUNS[target] ?? NOUNS.companies)[n === 1 ? 0 : 1];
 
 type PlanResult = {
   target: string;
@@ -35,9 +31,16 @@ type PlanResult = {
   willCreate: number;
   duplicates: number;
   skipped: number;
+  companies?: number;
   sample: { primary: string; detail: string }[];
 };
-type CommitResult = { target: string; created: number; duplicates: number; skipped: number };
+type CommitResult = {
+  target: string;
+  created: number;
+  duplicates: number;
+  skipped: number;
+  companies?: number;
+};
 
 export function MondayImport() {
   const router = useRouter();
@@ -300,7 +303,11 @@ export function MondayImport() {
           <div className="space-y-4">
             <p className="text-[14px] text-fg">
               Imported <strong>{commitResult.created}</strong>{" "}
-              {nounFor(commitResult.target, commitResult.created)}.
+              {nounFor(commitResult.target, commitResult.created)}
+              {commitResult.companies
+                ? ` and ${commitResult.companies} prospect ${commitResult.companies === 1 ? "company" : "companies"}`
+                : ""}
+              .
             </p>
             <p className="text-[13px] text-fg-muted">
               {commitResult.duplicates} already in Luna Desk (skipped); {commitResult.skipped} had no
@@ -332,9 +339,17 @@ export function MondayImport() {
                   ? ", linked to their company where the name matches"
                   : plan.target === "deals"
                     ? ", mapped onto your pipeline stages"
-                    : ""}
+                    : plan.target === "leads"
+                      ? " as prospect contacts"
+                      : ""}
               .
             </p>
+            {plan.companies ? (
+              <p className="text-[13px] text-fg-muted">
+                Plus <strong className="text-fg">{plan.companies}</strong> new prospect{" "}
+                {plan.companies === 1 ? "company" : "companies"}.
+              </p>
+            ) : null}
             <p className="text-[13px] text-fg-muted">
               From {plan.total} rows: {plan.duplicates} already in Luna Desk (skipped),{" "}
               {plan.skipped} had no name.

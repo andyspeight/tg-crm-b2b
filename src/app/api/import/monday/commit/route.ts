@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies, planContacts, planDeals } from "@/lib/monday/mapping";
-import { createCompaniesBatch, createContactsBatch, createDealsBatch } from "@/lib/crm/data";
+import { planCompanies, planContacts, planDeals, planLeads } from "@/lib/monday/mapping";
+import {
+  createCompaniesBatch,
+  createCompaniesReturning,
+  createContactsBatch,
+  createDealsBatch,
+  listCompanies,
+} from "@/lib/crm/data";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { AirtableError } from "@/lib/airtable";
 import { errorResponse, readJson } from "@/lib/api";
@@ -26,6 +32,7 @@ export async function POST(req: NextRequest) {
     let created = 0;
     let duplicates = 0;
     let skipped = 0;
+    let companiesCreated = 0;
 
     if (target === "companies") {
       const plan = await planCompanies(boardId);
@@ -42,11 +49,25 @@ export async function POST(req: NextRequest) {
       created = await createDealsBatch(plan.toCreate);
       duplicates = plan.duplicates;
       skipped = plan.skipped;
+    } else if (target === "leads") {
+      const plan = await planLeads(boardId);
+      await createCompaniesReturning(plan.newCompanies);
+      const all = await listCompanies();
+      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const nameToId = new Map(all.map((c) => [norm(c.name), c.id]));
+      const contactInputs = plan.contacts.map(({ input, companyName }) => ({
+        ...input,
+        companyId: companyName ? nameToId.get(norm(companyName)) : undefined,
+      }));
+      created = await createContactsBatch(contactInputs);
+      companiesCreated = plan.newCompanies.length;
+      duplicates = plan.duplicates;
+      skipped = plan.skipped;
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });
     }
 
-    return NextResponse.json({ target, created, duplicates, skipped });
+    return NextResponse.json({ target, created, duplicates, skipped, companies: companiesCreated });
   } catch (e) {
     if (e instanceof MondayNotConfiguredError) {
       return NextResponse.json(

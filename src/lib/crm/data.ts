@@ -338,6 +338,14 @@ export async function createCompaniesBatch(inputs: CompanyInput[]): Promise<numb
   return created.length;
 }
 
+/** Bulk-create companies and return the created records (needed to link contacts). */
+export async function createCompaniesReturning(inputs: CompanyInput[]): Promise<Company[]> {
+  if (inputs.length === 0) return [];
+  const fieldsList = inputs.map((i) => buildCompanyFields(i, false));
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.companies, fieldsList);
+  return created.map((r) => toCompany(r));
+}
+
 export async function updateCompany(id: string, input: CompanyInput): Promise<Company> {
   const fields = buildCompanyFields(input, true);
   return toCompany(await updateRecord(AIRTABLE_BASE_ID, TABLES.companies, id, fields));

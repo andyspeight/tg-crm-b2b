@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies, planContacts, planDeals } from "@/lib/monday/mapping";
+import { planCompanies, planContacts, planDeals, planLeads } from "@/lib/monday/mapping";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     let duplicates = 0;
     let skipped = 0;
     let willCreate = 0;
+    let companies = 0;
     let sample: { primary: string; detail: string }[] = [];
 
     if (target === "companies") {
@@ -53,11 +54,20 @@ export async function POST(req: NextRequest) {
             .filter(Boolean)
             .join(" · ") || "—",
       }));
+    } else if (target === "leads") {
+      const plan = await planLeads(boardId);
+      ({ total, duplicates, skipped } = plan);
+      willCreate = plan.contacts.length;
+      companies = plan.newCompanies.length;
+      sample = plan.contacts.slice(0, 8).map(({ input, companyName }) => ({
+        primary: input.name ?? "(no name)",
+        detail: [input.email, companyName ? `@ ${companyName}` : null].filter(Boolean).join(" · ") || "no email",
+      }));
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });
     }
 
-    return NextResponse.json({ target, total, willCreate, duplicates, skipped, sample });
+    return NextResponse.json({ target, total, willCreate, duplicates, skipped, companies, sample });
   } catch (e) {
     if (e instanceof MondayNotConfiguredError) {
       return NextResponse.json(

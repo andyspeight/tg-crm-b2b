@@ -8,6 +8,8 @@ import "server-only";
 
 const API_BASE = "https://api.airtable.com/v0";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export interface AirtableRecord<T = Record<string, unknown>> {
   id: string;
   createdTime: string;
@@ -113,6 +115,7 @@ export async function createRecords<T = Record<string, unknown>>(
 ): Promise<AirtableRecord<T>[]> {
   const out: AirtableRecord<T>[] = [];
   for (let i = 0; i < fieldsList.length; i += 10) {
+    if (i > 0) await sleep(220); // stay under Airtable's ~5 req/s limit on bulk writes
     const chunk = fieldsList.slice(i, i + 10).map((fields) => ({ fields }));
     const data = await request<{ records: AirtableRecord<T>[] }>(`${baseId}/${tableId}`, {
       method: "POST",

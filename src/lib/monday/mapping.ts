@@ -250,3 +250,71 @@ export async function planContacts(boardId: string): Promise<ContactsPlan> {
   }
   return { total: items.length, duplicates, skipped, toCreate };
 }
+
+// --- Leads (import as prospect companies + their contacts) ------------------
+
+export interface LeadsPlan {
+  total: number;
+  duplicates: number;
+  skipped: number;
+  newCompanies: CompanyInput[];
+  contacts: { input: ContactInput; companyName: string }[];
+}
+
+export async function planLeads(boardId: string): Promise<LeadsPlan> {
+  const [{ items }, companies, existingContacts] = await Promise.all([
+    getBoardItems(boardId),
+    listCompanies(),
+    listContacts({ limit: 5000 }),
+  ]);
+  const existingCompanyNames = new Set(companies.map((c) => norm(c.name)));
+  const seenEmail = new Set(
+    existingContacts.map((c) => (c.email || "").toLowerCase()).filter(Boolean),
+  );
+
+  const newCompanyNames = new Set<string>();
+  const newCompanies: CompanyInput[] = [];
+  const contacts: { input: ContactInput; companyName: string }[] = [];
+  let duplicates = 0;
+  let skipped = 0;
+  const batchEmail = new Set<string>();
+
+  for (const it of items) {
+    const personName = (it.name || "").trim();
+    if (!personName) {
+      skipped++;
+      continue;
+    }
+    const v = (title: string) => it.values[title.toLowerCase()] ?? "";
+    const companyName = v("company name").trim();
+    if (companyName) {
+      const key = norm(companyName);
+      if (!existingCompanyNames.has(key) && !newCompanyNames.has(key)) {
+        newCompanyNames.add(key);
+        newCompanies.push({
+          name: companyName,
+          lifecycleStage: "Prospect",
+          enrichmentSource: "Monday import (Leads)",
+        });
+      }
+    }
+
+    const email = v("email").trim().toLowerCase() || undefined;
+    if (email && (seenEmail.has(email) || batchEmail.has(email))) {
+      duplicates++;
+      continue;
+    }
+    if (email) batchEmail.add(email);
+    contacts.push({
+      input: {
+        name: personName,
+        email,
+        phone: v("phone").trim() || undefined,
+        notes: v("comments").trim() || undefined,
+        source: "Monday import (Leads)",
+      },
+      companyName,
+    });
+  }
+  return { total: items.length, duplicates, skipped, newCompanies, contacts };
+}
