@@ -458,6 +458,14 @@ export async function createDeal(input: DealInput): Promise<Deal> {
   return toDeal(await createRecord(AIRTABLE_BASE_ID, TABLES.deals, fields));
 }
 
+/** Bulk-create deals (Monday import), chunked to Airtable's 10-per-request limit. */
+export async function createDealsBatch(inputs: DealInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const fieldsList = inputs.map((i) => buildDealFields(i, false));
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.deals, fieldsList);
+  return created.length;
+}
+
 export async function updateDeal(id: string, input: DealInput): Promise<Deal> {
   const fields = buildDealFields(input, true);
   return toDeal(await updateRecord(AIRTABLE_BASE_ID, TABLES.deals, id, fields));

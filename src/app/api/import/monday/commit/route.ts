@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies, planContacts } from "@/lib/monday/mapping";
-import { createCompaniesBatch, createContactsBatch } from "@/lib/crm/data";
+import { planCompanies, planContacts, planDeals } from "@/lib/monday/mapping";
+import { createCompaniesBatch, createContactsBatch, createDealsBatch } from "@/lib/crm/data";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { AirtableError } from "@/lib/airtable";
 import { errorResponse, readJson } from "@/lib/api";
@@ -35,6 +35,11 @@ export async function POST(req: NextRequest) {
     } else if (target === "contacts") {
       const plan = await planContacts(boardId);
       created = await createContactsBatch(plan.toCreate);
+      duplicates = plan.duplicates;
+      skipped = plan.skipped;
+    } else if (target === "deals") {
+      const plan = await planDeals(boardId);
+      created = await createDealsBatch(plan.toCreate);
       duplicates = plan.duplicates;
       skipped = plan.skipped;
     } else {

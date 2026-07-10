@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies, planContacts } from "@/lib/monday/mapping";
+import { planCompanies, planContacts, planDeals } from "@/lib/monday/mapping";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
@@ -41,6 +41,17 @@ export async function POST(req: NextRequest) {
       sample = plan.toCreate.slice(0, 8).map((c) => ({
         primary: c.name ?? "(no name)",
         detail: [c.email, c.companyId ? "→ company" : null].filter(Boolean).join(" · ") || "no email",
+      }));
+    } else if (target === "deals") {
+      const plan = await planDeals(boardId);
+      ({ total, duplicates, skipped } = plan);
+      willCreate = plan.toCreate.length;
+      sample = plan.toCreate.slice(0, 8).map((c) => ({
+        primary: c.name ?? "(no name)",
+        detail:
+          [c.stage, c.mrr != null ? `£${c.mrr}` : null, c.companyId ? "→ company" : null]
+            .filter(Boolean)
+            .join(" · ") || "—",
       }));
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });

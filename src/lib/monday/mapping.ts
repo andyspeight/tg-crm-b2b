@@ -1,7 +1,7 @@
 import "server-only";
-import { listCompanies, listContacts } from "@/lib/crm/data";
-import type { CompanyInput, ContactInput } from "@/lib/crm/types";
-import { SIZE_BANDS } from "@/lib/crm/config";
+import { listCompanies, listContacts, listDeals } from "@/lib/crm/data";
+import type { CompanyInput, ContactInput, DealInput } from "@/lib/crm/types";
+import { DEAL_STAGES, SIZE_BANDS } from "@/lib/crm/config";
 import { getBoardItems } from "./boards";
 import type { MondayItem } from "./types";
 
@@ -94,6 +94,86 @@ export async function planCompanies(boardId: string): Promise<CompaniesPlan> {
     }
     seen.add(key);
     toCreate.push(companyFromItem(it));
+  }
+  return { total: items.length, duplicates, skipped, toCreate };
+}
+
+// --- Deals -----------------------------------------------------------------
+
+function parseNumber(raw: string): number | undefined {
+  const s = (raw || "").replace(/[^0-9.]/g, "");
+  if (!s) return undefined;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+const STAGE_ALIASES: Record<string, (typeof DEAL_STAGES)[number]> = {
+  lead: "New Lead",
+  new: "New Lead",
+  qualified: "Contacted",
+  demo: "Demo Booked",
+  "proposal sent": "Proposal",
+  "closed won": "Won",
+  "closed lost": "Lost",
+};
+
+function mapDealStage(raw: string): (typeof DEAL_STAGES)[number] {
+  const s = norm(raw);
+  for (const st of DEAL_STAGES) if (norm(st) === s) return st;
+  return STAGE_ALIASES[s] ?? "New Lead";
+}
+
+/** Build a Luna Deal, linking to a company via the deal's linked contact name. */
+export function dealFromItem(
+  item: MondayItem,
+  companyIdByContactName: Map<string, string>,
+): DealInput {
+  const v = (title: string) => item.values[title.toLowerCase()] ?? "";
+  const contactName = (v("contacts").split(",")[0] || "").trim();
+  const companyId = contactName ? companyIdByContactName.get(norm(contactName)) : undefined;
+  return {
+    name: item.name.trim(),
+    stage: mapDealStage(v("stage")),
+    mrr: parseNumber(v("deal value")),
+    expectedCloseDate: v("expected close date").trim() || undefined,
+    owner: v("owner").trim() || undefined,
+    companyId,
+  };
+}
+
+export interface DealsPlan {
+  total: number;
+  duplicates: number;
+  skipped: number;
+  toCreate: DealInput[];
+}
+
+export async function planDeals(boardId: string): Promise<DealsPlan> {
+  const [{ items }, existingDeals, contacts] = await Promise.all([
+    getBoardItems(boardId),
+    listDeals({ limit: 2000 }),
+    listContacts({ limit: 5000 }),
+  ]);
+  const companyIdByContactName = new Map<string, string>();
+  for (const c of contacts) if (c.companyId) companyIdByContactName.set(norm(c.name), c.companyId);
+
+  const seen = new Set(existingDeals.map((d) => norm(d.name)));
+  const toCreate: DealInput[] = [];
+  let duplicates = 0;
+  let skipped = 0;
+  for (const it of items) {
+    const name = (it.name || "").trim();
+    if (!name) {
+      skipped++;
+      continue;
+    }
+    const key = norm(name);
+    if (seen.has(key)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(key);
+    toCreate.push(dealFromItem(it, companyIdByContactName));
   }
   return { total: items.length, duplicates, skipped, toCreate };
 }

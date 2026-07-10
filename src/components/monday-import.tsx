@@ -8,15 +8,26 @@ import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
 import { Button, Modal, Spinner } from "@/components/ui";
 
 /** Board names Luna Desk knows how to import, and the Luna object they map to. */
-function inferTarget(name: string): "companies" | "contacts" | null {
+function inferTarget(name: string): "companies" | "contacts" | "deals" | null {
   const n = name.toLowerCase().trim();
   if (n === "companies") return "companies";
   if (n === "contacts" || n === "contacts type") return "contacts";
+  if (n === "deals") return "deals";
   return null;
 }
 
 const nounFor = (target: string, n: number) =>
-  target === "contacts" ? (n === 1 ? "contact" : "contacts") : n === 1 ? "company" : "companies";
+  target === "contacts"
+    ? n === 1
+      ? "contact"
+      : "contacts"
+    : target === "deals"
+      ? n === 1
+        ? "deal"
+        : "deals"
+      : n === 1
+        ? "company"
+        : "companies";
 
 type PlanResult = {
   target: string;
@@ -319,7 +330,9 @@ export function MondayImport() {
                 ? " as customers (Green health, quarterly care)"
                 : plan.target === "contacts"
                   ? ", linked to their company where the name matches"
-                  : ""}
+                  : plan.target === "deals"
+                    ? ", mapped onto your pipeline stages"
+                    : ""}
               .
             </p>
             <p className="text-[13px] text-fg-muted">
