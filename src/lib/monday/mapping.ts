@@ -1,6 +1,6 @@
 import "server-only";
-import { listCompanies } from "@/lib/crm/data";
-import type { CompanyInput } from "@/lib/crm/types";
+import { listCompanies, listContacts } from "@/lib/crm/data";
+import type { CompanyInput, ContactInput } from "@/lib/crm/types";
 import { SIZE_BANDS } from "@/lib/crm/config";
 import { getBoardItems } from "./boards";
 import type { MondayItem } from "./types";
@@ -94,6 +94,79 @@ export async function planCompanies(boardId: string): Promise<CompaniesPlan> {
     }
     seen.add(key);
     toCreate.push(companyFromItem(it));
+  }
+  return { total: items.length, duplicates, skipped, toCreate };
+}
+
+// --- Contacts (from either "Contacts" or "Contacts Type", deduped by email) ---
+
+/** Build a Luna Contact from a Monday contact row, linking to a company by name. */
+export function contactFromItem(
+  item: MondayItem,
+  companyIdByName: Map<string, string>,
+): ContactInput {
+  const v = (title: string) => item.values[title.toLowerCase()] ?? "";
+  const last = v("last name").trim();
+  const name = [item.name.trim(), last].filter(Boolean).join(" ") || item.name.trim();
+  const email = v("email").trim().toLowerCase() || undefined;
+  const phone = v("phone number").trim() || undefined;
+  const companyName = v("company").trim();
+  const companyId = companyName ? companyIdByName.get(norm(companyName)) : undefined;
+  const linkedin = [v("link"), v("link 1"), v("social")]
+    .find((u) => /linkedin\.com/i.test(u))
+    ?.trim();
+  const notes = v("comments").trim() || undefined;
+  return { name, email, phone, companyId, linkedin, notes, source: "Monday import" };
+}
+
+export interface ContactsPlan {
+  total: number;
+  duplicates: number;
+  skipped: number;
+  toCreate: ContactInput[];
+}
+
+export async function planContacts(boardId: string): Promise<ContactsPlan> {
+  const [{ items }, existingContacts, companies] = await Promise.all([
+    getBoardItems(boardId),
+    listContacts({ limit: 5000 }),
+    listCompanies(),
+  ]);
+  const companyIdByName = new Map(companies.map((c) => [norm(c.name), c.id]));
+  const seenEmail = new Set(
+    existingContacts.map((c) => (c.email || "").toLowerCase()).filter(Boolean),
+  );
+  const seenNameCo = new Set(existingContacts.map((c) => `${norm(c.name)}|${c.companyId || ""}`));
+
+  const toCreate: ContactInput[] = [];
+  let duplicates = 0;
+  let skipped = 0;
+  const batchEmail = new Set<string>();
+  const batchNameCo = new Set<string>();
+
+  for (const it of items) {
+    const name = (it.name || "").trim();
+    if (!name) {
+      skipped++;
+      continue;
+    }
+    const contact = contactFromItem(it, companyIdByName);
+    if (contact.email) {
+      if (seenEmail.has(contact.email) || batchEmail.has(contact.email)) {
+        duplicates++;
+        continue;
+      }
+      batchEmail.add(contact.email);
+    } else {
+      // No email: dedupe on name + linked company so re-runs don't double up.
+      const key = `${norm(name)}|${contact.companyId || ""}`;
+      if (seenNameCo.has(key) || batchNameCo.has(key)) {
+        duplicates++;
+        continue;
+      }
+      batchNameCo.add(key);
+    }
+    toCreate.push(contact);
   }
   return { total: items.length, duplicates, skipped, toCreate };
 }

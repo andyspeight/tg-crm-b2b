@@ -402,6 +402,14 @@ export async function createContact(input: ContactInput): Promise<Contact> {
   return toContact(await createRecord(AIRTABLE_BASE_ID, TABLES.contacts, fields));
 }
 
+/** Bulk-create contacts (Monday import), chunked to Airtable's 10-per-request limit. */
+export async function createContactsBatch(inputs: ContactInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const fieldsList = inputs.map((i) => buildContactFields(i, false));
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.contacts, fieldsList);
+  return created.length;
+}
+
 export async function updateContact(id: string, input: ContactInput): Promise<Contact> {
   const fields = buildContactFields(input, true);
   return toContact(await updateRecord(AIRTABLE_BASE_ID, TABLES.contacts, id, fields));

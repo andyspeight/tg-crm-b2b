@@ -8,11 +8,15 @@ import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
 import { Button, Modal, Spinner } from "@/components/ui";
 
 /** Board names Luna Desk knows how to import, and the Luna object they map to. */
-function inferTarget(name: string): "companies" | null {
+function inferTarget(name: string): "companies" | "contacts" | null {
   const n = name.toLowerCase().trim();
   if (n === "companies") return "companies";
+  if (n === "contacts" || n === "contacts type") return "contacts";
   return null;
 }
+
+const nounFor = (target: string, n: number) =>
+  target === "contacts" ? (n === 1 ? "contact" : "contacts") : n === 1 ? "company" : "companies";
 
 type PlanResult = {
   target: string;
@@ -20,13 +24,7 @@ type PlanResult = {
   willCreate: number;
   duplicates: number;
   skipped: number;
-  sample: {
-    name: string;
-    website: string | null;
-    country: string | null;
-    sizeBand: string | null;
-    lifecycleStage: string | null;
-  }[];
+  sample: { primary: string; detail: string }[];
 };
 type CommitResult = { target: string; created: number; duplicates: number; skipped: number };
 
@@ -291,7 +289,7 @@ export function MondayImport() {
           <div className="space-y-4">
             <p className="text-[14px] text-fg">
               Imported <strong>{commitResult.created}</strong>{" "}
-              {commitResult.created === 1 ? "company" : "companies"}.
+              {nounFor(commitResult.target, commitResult.created)}.
             </p>
             <p className="text-[13px] text-fg-muted">
               {commitResult.duplicates} already in Luna Desk (skipped); {commitResult.skipped} had no
@@ -315,9 +313,14 @@ export function MondayImport() {
         ) : plan ? (
           <div className="space-y-4">
             <p className="text-[14px] text-fg">
-              <strong>{plan.willCreate}</strong> new{" "}
-              {plan.willCreate === 1 ? "company" : "companies"} will be created as customers (Green
-              health, quarterly care).
+              <strong>{plan.willCreate}</strong> new {nounFor(plan.target, plan.willCreate)} will be
+              created
+              {plan.target === "companies"
+                ? " as customers (Green health, quarterly care)"
+                : plan.target === "contacts"
+                  ? ", linked to their company where the name matches"
+                  : ""}
+              .
             </p>
             <p className="text-[13px] text-fg-muted">
               From {plan.total} rows: {plan.duplicates} already in Luna Desk (skipped),{" "}
@@ -330,15 +333,13 @@ export function MondayImport() {
                   First few
                 </h3>
                 <div className="space-y-1.5">
-                  {plan.sample.map((c) => (
+                  {plan.sample.map((c, i) => (
                     <div
-                      key={c.name}
+                      key={`${c.primary}-${i}`}
                       className="flex items-center justify-between gap-3 rounded-lg border border-border-soft bg-surface px-2.5 py-1.5"
                     >
-                      <span className="truncate text-[13px] text-fg">{c.name}</span>
-                      <span className="shrink-0 text-[11px] text-fg-subtle">
-                        {[c.website, c.country, c.sizeBand].filter(Boolean).join(" · ") || "name only"}
-                      </span>
+                      <span className="truncate text-[13px] text-fg">{c.primary}</span>
+                      <span className="shrink-0 text-[11px] text-fg-subtle">{c.detail}</span>
                     </div>
                   ))}
                 </div>
@@ -353,7 +354,7 @@ export function MondayImport() {
               </Button>
               <Button onClick={runCommit} disabled={committing || plan.willCreate === 0}>
                 {committing ? <Spinner /> : <Download size={15} strokeWidth={1.9} />} Import{" "}
-                {plan.willCreate} {plan.willCreate === 1 ? "company" : "companies"}
+                {plan.willCreate} {nounFor(plan.target, plan.willCreate)}
               </Button>
             </div>
           </div>

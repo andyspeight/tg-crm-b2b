@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies } from "@/lib/monday/mapping";
+import { planCompanies, planContacts } from "@/lib/monday/mapping";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
@@ -20,27 +20,33 @@ export async function POST(req: NextRequest) {
     const boardId = typeof body.boardId === "string" ? body.boardId : "";
     const target = typeof body.target === "string" ? body.target : "";
     if (!boardId) return NextResponse.json({ error: "Missing boardId" }, { status: 400 });
-    if (target !== "companies") {
-      return NextResponse.json({ error: "Only the Companies import is ready so far." }, { status: 400 });
+    let total = 0;
+    let duplicates = 0;
+    let skipped = 0;
+    let willCreate = 0;
+    let sample: { primary: string; detail: string }[] = [];
+
+    if (target === "companies") {
+      const plan = await planCompanies(boardId);
+      ({ total, duplicates, skipped } = plan);
+      willCreate = plan.toCreate.length;
+      sample = plan.toCreate.slice(0, 8).map((c) => ({
+        primary: c.name ?? "(no name)",
+        detail: [c.website, c.country, c.sizeBand].filter(Boolean).join(" · ") || "name only",
+      }));
+    } else if (target === "contacts") {
+      const plan = await planContacts(boardId);
+      ({ total, duplicates, skipped } = plan);
+      willCreate = plan.toCreate.length;
+      sample = plan.toCreate.slice(0, 8).map((c) => ({
+        primary: c.name ?? "(no name)",
+        detail: [c.email, c.companyId ? "→ company" : null].filter(Boolean).join(" · ") || "no email",
+      }));
+    } else {
+      return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });
     }
 
-    const plan = await planCompanies(boardId);
-    const sample = plan.toCreate.slice(0, 8).map((c) => ({
-      name: c.name,
-      website: c.website ?? null,
-      country: c.country ?? null,
-      sizeBand: c.sizeBand ?? null,
-      lifecycleStage: c.lifecycleStage ?? null,
-    }));
-
-    return NextResponse.json({
-      target,
-      total: plan.total,
-      willCreate: plan.toCreate.length,
-      duplicates: plan.duplicates,
-      skipped: plan.skipped,
-      sample,
-    });
+    return NextResponse.json({ target, total, willCreate, duplicates, skipped, sample });
   } catch (e) {
     if (e instanceof MondayNotConfiguredError) {
       return NextResponse.json(
