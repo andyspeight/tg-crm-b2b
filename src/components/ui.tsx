@@ -9,6 +9,7 @@ import {
   useEffect,
 } from "react";
 import { ChevronDown, X } from "lucide-react";
+import Link from "next/link";
 
 export function cn(...xs: (string | false | null | undefined)[]): string {
   return xs.filter(Boolean).join(" ");
@@ -31,6 +32,11 @@ const BUTTON_SIZES: Record<ButtonSize, string> = {
   md: "text-[15px] h-11 px-4 gap-2",
 };
 
+const BUTTON_BASE =
+  "inline-flex cursor-pointer items-center justify-center rounded-lg font-medium transition-[background-color,filter,transform] active:translate-y-px " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)] " +
+  "disabled:opacity-50 disabled:pointer-events-none";
+
 export function Button({
   variant = "primary",
   size = "md",
@@ -39,16 +45,30 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
   return (
     <button
-      className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-lg font-medium transition-[background-color,filter,transform] active:translate-y-px",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)]",
-        "disabled:opacity-50 disabled:pointer-events-none",
-        BUTTON_VARIANTS[variant],
-        BUTTON_SIZES[size],
-        className,
-      )}
+      className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}
       {...props}
     />
+  );
+}
+
+/** A next/link styled identically to <Button> — for navigational actions. */
+export function ButtonLink({
+  href,
+  variant = "primary",
+  size = "md",
+  className,
+  children,
+}: {
+  href: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link href={href} className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}>
+      {children}
+    </Link>
   );
 }
 

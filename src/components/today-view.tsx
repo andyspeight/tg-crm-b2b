@@ -7,6 +7,7 @@ import { api } from "@/lib/client";
 import type { Deal, Task } from "@/lib/crm/types";
 import { isPast } from "@/lib/deal-flags";
 import { EmptyState } from "@/components/ui";
+import { GettingStarted } from "@/components/getting-started";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export type AttentionItem = { deal: Deal; label: string; danger: boolean };
@@ -42,6 +43,8 @@ export function TodayView({ tasks: initialTasks, attention }: { tasks: Task[]; a
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
+      <GettingStarted />
+
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-fg">{greeting}</h1>
         <p className="mt-0.5 text-[13px] text-fg-subtle">

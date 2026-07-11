@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarPlus, CheckCircle2 } from "lucide-react";
+import { CalendarPlus, CheckCircle2, Download } from "lucide-react";
 import { api } from "@/lib/client";
 import { ACCOUNT_HEALTH, CARE_CADENCES, TOUCH_TYPES } from "@/lib/crm/config";
 import type { CareTouch, Company } from "@/lib/crm/types";
 import { isPast } from "@/lib/deal-flags";
-import { Button, EmptyState, Field, Modal, Select, Spinner, Textarea } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, Field, Modal, Select, Spinner, Textarea } from "@/components/ui";
 import { HealthBadge } from "@/components/badges";
 import { formatDate } from "@/lib/format";
 
@@ -101,7 +101,12 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
       {filtered.length === 0 ? (
         <EmptyState
           title="No customers in this view"
-          hint="Customers (lifecycle = Customer) appear here. Adjust the filters or import them first."
+          hint="Customers (lifecycle = Customer) appear here. Adjust the filters, or import them from Monday to get started."
+          action={
+            <ButtonLink href="/import">
+              <Download size={16} strokeWidth={2} /> Import from Monday
+            </ButtonLink>
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">

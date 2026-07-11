@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Deal } from "@/lib/crm/types";
-import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { StageBadge } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -97,7 +97,16 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
       {deals.length === 0 ? (
         <EmptyState
           title={q ? "No deals match your search" : "No deals yet"}
-          hint={q ? undefined : "Add a deal to start tracking the new-business pipeline."}
+          hint={
+            q ? undefined : "Import your pipeline from Monday, or add a deal with the New button above."
+          }
+          action={
+            q ? undefined : (
+              <ButtonLink href="/import">
+                <Download size={16} strokeWidth={2} /> Import from Monday
+              </ButtonLink>
+            )
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">

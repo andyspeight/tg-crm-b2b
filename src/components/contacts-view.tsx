@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact } from "@/lib/crm/types";
-import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
 import { ContactForm, type CompanyOption } from "@/components/forms";
 
 export function ContactsView({
@@ -99,7 +99,16 @@ export function ContactsView({
       {contacts.length === 0 ? (
         <EmptyState
           title={q ? "No contacts match your search" : "No contacts yet"}
-          hint={q ? undefined : "Add people against their company to build the relationship map."}
+          hint={
+            q ? undefined : "Import contacts from Monday, or add one with the New button above."
+          }
+          action={
+            q ? undefined : (
+              <ButtonLink href="/import">
+                <Download size={16} strokeWidth={2} /> Import from Monday
+              </ButtonLink>
+            )
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">

@@ -3,20 +3,25 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, Search, Users } from "lucide-react";
+import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, MoreHorizontal, Search, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
-import { cn, IconButton, Spinner } from "@/components/ui";
+import { cn, Spinner } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAdd } from "@/components/quick-add";
 
+// Four everyday destinations up top; the rest live in the More menu so a
+// first-time user isn't faced with seven tabs at once.
 const NAV = [
   { href: "/today", label: "Today", icon: Home },
-  { href: "/companies", label: "Companies", icon: Building2 },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/deals", label: "Deals", icon: Briefcase },
   { href: "/pipeline", label: "Pipeline", icon: Columns3 },
+  { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/care", label: "Care", icon: HeartHandshake },
+];
+
+const MORE = [
+  { href: "/deals", label: "Deals", icon: Briefcase },
+  { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/import", label: "Import", icon: Download },
 ];
 
@@ -65,12 +70,93 @@ export function TopBar() {
           <GlobalSearch />
           <QuickAdd />
           <ThemeToggle />
-          <IconButton label="Sign out" onClick={logout}>
-            <LogOut size={18} strokeWidth={1.75} />
-          </IconButton>
+          <MoreMenu onLogout={logout} />
         </div>
       </div>
     </header>
+  );
+}
+
+function MoreMenu({ onLogout }: { onLogout: () => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const activeInMore = MORE.some(
+    (m) => pathname === m.href || pathname.startsWith(`${m.href}/`),
+  );
+
+  function go(href: string) {
+    setOpen(false);
+    router.push(href);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label="More"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          "inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+          activeInMore || open ? "bg-muted text-fg" : "text-fg-muted hover:bg-muted hover:text-fg",
+        )}
+      >
+        <MoreHorizontal size={18} strokeWidth={1.75} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="luna-fade absolute right-0 mt-1.5 w-48 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-[0_16px_40px_-12px_rgba(8,15,30,0.3)]"
+        >
+          {MORE.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <button
+                key={item.href}
+                role="menuitem"
+                onClick={() => go(item.href)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] transition-colors",
+                  active ? "bg-muted text-fg" : "text-fg-muted hover:bg-muted hover:text-fg",
+                )}
+              >
+                <Icon size={16} strokeWidth={1.75} /> {item.label}
+              </button>
+            );
+          })}
+          <div className="my-1 border-t border-border-soft" />
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-fg-muted transition-colors hover:bg-muted hover:text-fg"
+          >
+            <LogOut size={16} strokeWidth={1.75} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
