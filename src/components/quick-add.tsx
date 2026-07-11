@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company } from "@/lib/crm/types";
 import type { EnrichedCompanyData, EnrichedContactData } from "@/lib/intel/types";
+import { ACTIVITY_TYPES } from "@/lib/crm/config";
 import {
   Button,
   ErrorText,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui";
 
 type Option = { id: string; name: string };
+type ExtractedTask = { title: string; dueDate?: string; checked: boolean };
 type Mode = "task" | "note" | "linkedin";
 
 const TABS: { id: Mode; label: string }[] = [
@@ -44,6 +46,10 @@ export function QuickAdd() {
   const [noteCompany, setNoteCompany] = useState("");
   const [noteSummary, setNoteSummary] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  const [noteType, setNoteType] = useState<string>("Note");
+  const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
+  const [tidying, setTidying] = useState(false);
+  const [tidyError, setTidyError] = useState("");
 
   async function openModal() {
     setOpen(true);
@@ -68,7 +74,31 @@ export function QuickAdd() {
     setNoteCompany("");
     setNoteSummary("");
     setNoteBody("");
+    setNoteType("Note");
+    setExtractedTasks([]);
+    setTidyError("");
+    setTidying(false);
     setError("");
+  }
+
+  async function tidy() {
+    if (!noteBody.trim()) return;
+    setTidyError("");
+    setTidying(true);
+    try {
+      const companyName = companies.find((c) => c.id === noteCompany)?.name;
+      const data = await api<{ summary: string; type: string; tasks: { title: string; dueDate?: string }[] }>(
+        "/api/ai/classify",
+        { method: "POST", body: JSON.stringify({ text: noteBody, companyName }) },
+      );
+      if (data.summary) setNoteSummary(data.summary);
+      if (data.type) setNoteType(data.type);
+      setExtractedTasks((data.tasks || []).map((t) => ({ ...t, checked: true })));
+    } catch (e) {
+      setTidyError(e instanceof Error ? e.message : "Couldn't tidy that note.");
+    } finally {
+      setTidying(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -100,12 +130,18 @@ export function QuickAdd() {
         await api("/api/activities", {
           method: "POST",
           body: JSON.stringify({
-            type: "Note",
+            type: noteType,
             summary: noteSummary,
             rawContent: noteBody,
             companyId: noteCompany,
           }),
         });
+        for (const t of extractedTasks.filter((t) => t.checked)) {
+          await api("/api/tasks", {
+            method: "POST",
+            body: JSON.stringify({ title: t.title, dueDate: t.dueDate, companyId: noteCompany }),
+          });
+        }
       }
       close();
       router.refresh();
@@ -168,21 +204,77 @@ export function QuickAdd() {
                 <Field label="Company">
                   <CompanySelect value={noteCompany} onChange={setNoteCompany} companies={companies} />
                 </Field>
-                <Field label="Summary">
-                  <Input
-                    value={noteSummary}
-                    onChange={(e) => setNoteSummary(e.target.value)}
-                    autoFocus
-                    placeholder="Quick note"
-                  />
-                </Field>
-                <Field label="Notes">
+                <div className="grid grid-cols-[1fr_9rem] gap-3">
+                  <Field label="Summary">
+                    <Input
+                      value={noteSummary}
+                      onChange={(e) => setNoteSummary(e.target.value)}
+                      autoFocus
+                      placeholder="Quick note"
+                    />
+                  </Field>
+                  <Field label="Type">
+                    <Select value={noteType} onChange={(e) => setNoteType(e.target.value)}>
+                      {ACTIVITY_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label htmlFor="note-body" className="text-[13px] font-medium text-fg-muted">
+                      Notes
+                    </label>
+                    <button
+                      type="button"
+                      onClick={tidy}
+                      disabled={tidying || !noteBody.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-accent-soft bg-accent-soft/40 px-2 py-1 text-[12px] font-medium text-accent-strong transition-colors hover:bg-accent-soft disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      {tidying ? <Spinner /> : <Sparkles size={13} strokeWidth={2} />}
+                      Tidy with AI
+                    </button>
+                  </div>
                   <Textarea
+                    id="note-body"
                     value={noteBody}
                     onChange={(e) => setNoteBody(e.target.value)}
-                    placeholder="Paste-dump is fine."
+                    placeholder="Paste-dump is fine — AI tidies it and files it."
+                    rows={5}
                   />
-                </Field>
+                  {tidyError ? <p className="mt-1 text-[12px] text-danger">{tidyError}</p> : null}
+                </div>
+                {extractedTasks.length > 0 ? (
+                  <div className="rounded-lg border border-border-soft bg-surface p-3">
+                    <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-fg-subtle">
+                      Follow-up tasks
+                    </p>
+                    <div className="space-y-1.5">
+                      {extractedTasks.map((t, i) => (
+                        <label key={i} className="flex cursor-pointer items-start gap-2 text-[13px]">
+                          <input
+                            type="checkbox"
+                            checked={t.checked}
+                            onChange={(e) =>
+                              setExtractedTasks((prev) =>
+                                prev.map((x, j) => (j === i ? { ...x, checked: e.target.checked } : x)),
+                              )
+                            }
+                            style={{ accentColor: "var(--color-accent)" }}
+                            className="mt-0.5"
+                          />
+                          <span className="text-fg">
+                            {t.title}
+                            {t.dueDate ? <span className="text-fg-subtle"> · due {t.dueDate}</span> : null}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
             <ErrorText>{error}</ErrorText>
