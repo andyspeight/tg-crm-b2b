@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Briefcase, Building2, CornerDownLeft, Sparkles, User, X } from "lucide-react";
+import {
+  Briefcase,
+  Building2,
+  Check,
+  CornerDownLeft,
+  HeartHandshake,
+  ListPlus,
+  Sparkles,
+  StickyNote,
+  User,
+  X,
+} from "lucide-react";
 import { api } from "@/lib/client";
 import { cn, Spinner } from "@/components/ui";
 
@@ -13,7 +24,12 @@ type AskResult = {
   sub?: string;
   href: string;
 };
-type AskResponse = { answer: string; results: AskResult[] };
+type AskProposal = {
+  type: "task" | "care_touch" | "note";
+  summary: string;
+  params: Record<string, unknown>;
+};
+type AskResponse = { answer: string; results: AskResult[]; proposals: AskProposal[] };
 
 const EXAMPLES = [
   "How's my pipeline looking?",
@@ -23,6 +39,7 @@ const EXAMPLES = [
 ];
 
 const RESULT_ICON = { company: Building2, contact: User, deal: Briefcase } as const;
+const PROPOSAL_ICON = { task: ListPlus, care_touch: HeartHandshake, note: StickyNote } as const;
 
 export function AskLuna() {
   const [open, setOpen] = useState(false);
@@ -196,6 +213,14 @@ function Answer({
         ))}
       </div>
 
+      {res.proposals.length > 0 ? (
+        <div className="space-y-1.5">
+          {res.proposals.map((p, i) => (
+            <ProposalCard key={i} proposal={p} onNavigate={onNavigate} />
+          ))}
+        </div>
+      ) : null}
+
       {res.results.length > 0 ? (
         <div className="border-t border-border-soft pt-3">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
@@ -223,6 +248,79 @@ function Answer({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ProposalCard({ proposal, onNavigate }: { proposal: AskProposal; onNavigate: () => void }) {
+  const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const [href, setHref] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const Icon = PROPOSAL_ICON[proposal.type];
+
+  async function confirm() {
+    setStatus("saving");
+    try {
+      const data = await api<{ ok: boolean; message: string; record?: { name: string; href: string } }>(
+        "/api/ai/act",
+        { method: "POST", body: JSON.stringify({ action: { type: proposal.type, params: proposal.params } }) },
+      );
+      setMessage(data.message || "Done.");
+      setHref(data.record?.href ?? null);
+      setStatus("done");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Couldn't do that.");
+      setStatus("error");
+    }
+  }
+
+  if (dismissed) return null;
+
+  if (status === "done") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-[13px]">
+        <Check size={15} strokeWidth={2.2} className="shrink-0 text-success" aria-hidden />
+        <span className="flex-1 text-fg">{message}</span>
+        {href ? (
+          <Link
+            href={href}
+            onClick={onNavigate}
+            className="shrink-0 text-[12px] font-medium text-accent-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Open
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-accent-soft bg-accent-soft/30 px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <Icon size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-accent-strong" aria-hidden />
+        <p className="flex-1 text-[13px] text-fg">{proposal.summary}</p>
+      </div>
+      {status === "error" ? <p className="mt-1 pl-6 text-[12px] text-danger">{message}</p> : null}
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          disabled={status === "saving"}
+          className="inline-flex h-8 items-center rounded-md px-2.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-muted hover:text-fg disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Dismiss
+        </button>
+        <button
+          type="button"
+          onClick={confirm}
+          disabled={status === "saving"}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-btn px-3 text-[12px] font-medium text-btn-fg transition-[filter] hover:brightness-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)]"
+        >
+          {status === "saving" ? <Spinner /> : <Check size={13} strokeWidth={2.2} />}
+          {status === "error" ? "Retry" : "Confirm"}
+        </button>
+      </div>
     </div>
   );
 }

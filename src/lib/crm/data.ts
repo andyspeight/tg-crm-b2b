@@ -813,6 +813,43 @@ export async function logCareTouch(
   return updated;
 }
 
+/**
+ * Log a care touch for a company by completing its next open Scheduled touch.
+ * If there isn't one, record a Completed touch and schedule the next per cadence.
+ * Lets Ask Luna log care by company name without the caller knowing a touch id.
+ */
+export async function logCareTouchForCompany(
+  companyId: string,
+  input: { outcomeNotes?: string; touchType?: string },
+): Promise<CareTouch> {
+  const board = await listCareBoard();
+  const row = board.find((r) => r.company.id === companyId);
+  if (row?.nextTouch) return logCareTouch(row.nextTouch.id, input);
+
+  const company = row?.company ?? (await getCompany(companyId));
+  const touchType = (input.touchType as CareTouch["touchType"]) || "Check-In Call";
+  const today = new Date().toISOString().slice(0, 10);
+  const completed = await createCareTouch({
+    companyId,
+    touchType,
+    outcomeNotes: input.outcomeNotes,
+    status: "Completed",
+    dueDate: today,
+    name: `${touchType} · ${company.name}`,
+  });
+  const months = cadenceMonths(company.careCadence);
+  if (months) {
+    await createCareTouch({
+      companyId,
+      touchType: "Check-In Call",
+      status: "Scheduled",
+      dueDate: addMonths(today, months),
+      name: `Check-In Call · ${company.name}`,
+    });
+  }
+  return completed;
+}
+
 // --- search -----------------------------------------------------------------
 
 export async function searchAll(

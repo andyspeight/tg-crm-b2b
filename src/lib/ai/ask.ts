@@ -18,6 +18,7 @@ import {
   DEAL_STAGES,
   LIFECYCLE_STAGES,
   REGIONS,
+  TOUCH_TYPES,
 } from "@/lib/crm/config";
 import type { Company, Deal } from "@/lib/crm/types";
 
@@ -34,9 +35,17 @@ export interface AskResult {
   href: string;
 }
 
+/** A write Luna has drafted; nothing happens until the user confirms it. */
+export interface AskProposal {
+  type: "task" | "care_touch" | "note";
+  summary: string;
+  params: Record<string, unknown>;
+}
+
 export interface AskResponse {
   answer: string;
   results: AskResult[];
+  proposals: AskProposal[];
 }
 
 function norm(s: unknown): string {
@@ -149,6 +158,64 @@ const TOOLS: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: "deals_closing_soon",
+    description:
+      "Open deals with an expected close date within the next N days. Use for 'what's closing this month?' and forecast questions.",
+    input_schema: {
+      type: "object",
+      properties: { days: { type: "number", description: "Window in days (default 30)." } },
+    },
+  },
+  {
+    name: "recent_activity",
+    description:
+      "Momentum snapshot: how many deals were created and how many accounts were contacted in the last N days. Use for 'how active have we been lately?'.",
+    input_schema: {
+      type: "object",
+      properties: { days: { type: "number", description: "Look-back window in days (default 30)." } },
+    },
+  },
+  {
+    name: "propose_task",
+    description:
+      "Draft a task for Andy to confirm. Use when he asks to create/add a task, reminder or to-do. Never say it's done — it is only created when he confirms.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        dueDate: { type: "string", description: "ISO date YYYY-MM-DD, if a due date is given." },
+        companyName: { type: "string", description: "Company to link the task to, if any." },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "propose_care_touch",
+    description:
+      "Draft a logged care touch (a completed check-in / QBR / training nudge, etc.) for a customer, for Andy to confirm. Use when he says he has spoken to or checked in on a customer. Completing it schedules the next touch on cadence.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyName: { type: "string" },
+        touchType: { type: "string", description: `One of: ${TOUCH_TYPES.join(", ")}.` },
+        outcomeNotes: { type: "string", description: "What happened / the outcome." },
+      },
+      required: ["companyName"],
+    },
+  },
+  {
+    name: "propose_note",
+    description: "Draft a note to add to a company's activity timeline, for Andy to confirm.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyName: { type: "string" },
+        text: { type: "string" },
+      },
+      required: ["companyName", "text"],
+    },
+  },
 ];
 
 export async function askLuna(question: string): Promise<AskResponse> {
@@ -157,6 +224,7 @@ export async function askLuna(question: string): Promise<AskResponse> {
     const key = `${r.type}:${r.id}`;
     if (!refs.has(key)) refs.set(key, r);
   };
+  const proposals: AskProposal[] = [];
 
   let recencyCache: Awaited<ReturnType<typeof activityRecency>> | null = null;
   const recency = async () => (recencyCache ??= await activityRecency());
@@ -369,6 +437,97 @@ export async function askLuna(question: string): Promise<AskResponse> {
         };
       }
 
+      case "deals_closing_soon": {
+        const days = n("days") ?? 30;
+        const today = new Date().toISOString().slice(0, 10);
+        const until = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+        const ds = (await listDeals())
+          .filter((d) => d.stage !== "Won" && d.stage !== "Lost")
+          .filter((d) => d.expectedCloseDate && d.expectedCloseDate >= today && d.expectedCloseDate <= until)
+          .sort((a, b) => (a.expectedCloseDate || "").localeCompare(b.expectedCloseDate || ""));
+        const rows = ds.slice(0, 25);
+        rows.forEach((d) =>
+          addRef({
+            type: "deal",
+            id: d.id,
+            name: d.name,
+            sub: [d.stage, d.expectedCloseDate].filter(Boolean).join(" · "),
+            href: dealHref(d),
+          }),
+        );
+        return { days, count: ds.length, totalMrr: ds.reduce((t, d) => t + (d.mrr ?? 0), 0), deals: rows.map(compactDeal) };
+      }
+
+      case "recent_activity": {
+        const days = n("days") ?? 30;
+        const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+        const deals = await listDeals();
+        const newDeals = deals.filter((d) => (d.createdTime || "").slice(0, 10) >= cutoff);
+        const rec = await recency();
+        const accountsContacted = Object.values(rec.byCompany).filter((dt) => (dt || "").slice(0, 10) >= cutoff).length;
+        newDeals.slice(0, 10).forEach((d) => addRef({ type: "deal", id: d.id, name: d.name, sub: d.stage, href: dealHref(d) }));
+        return {
+          days,
+          newDealsCount: newDeals.length,
+          newDealsMrr: newDeals.reduce((t, d) => t + (d.mrr ?? 0), 0),
+          accountsContacted,
+          newDeals: newDeals.slice(0, 10).map(compactDeal),
+        };
+      }
+
+      case "propose_task": {
+        const title = (s("title") ?? "").trim();
+        if (!title) return { error: "A task needs a title." };
+        const dueDate = s("dueDate");
+        const companyName = s("companyName");
+        let companyId: string | undefined;
+        let resolvedName: string | undefined;
+        if (companyName) {
+          const { companies } = await searchAll(companyName, 3);
+          const match = companies.find((c) => norm(c.name) === norm(companyName)) || companies[0];
+          if (match) {
+            companyId = match.id;
+            resolvedName = match.name;
+          }
+        }
+        const summary = `Create task: “${title}”${dueDate ? ` · due ${dueDate}` : ""}${resolvedName ? ` · ${resolvedName}` : ""}`;
+        proposals.push({ type: "task", summary, params: { title, dueDate, companyId, companyName: resolvedName ?? companyName } });
+        return { ok: true, prepared: summary, note: "Drafted — awaiting Andy's confirmation." };
+      }
+
+      case "propose_care_touch": {
+        const companyName = (s("companyName") ?? "").trim();
+        if (!companyName) return { error: "Which customer is this care touch for?" };
+        const { companies } = await searchAll(companyName, 3);
+        const match = companies.find((c) => norm(c.name) === norm(companyName)) || companies[0];
+        if (!match) return { error: `No company found matching "${companyName}".` };
+        const touchType = s("touchType");
+        const outcomeNotes = s("outcomeNotes");
+        const summary = `Log ${touchType || "care touch"} · ${match.name}${outcomeNotes ? ` — “${outcomeNotes}”` : ""}`;
+        proposals.push({
+          type: "care_touch",
+          summary,
+          params: { companyId: match.id, companyName: match.name, touchType, outcomeNotes },
+        });
+        return { ok: true, prepared: summary, note: "Drafted — awaiting Andy's confirmation." };
+      }
+
+      case "propose_note": {
+        const companyName = (s("companyName") ?? "").trim();
+        const text = (s("text") ?? "").trim();
+        if (!companyName || !text) return { error: "A note needs a company and some text." };
+        const { companies } = await searchAll(companyName, 3);
+        const match = companies.find((c) => norm(c.name) === norm(companyName)) || companies[0];
+        if (!match) return { error: `No company found matching "${companyName}".` };
+        const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+        proposals.push({
+          type: "note",
+          summary: `Note on ${match.name}: “${preview}”`,
+          params: { companyId: match.id, companyName: match.name, text },
+        });
+        return { ok: true, prepared: `Note drafted for ${match.name}`, note: "Awaiting Andy's confirmation." };
+      }
+
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -387,7 +546,13 @@ Vocabulary you can filter on:
 - Company types: ${COMPANY_TYPES.join(", ")}
 - Lifecycle stages: ${LIFECYCLE_STAGES.join(", ")}
 - Regions: ${REGIONS.join(", ")}; account health: ${ACCOUNT_HEALTH.join(", ")}
-- Deal stages: ${DEAL_STAGES.join(", ")} (Won and Lost are closed; the rest are open)`;
+- Deal stages: ${DEAL_STAGES.join(", ")} (Won and Lost are closed; the rest are open)
+
+You can also DO a few things for Andy, always behind his confirmation:
+- propose_task — draft a task, reminder or to-do
+- propose_care_touch — log that he has checked in on a customer (completing it schedules the next touch on cadence)
+- propose_note — add a note to a company's timeline
+When he asks you to do one of these, call the matching propose_ tool with your best interpretation and resolve the company by name. Then tell him you've drafted it for confirmation — never say it is done, because nothing is written until he confirms below. If you can't tell which company he means, ask.`;
 
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: question }];
 
@@ -426,8 +591,13 @@ Vocabulary you can filter on:
     return {
       answer: textFrom(resp) || "I couldn't find an answer to that.",
       results: [...refs.values()].slice(0, 15),
+      proposals,
     };
   }
 
-  return { answer: "That took too many steps — try narrowing the question.", results: [...refs.values()].slice(0, 15) };
+  return {
+    answer: "That took too many steps — try narrowing the question.",
+    results: [...refs.values()].slice(0, 15),
+    proposals,
+  };
 }
