@@ -9,6 +9,7 @@ import type { Company, Contact } from "@/lib/crm/types";
 import { cn, Spinner } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAdd } from "@/components/quick-add";
+import { AskLuna } from "@/components/ask-luna";
 
 // Four everyday destinations up top; the rest live in the More menu so a
 // first-time user isn't faced with seven tabs at once.
@@ -66,8 +67,11 @@ export function TopBar() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1">
-          <GlobalSearch />
+        <div className="ml-auto flex items-center gap-1.5">
+          <AskLuna />
+          <div className="hidden sm:block">
+            <GlobalSearch />
+          </div>
           <QuickAdd />
           <ThemeToggle />
           <MoreMenu onLogout={logout} />
