@@ -8,12 +8,15 @@ import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
 import { Button, Modal, Spinner } from "@/components/ui";
 
 /** Board names Luna Desk knows how to import, and the Luna object they map to. */
-function inferTarget(name: string): "companies" | "contacts" | "deals" | "leads" | null {
+function inferTarget(
+  name: string,
+): "companies" | "contacts" | "deals" | "leads" | "clientsprogress" | null {
   const n = name.toLowerCase().trim();
   if (n === "companies") return "companies";
   if (n === "contacts" || n === "contacts type") return "contacts";
   if (n === "deals") return "deals";
   if (n === "leads") return "leads";
+  if (n === "clients progress") return "clientsprogress";
   return null;
 }
 
@@ -302,16 +305,26 @@ export function MondayImport() {
         ) : commitResult ? (
           <div className="space-y-4">
             <p className="text-[14px] text-fg">
-              Imported <strong>{commitResult.created}</strong>{" "}
-              {nounFor(commitResult.target, commitResult.created)}
-              {commitResult.companies
-                ? ` and ${commitResult.companies} prospect ${commitResult.companies === 1 ? "company" : "companies"}`
-                : ""}
-              .
+              {commitResult.target === "clientsprogress" ? (
+                <>
+                  Set health on <strong>{commitResult.created}</strong>{" "}
+                  {commitResult.created === 1 ? "customer" : "customers"}.
+                </>
+              ) : (
+                <>
+                  Imported <strong>{commitResult.created}</strong>{" "}
+                  {nounFor(commitResult.target, commitResult.created)}
+                  {commitResult.companies
+                    ? ` and ${commitResult.companies} prospect ${commitResult.companies === 1 ? "company" : "companies"}`
+                    : ""}
+                  .
+                </>
+              )}
             </p>
             <p className="text-[13px] text-fg-muted">
-              {commitResult.duplicates} already in Luna Desk (skipped); {commitResult.skipped} had no
-              name.
+              {commitResult.target === "clientsprogress"
+                ? `${commitResult.duplicates} not matched to a Luna customer; ${commitResult.skipped} had no mappable status.`
+                : `${commitResult.duplicates} already in Luna Desk (skipped); ${commitResult.skipped} had no name.`}
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setImporting(null)}>
@@ -331,18 +344,28 @@ export function MondayImport() {
         ) : plan ? (
           <div className="space-y-4">
             <p className="text-[14px] text-fg">
-              <strong>{plan.willCreate}</strong> new {nounFor(plan.target, plan.willCreate)} will be
-              created
-              {plan.target === "companies"
-                ? " as customers (Green health, quarterly care)"
-                : plan.target === "contacts"
-                  ? ", linked to their company where the name matches"
-                  : plan.target === "deals"
-                    ? ", mapped onto your pipeline stages"
-                    : plan.target === "leads"
-                      ? " as prospect contacts"
-                      : ""}
-              .
+              {plan.target === "clientsprogress" ? (
+                <>
+                  <strong>{plan.willCreate}</strong>{" "}
+                  {plan.willCreate === 1 ? "customer" : "customers"} will have their health set from
+                  their Clients Progress status.
+                </>
+              ) : (
+                <>
+                  <strong>{plan.willCreate}</strong> new {nounFor(plan.target, plan.willCreate)} will
+                  be created
+                  {plan.target === "companies"
+                    ? " as customers (Green health, quarterly care)"
+                    : plan.target === "contacts"
+                      ? ", linked to their company where the name matches"
+                      : plan.target === "deals"
+                        ? ", mapped onto your pipeline stages"
+                        : plan.target === "leads"
+                          ? " as prospect contacts"
+                          : ""}
+                  .
+                </>
+              )}
             </p>
             {plan.companies ? (
               <p className="text-[13px] text-fg-muted">
@@ -351,8 +374,9 @@ export function MondayImport() {
               </p>
             ) : null}
             <p className="text-[13px] text-fg-muted">
-              From {plan.total} rows: {plan.duplicates} already in Luna Desk (skipped),{" "}
-              {plan.skipped} had no name.
+              {plan.target === "clientsprogress"
+                ? `From ${plan.total} rows: ${plan.duplicates} not matched to a Luna customer, ${plan.skipped} had no mappable status.`
+                : `From ${plan.total} rows: ${plan.duplicates} already in Luna Desk (skipped), ${plan.skipped} had no name.`}
             </p>
 
             {plan.sample.length > 0 ? (
@@ -381,8 +405,10 @@ export function MondayImport() {
                 Cancel
               </Button>
               <Button onClick={runCommit} disabled={committing || plan.willCreate === 0}>
-                {committing ? <Spinner /> : <Download size={15} strokeWidth={1.9} />} Import{" "}
-                {plan.willCreate} {nounFor(plan.target, plan.willCreate)}
+                {committing ? <Spinner /> : <Download size={15} strokeWidth={1.9} />}{" "}
+                {plan.target === "clientsprogress"
+                  ? `Update ${plan.willCreate} ${plan.willCreate === 1 ? "customer" : "customers"}`
+                  : `Import ${plan.willCreate} ${nounFor(plan.target, plan.willCreate)}`}
               </Button>
             </div>
           </div>

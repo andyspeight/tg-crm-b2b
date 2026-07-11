@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { planCompanies, planContacts, planDeals, planLeads } from "@/lib/monday/mapping";
+import {
+  planCompanies,
+  planContacts,
+  planDeals,
+  planLeads,
+  planClientsProgress,
+} from "@/lib/monday/mapping";
 import {
   createCompaniesBatch,
   createCompaniesReturning,
   createContactsBatch,
   createDealsBatch,
   listCompanies,
+  updateCompaniesHealth,
 } from "@/lib/crm/data";
 import { MondayError, MondayNotConfiguredError } from "@/lib/monday/client";
 import { AirtableError } from "@/lib/airtable";
@@ -63,6 +70,11 @@ export async function POST(req: NextRequest) {
       companiesCreated = plan.newCompanies.length;
       duplicates = plan.duplicates;
       skipped = plan.skipped;
+    } else if (target === "clientsprogress") {
+      const plan = await planClientsProgress(boardId);
+      created = await updateCompaniesHealth(plan.updates);
+      duplicates = plan.unmatched;
+      skipped = plan.noStatus;
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });
     }

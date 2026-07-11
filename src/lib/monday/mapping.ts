@@ -1,7 +1,7 @@
 import "server-only";
 import { listCompanies, listContacts, listDeals } from "@/lib/crm/data";
 import type { CompanyInput, ContactInput, DealInput } from "@/lib/crm/types";
-import { DEAL_STAGES, SIZE_BANDS } from "@/lib/crm/config";
+import { ACCOUNT_HEALTH, DEAL_STAGES, SIZE_BANDS } from "@/lib/crm/config";
 import { getBoardItems } from "./boards";
 import type { MondayItem } from "./types";
 
@@ -317,4 +317,87 @@ export async function planLeads(boardId: string): Promise<LeadsPlan> {
     });
   }
   return { total: items.length, duplicates, skipped, newCompanies, contacts };
+}
+
+// --- Clients Progress (health overlay onto existing customers) --------------
+
+type Health = (typeof ACCOUNT_HEALTH)[number];
+
+const HEALTH_ALIASES: Record<string, Health> = {
+  "on track": "Green",
+  active: "Green",
+  good: "Green",
+  healthy: "Green",
+  green: "Green",
+  live: "Green",
+  happy: "Green",
+  stable: "Green",
+  complete: "Green",
+  completed: "Green",
+  onboarded: "Green",
+  "at risk": "Amber",
+  amber: "Amber",
+  watch: "Amber",
+  monitor: "Amber",
+  "needs attention": "Amber",
+  onboarding: "Amber",
+  pending: "Amber",
+  new: "Amber",
+  red: "Red",
+  critical: "Red",
+  churn: "Red",
+  churning: "Red",
+  churned: "Red",
+  escalation: "Red",
+  escalated: "Red",
+  unhappy: "Red",
+  cancelled: "Red",
+  lost: "Red",
+  stalled: "Red",
+};
+
+function mapHealth(raw: string): Health | undefined {
+  const s = norm(raw);
+  if (!s) return undefined;
+  if (HEALTH_ALIASES[s]) return HEALTH_ALIASES[s];
+  if (/(risk|amber|watch|onboard|attention|pending)/.test(s)) return "Amber";
+  if (/(churn|critical|escalat|cancel|lost|stall|unhappy|\bred\b)/.test(s)) return "Red";
+  if (/(track|active|good|health|green|live|happy|stable|complet)/.test(s)) return "Green";
+  return undefined;
+}
+
+export interface ClientsProgressPlan {
+  total: number;
+  unmatched: number;
+  noStatus: number;
+  updates: { id: string; name: string; health: Health }[];
+}
+
+export async function planClientsProgress(boardId: string): Promise<ClientsProgressPlan> {
+  const [{ items }, companies] = await Promise.all([getBoardItems(boardId), listCompanies()]);
+  const byName = new Map(companies.map((c) => [norm(c.name), c]));
+  const updates: { id: string; name: string; health: Health }[] = [];
+  const seen = new Set<string>();
+  let unmatched = 0;
+  let noStatus = 0;
+
+  for (const it of items) {
+    const name = (it.name || "").trim();
+    if (!name) continue;
+    const company = byName.get(norm(name));
+    if (!company) {
+      unmatched++;
+      continue;
+    }
+    if (seen.has(company.id)) continue;
+    const v = (title: string) => it.values[title.toLowerCase()] ?? "";
+    const health = mapHealth(v("status"));
+    if (!health) {
+      noStatus++;
+      continue;
+    }
+    seen.add(company.id);
+    updates.push({ id: company.id, name: company.name, health });
+  }
+  return { total: items.length, unmatched, noStatus, updates };
 }

@@ -126,6 +126,25 @@ export async function createRecords<T = Record<string, unknown>>(
   return out;
 }
 
+/** Update many records, chunked to Airtable's 10-per-request limit. */
+export async function updateRecords<T = Record<string, unknown>>(
+  baseId: string,
+  tableId: string,
+  records: { id: string; fields: Record<string, unknown> }[],
+): Promise<AirtableRecord<T>[]> {
+  const out: AirtableRecord<T>[] = [];
+  for (let i = 0; i < records.length; i += 10) {
+    if (i > 0) await sleep(220); // stay under Airtable's ~5 req/s limit on bulk writes
+    const chunk = records.slice(i, i + 10);
+    const data = await request<{ records: AirtableRecord<T>[] }>(`${baseId}/${tableId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ records: chunk }),
+    });
+    out.push(...(data.records || []));
+  }
+  return out;
+}
+
 export function updateRecord<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,

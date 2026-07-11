@@ -49,6 +49,7 @@ import {
   getRecord,
   listRecords,
   updateRecord,
+  updateRecords,
 } from "@/lib/airtable";
 
 export class ValidationError extends Error {
@@ -344,6 +345,17 @@ export async function createCompaniesReturning(inputs: CompanyInput[]): Promise<
   const fieldsList = inputs.map((i) => buildCompanyFields(i, false));
   const created = await createRecords(AIRTABLE_BASE_ID, TABLES.companies, fieldsList);
   return created.map((r) => toCompany(r));
+}
+
+/** Bulk-set Account Health on existing companies (Clients Progress overlay). */
+export async function updateCompaniesHealth(
+  updates: { id: string; health: string }[],
+): Promise<number> {
+  if (updates.length === 0) return 0;
+  const F = FIELDS.companies;
+  const records = updates.map((u) => ({ id: u.id, fields: { [F.accountHealth]: u.health } }));
+  const updated = await updateRecords(AIRTABLE_BASE_ID, TABLES.companies, records);
+  return updated.length;
 }
 
 export async function updateCompany(id: string, input: CompanyInput): Promise<Company> {
