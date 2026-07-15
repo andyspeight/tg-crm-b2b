@@ -8,6 +8,7 @@ import {
   TextareaHTMLAttributes,
   useEffect,
 } from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, ChevronDown, Info, X } from "lucide-react";
 import Link from "next/link";
 
@@ -195,10 +196,13 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  if (!open || typeof document === "undefined") return null;
+  // Portal to <body>: an ancestor with backdrop-filter/filter/transform (e.g. the
+  // sticky top bar that hosts Quick add) becomes the containing block for fixed
+  // positioning, which would otherwise clamp this overlay to that ancestor's box.
+  return createPortal(
     <div
-      className="luna-fade fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-[rgba(11,18,32,0.6)] backdrop-blur-md"
+      className="luna-fade fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-[rgba(11,18,32,0.6)] backdrop-blur-md"
       role="dialog"
       aria-modal="true"
     >
@@ -216,7 +220,8 @@ export function Modal({
           <div className="px-6 py-5">{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

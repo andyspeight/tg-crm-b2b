@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Briefcase,
@@ -110,8 +111,8 @@ export function AskLuna() {
         </kbd>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Ask Luna">
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Ask Luna">
           <button
             aria-hidden
             tabIndex={-1}
@@ -188,7 +189,8 @@ export function AskLuna() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
