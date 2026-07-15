@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, Moon, MoreHorizontal, Search, Sparkles, Users } from "lucide-react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, Moon, MoreHorizontal, Search, Sparkles, User, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, Spinner } from "@/components/ui";
@@ -222,8 +222,8 @@ function GlobalSearch() {
     <div ref={boxRef} className="relative">
       <Search
         size={15}
-        strokeWidth={1.75}
-        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+        strokeWidth={1.9}
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
       />
       <input
         value={q}
@@ -232,56 +232,91 @@ function GlobalSearch() {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Search..."
+        placeholder="Search…"
         aria-label="Search companies and contacts"
-        className="w-36 rounded-lg border border-border bg-surface py-1.5 pl-8 pr-3 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:w-52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-44"
+        className="h-9 w-52 rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] text-fg shadow-card transition-[width,box-shadow,border-color] placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:w-72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       {open && q.trim().length >= 2 && (
-        <div className="luna-fade absolute right-0 mt-1.5 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-[0_16px_40px_-12px_rgba(8,15,30,0.3)]">
-          {loading && (
-            <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-fg-subtle">
-              <Spinner /> Searching...
+        <div className="luna-pop shadow-float absolute right-0 z-30 mt-2 w-[23rem] overflow-hidden rounded-2xl border border-border bg-card">
+          {loading ? (
+            <div className="flex items-center gap-2 px-4 py-5 text-[13px] text-fg-subtle">
+              <Spinner /> Searching…
+            </div>
+          ) : !hasResults ? (
+            <div className="px-4 py-7 text-center">
+              <p className="text-[13px] font-medium text-fg-muted">No matches for “{q.trim()}”</p>
+              <p className="mt-0.5 text-[12px] text-fg-subtle">Try a company or contact name.</p>
+            </div>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto py-1.5">
+              {results.companies.length > 0 && (
+                <div className="pb-1">
+                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Companies
+                  </p>
+                  {results.companies.slice(0, 6).map((c) => (
+                    <SearchRow
+                      key={c.id}
+                      icon={<Building2 size={15} strokeWidth={1.75} />}
+                      name={c.name}
+                      sub={c.type}
+                      onClick={() => go(`/companies/${c.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+              {results.contacts.length > 0 && (
+                <div className={results.companies.length > 0 ? "border-t border-border-soft pt-1" : ""}>
+                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Contacts
+                  </p>
+                  {results.contacts.slice(0, 6).map((c) => (
+                    <SearchRow
+                      key={c.id}
+                      icon={<User size={15} strokeWidth={1.75} />}
+                      name={c.name}
+                      sub={c.companyName}
+                      onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {!loading && !hasResults && (
-            <div className="px-4 py-3 text-[13px] text-fg-subtle">No matches</div>
-          )}
-          {!loading && results.companies.length > 0 && (
-            <div className="border-b border-border-soft py-1">
-              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                Companies
-              </p>
-              {results.companies.slice(0, 6).map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => go(`/companies/${c.id}`)}
-                  className="block w-full px-4 py-1.5 text-left text-[13px] text-fg hover:bg-muted"
-                >
-                  {c.name}
-                  {c.type ? <span className="ml-2 text-fg-subtle">{c.type}</span> : null}
-                </button>
-              ))}
-            </div>
-          )}
-          {!loading && results.contacts.length > 0 && (
-            <div className="py-1">
-              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                Contacts
-              </p>
-              {results.contacts.slice(0, 6).map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
-                  className="block w-full px-4 py-1.5 text-left text-[13px] text-fg hover:bg-muted"
-                >
-                  {c.name}
-                  {c.companyName ? <span className="ml-2 text-fg-subtle">{c.companyName}</span> : null}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 border-t border-border-soft bg-muted/40 px-3 py-2 text-[11px] text-fg-subtle">
+            Press
+            <kbd className="rounded border border-border bg-card px-1 font-medium text-fg-muted">⌘K</kbd>
+            to ask Luna anything
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function SearchRow({
+  icon,
+  name,
+  sub,
+  onClick,
+}: {
+  icon: ReactNode;
+  name: string;
+  sub?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+    >
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-strong">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium text-fg">{name}</span>
+        {sub ? <span className="block truncate text-[11px] text-fg-subtle">{sub}</span> : null}
+      </span>
+    </button>
   );
 }
