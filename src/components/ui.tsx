@@ -198,19 +198,19 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="luna-fade fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(11,18,32,0.6)] p-4 backdrop-blur-md sm:items-center sm:p-6"
+      className="luna-fade fixed inset-0 z-40 flex items-end justify-center bg-[rgba(11,18,32,0.6)] p-4 backdrop-blur-md sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
     >
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="luna-pop shadow-float relative z-10 my-4 w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card sm:my-0">
-        <div className="flex items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
+      <div className="luna-pop shadow-float relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
           <h2 className="text-[16px] font-semibold tracking-tight text-fg">{title}</h2>
           <IconButton label="Close" onClick={onClose}>
             <X size={18} strokeWidth={1.75} />
           </IconButton>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -411,7 +411,7 @@ export function StatTile({
     </>
   );
   const base = cn(
-    "flex flex-col rounded-2xl border border-border bg-card p-3.5 text-left shadow-card ring-1 ring-inset",
+    "flex w-full flex-col rounded-2xl border border-border bg-card p-3.5 text-left shadow-card ring-1 ring-inset",
     ring,
     active && "ring-2 ring-accent",
   );

@@ -234,7 +234,7 @@ function GlobalSearch() {
         onFocus={() => setOpen(true)}
         placeholder="Search…"
         aria-label="Search companies and contacts"
-        className="h-9 w-52 rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] text-fg shadow-card transition-[width,box-shadow,border-color] placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:w-72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="h-9 w-64 rounded-lg border border-border bg-surface pl-9 pr-3 text-[13.5px] text-fg shadow-card transition-[box-shadow,border-color] placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       {open && q.trim().length >= 2 && (
         <div className="luna-pop shadow-float absolute right-0 z-30 mt-2 w-[23rem] overflow-hidden rounded-2xl border border-border bg-card">
