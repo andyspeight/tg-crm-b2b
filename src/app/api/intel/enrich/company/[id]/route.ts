@@ -60,6 +60,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         { status: 503 },
       );
     }
+    if (e instanceof Error && /Bright Data/i.test(e.message)) {
+      return NextResponse.json({ error: e.message }, { status: 502 });
+    }
     return errorResponse(e);
   }
 }

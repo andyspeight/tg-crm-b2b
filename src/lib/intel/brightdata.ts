@@ -37,7 +37,10 @@ async function trigger(datasetId: string, url: string): Promise<string> {
     body: JSON.stringify([{ url }]),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Bright Data trigger failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Bright Data trigger failed (${res.status})${body ? `: ${body.slice(0, 300)}` : ""}`);
+  }
   const data = (await res.json()) as { snapshot_id?: string };
   if (!data.snapshot_id) throw new Error("Bright Data did not return a snapshot id");
   return data.snapshot_id;
@@ -58,9 +61,12 @@ async function triggerDiscover(
       cache: "no-store",
     },
   );
-  if (!res.ok) throw new Error(`Bright Data discover failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Bright Data discover failed (${res.status})${body ? `: ${body.slice(0, 300)}` : ""}`);
+  }
   const data = (await res.json()) as { snapshot_id?: string };
-  if (!data.snapshot_id) throw new Error("Bright Data did not return a snapshot id");
+  if (!data.snapshot_id) throw new Error("Bright Data discover returned no snapshot id");
   return data.snapshot_id;
 }
 
