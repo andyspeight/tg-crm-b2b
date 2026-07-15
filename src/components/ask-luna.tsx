@@ -101,11 +101,11 @@ export function AskLuna() {
         onClick={() => setOpen(true)}
         aria-label="Ask Luna"
         aria-keyshortcuts="Meta+K Control+K"
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-accent-soft bg-accent-soft/40 px-2.5 text-[13px] font-medium text-accent-strong transition-colors hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-navy px-3 text-[13px] font-semibold text-white shadow-raise transition-[transform,filter] hover:-translate-y-px hover:brightness-110 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--bg)]"
       >
-        <Sparkles size={15} strokeWidth={1.9} />
+        <Sparkles size={15} strokeWidth={2} />
         <span className="hidden sm:inline">Ask Luna</span>
-        <kbd className="ml-0.5 hidden rounded border border-accent-soft bg-card/60 px-1 text-[10px] font-medium text-accent-strong lg:inline">
+        <kbd className="ml-0.5 hidden rounded border border-white/25 bg-white/10 px-1 text-[10px] font-medium text-white/80 lg:inline">
           ⌘K
         </kbd>
       </button>

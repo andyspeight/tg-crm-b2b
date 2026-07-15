@@ -210,7 +210,7 @@ export function Modal({
             <X size={18} strokeWidth={1.75} />
           </IconButton>
         </div>
-        <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
       </div>
     </div>
   );
