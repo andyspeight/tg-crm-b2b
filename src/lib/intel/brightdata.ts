@@ -24,9 +24,10 @@ function key(): string {
 const PROFILE_DATASET = process.env.BRIGHTDATA_LINKEDIN_PROFILE_DATASET || "gd_l1viktl72bvl7bjuj0";
 const COMPANY_DATASET = process.env.BRIGHTDATA_LINKEDIN_COMPANY_DATASET || "gd_l1vikfnt1wgvvqz95w";
 
-// discover-by-name inputs vary per account/dataset; keep them overridable without a code change.
-const COMPANY_DISCOVER_BY = process.env.BRIGHTDATA_COMPANY_DISCOVER_BY || "name";
-const COMPANY_DISCOVER_FIELD = process.env.BRIGHTDATA_COMPANY_DISCOVER_FIELD || "name";
+// The LinkedIn company dataset is collect-by-URL only, so name discovery goes
+// through the SERP API (name -> Google -> website / LinkedIn). Needs a SERP zone.
+const SERP_API = "https://api.brightdata.com/request";
+const SERP_ZONE = process.env.BRIGHTDATA_SERP_ZONE;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,28 +47,36 @@ async function trigger(datasetId: string, url: string): Promise<string> {
   return data.snapshot_id;
 }
 
-/** Trigger a discover_new job (find pages matching search criteria, not a known URL). */
-async function triggerDiscover(
-  datasetId: string,
-  discoverBy: string,
-  input: Record<string, unknown>,
-): Promise<string> {
-  const res = await fetch(
-    `${API}/trigger?dataset_id=${datasetId}&include_errors=true&type=discover_new&discover_by=${discoverBy}`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
-      body: JSON.stringify([input]),
-      cache: "no-store",
-    },
-  );
+interface SerpResult {
+  link: string;
+  title?: string;
+  description?: string;
+}
+
+/** Run a Google search via the Bright Data SERP API; returns organic results. */
+async function serpOrganic(query: string): Promise<SerpResult[]> {
+  if (!SERP_ZONE) throw new Error("Bright Data SERP zone is not set (BRIGHTDATA_SERP_ZONE)");
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&gl=uk&hl=en&num=20`;
+  const res = await fetch(SERP_API, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ zone: SERP_ZONE, url, format: "raw" }),
+    cache: "no-store",
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Bright Data discover failed (${res.status})${body ? `: ${body.slice(0, 1200)}` : ""}`);
+    throw new Error(`Bright Data SERP failed (${res.status})${body ? `: ${body.slice(0, 400)}` : ""}`);
   }
-  const data = (await res.json()) as { snapshot_id?: string };
-  if (!data.snapshot_id) throw new Error("Bright Data discover returned no snapshot id");
-  return data.snapshot_id;
+  const data = (await res.json().catch(() => ({}))) as { organic?: unknown[] };
+  if (!Array.isArray(data.organic)) return [];
+  return data.organic
+    .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")
+    .map((o) => ({
+      link: str(o.link) || str(o.url) || "",
+      title: str(o.title),
+      description: str(o.description) || str(o.snippet),
+    }))
+    .filter((o) => o.link);
 }
 
 async function collect(snapshotId: string): Promise<Record<string, unknown>[]> {
@@ -168,18 +177,43 @@ export class BrightDataProvider {
     return mapCompany(records[0], url);
   }
 
-  /** Find a company on LinkedIn from its name alone (for name-only records). */
+  /**
+   * Find a company from its name via Google (SERP), then enrich from its LinkedIn
+   * page if one turns up; otherwise return the website + the search snippet.
+   */
   async discoverCompany(name: string): Promise<EnrichedCompanyData | null> {
-    const snapshot = await triggerDiscover(COMPANY_DATASET, COMPANY_DISCOVER_BY, {
-      [COMPANY_DISCOVER_FIELD]: name,
-    });
-    const records = await collect(snapshot);
-    if (records.length === 0) return null;
-    // Prefer an exact name match, else the first (most relevant) result.
-    const target = name.trim().toLowerCase();
-    const best =
-      records.find((r) => (pick(r, ["name", "company_name"]) || "").toLowerCase() === target) || records[0];
-    const url = pick(best, ["url", "input_url", "linkedin_url"]) || "";
-    return mapCompany(best, url);
+    const results = await serpOrganic(name);
+    if (results.length === 0) return null;
+
+    const links = results.map((r) => r.link);
+    const linkedin = links.find((l) => /linkedin\.com\/company\//i.test(l));
+    const website = links.find(
+      (l) =>
+        !/(linkedin\.|facebook\.|instagram\.|twitter\.|x\.com|youtube\.|tiktok\.|wikipedia\.|glassdoor\.|indeed\.|trustpilot\.|yell\.|yelp\.|crunchbase\.|bloomberg\.|google\.|reddit\.)/i.test(l),
+    );
+
+    // Richest path: a LinkedIn company page we can scrape for full detail.
+    if (linkedin) {
+      try {
+        const data = await this.companyFromUrl(linkedin);
+        if (!data.website && website) data.website = website;
+        return data;
+      } catch {
+        // fall through to website-only if the LinkedIn scrape fails
+      }
+    }
+    if (website) {
+      const snippet = results.find((r) => r.link === website)?.description;
+      return {
+        name,
+        website,
+        linkedin,
+        description: snippet,
+        sizeBand: undefined,
+        country: undefined,
+        socials: undefined,
+      };
+    }
+    return null;
   }
 }
