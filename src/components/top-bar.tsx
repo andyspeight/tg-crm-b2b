@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, MoreHorizontal, Search, Sparkles, Users } from "lucide-react";
+import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, LogOut, Moon, MoreHorizontal, Search, Sparkles, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, Spinner } from "@/components/ui";
@@ -39,8 +39,11 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5">
-        <Link href="/today" className="flex shrink-0 items-baseline gap-2">
-          <span className="text-base font-semibold tracking-tight text-navy">Luna Desk</span>
+        <Link href="/today" className="flex shrink-0 items-center gap-2">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-navy text-white shadow-raise">
+            <Moon size={15} strokeWidth={2} fill="currentColor" className="rotate-[18deg]" />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight text-navy">Luna Desk</span>
           <span className="hidden text-[11px] font-medium uppercase tracking-wide text-fg-subtle sm:inline">
             TG B2B CRM
           </span>
@@ -57,7 +60,7 @@ export function TopBar() {
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors",
                   active
-                    ? "bg-muted text-fg"
+                    ? "bg-accent-soft text-accent-strong"
                     : "text-fg-muted hover:bg-muted hover:text-fg",
                 )}
               >
