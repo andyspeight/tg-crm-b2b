@@ -198,19 +198,23 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="luna-fade fixed inset-0 z-40 flex items-end justify-center bg-[rgba(11,18,32,0.6)] p-4 backdrop-blur-md sm:items-center sm:p-6"
+      className="luna-fade fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-[rgba(11,18,32,0.6)] backdrop-blur-md"
       role="dialog"
       aria-modal="true"
     >
-      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="luna-pop shadow-float relative z-10 flex max-h-[calc(100dvh_-_2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
-          <h2 className="text-[16px] font-semibold tracking-tight text-fg">{title}</h2>
-          <IconButton label="Close" onClick={onClose}>
-            <X size={18} strokeWidth={1.75} />
-          </IconButton>
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6" onClick={onClose}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="luna-pop shadow-float relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
+            <h2 className="text-[16px] font-semibold tracking-tight text-fg">{title}</h2>
+            <IconButton label="Close" onClick={onClose}>
+              <X size={18} strokeWidth={1.75} />
+            </IconButton>
+          </div>
+          <div className="px-6 py-5">{children}</div>
         </div>
-        <div className="min-h-0 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
       </div>
     </div>
   );
