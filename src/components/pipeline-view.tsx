@@ -7,9 +7,43 @@ import { api } from "@/lib/client";
 import { DEAL_STAGES } from "@/lib/crm/config";
 import type { Deal, DealStage } from "@/lib/crm/types";
 import { dealFlag } from "@/lib/deal-flags";
-import { Button, ErrorText, IconButton, Modal } from "@/components/ui";
+import {
+  Button,
+  IconButton,
+  InlineAlert,
+  Modal,
+  Monogram,
+  PageHeader,
+  type BadgeColor,
+} from "@/components/ui";
+import { stageColor } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
 import { formatMoney } from "@/lib/format";
+
+/** CSS-var token for each stage colour, so the lane dot matches the stage badge. */
+const STAGE_DOT_TOKEN: Record<BadgeColor, string> = {
+  neutral: "--color-fg-subtle",
+  navy: "--color-navy",
+  accent: "--color-accent-strong",
+  success: "--color-success",
+  warning: "--color-warning",
+  danger: "--color-danger",
+  info: "--color-info",
+};
+
+function StageDot({ stage }: { stage: DealStage }) {
+  const token = STAGE_DOT_TOKEN[stageColor(stage)];
+  return (
+    <span
+      aria-hidden
+      className="h-2 w-2 shrink-0 rounded-full"
+      style={{
+        backgroundColor: `var(${token})`,
+        boxShadow: `0 0 0 3px color-mix(in srgb, var(${token}) 14%, transparent)`,
+      }}
+    />
+  );
+}
 
 export function PipelineView({
   initial,
@@ -59,24 +93,23 @@ export function PipelineView({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Pipeline</h1>
-          <p className="text-[13px] text-fg-subtle">
-            {deals.length} {deals.length === 1 ? "deal" : "deals"} · drag a card or use the stage
-            menu to move it
-          </p>
-        </div>
-        <div className="ml-auto">
-          <Button onClick={() => setQuickAdd("New Lead")}>
+      <PageHeader
+        title="Pipeline"
+        description={`${deals.length} ${deals.length === 1 ? "deal" : "deals"} · drag a card or use the stage menu to move it`}
+        actions={
+          <Button variant="primary" onClick={() => setQuickAdd("New Lead")}>
             <Plus size={16} strokeWidth={2} /> New deal
           </Button>
+        }
+      />
+
+      {error ? (
+        <div className="mt-4">
+          <InlineAlert variant="danger">{error}</InlineAlert>
         </div>
-      </div>
+      ) : null}
 
-      <ErrorText>{error}</ErrorText>
-
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-3">
+      <div className="-mx-1 mt-5 flex gap-3 overflow-x-auto px-1 pb-3">
         {DEAL_STAGES.map((stage) => {
           const items = byStage.get(stage) ?? [];
           const total = items.reduce((s, d) => s + (d.mrr ?? 0), 0);
@@ -98,31 +131,39 @@ export function PipelineView({
                 if (id) moveDeal(id, stage);
                 setDragOver(null);
               }}
-              className={`flex w-[264px] shrink-0 flex-col rounded-xl border bg-muted/40 transition-colors ${
+              className={`group/lane flex w-[272px] shrink-0 flex-col rounded-2xl border bg-muted/40 shadow-card transition-colors ${
                 active ? "border-accent ring-1 ring-accent" : "border-border-soft"
               }`}
             >
-              <div className="flex items-center gap-2 px-3 py-2.5">
+              <div className="flex items-center gap-2 border-b border-border-soft px-3 py-2.5">
+                <StageDot stage={stage} />
                 <h2 className="text-[13px] font-semibold text-fg">{stage}</h2>
-                <span className="rounded-md bg-card px-1.5 py-0.5 text-[11px] font-medium text-fg-subtle">
+                <span className="tnum rounded-md bg-card px-1.5 py-0.5 text-[11px] font-medium text-fg-subtle">
                   {items.length}
                 </span>
-                <span className="tnum ml-auto text-[12px] text-fg-subtle">{formatMoney(total)}</span>
-                <IconButton label={`Add deal to ${stage}`} onClick={() => setQuickAdd(stage)}>
+                <span className="tnum ml-auto text-[13px] font-medium text-fg">
+                  {total > 0 ? formatMoney(total) : <span className="text-fg-subtle">—</span>}
+                </span>
+                <IconButton
+                  label={`Add deal to ${stage}`}
+                  onClick={() => setQuickAdd(stage)}
+                  className="opacity-0 transition-opacity group-hover/lane:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                >
                   <Plus size={16} strokeWidth={1.75} />
                 </IconButton>
               </div>
 
-              <div className="flex min-h-16 flex-1 flex-col gap-2 px-2 pb-2">
+              <div className="flex min-h-16 flex-1 flex-col gap-2 p-2">
                 {items.length === 0 ? (
-                  <p className="px-1 py-6 text-center text-[12px] text-fg-subtle">
+                  <p className="luna-fade px-1 py-6 text-center text-[12px] text-fg-subtle">
                     {active ? "Drop here" : "No deals"}
                   </p>
                 ) : (
-                  items.map((d) => (
+                  items.map((d, i) => (
                     <DealCard
                       key={d.id}
                       deal={d}
+                      index={i}
                       lastActivity={
                         recency.byDeal[d.id] ||
                         (d.companyId ? recency.byCompany[d.companyId] : undefined) ||
@@ -166,6 +207,7 @@ export function PipelineView({
 
 function DealCard({
   deal,
+  index,
   lastActivity,
   dragging,
   onDragStart,
@@ -173,6 +215,7 @@ function DealCard({
   onStageChange,
 }: {
   deal: Deal;
+  index: number;
   lastActivity?: string;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
@@ -186,25 +229,35 @@ function DealCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`cursor-grab rounded-lg border border-border bg-card p-3 shadow-[0_1px_2px_rgba(8,15,30,0.04)] active:cursor-grabbing ${
+      style={{ "--i": Math.min(index, 12) } as React.CSSProperties}
+      className={`luna-rise group/card cursor-grab rounded-2xl border border-border bg-card p-3 shadow-card transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-raise active:translate-y-0 active:cursor-grabbing ${
         dragging ? "opacity-50" : ""
       }`}
     >
-      <p className="text-[13px] font-medium leading-snug text-fg">{deal.name || "Untitled"}</p>
-      {deal.companyId ? (
-        <Link
-          href={`/companies/${deal.companyId}`}
-          className="mt-0.5 block truncate text-[12px] text-fg-subtle hover:text-accent-strong"
-        >
-          {deal.companyName || "Company"}
-        </Link>
-      ) : null}
+      <div className="flex items-start gap-2.5">
+        <Monogram name={deal.companyName || deal.name} size="sm" tone="navy" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium leading-snug text-fg">
+            {deal.name || "Untitled"}
+          </p>
+          {deal.companyId ? (
+            <Link
+              href={`/companies/${deal.companyId}`}
+              className="mt-0.5 block truncate text-[12px] text-fg-subtle hover:text-accent-strong"
+            >
+              {deal.companyName || "Company"}
+            </Link>
+          ) : null}
+        </div>
+      </div>
 
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="tnum text-[13px] font-medium text-fg">{formatMoney(deal.mrr)}</span>
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <span className="tnum text-[13px] font-medium text-fg">
+          {deal.mrr ? formatMoney(deal.mrr) : <span className="text-fg-subtle">—</span>}
+        </span>
         {flag ? (
           <span
-            className={`inline-flex items-center gap-1 text-[11px] ${
+            className={`inline-flex items-center gap-1 text-[11px] font-medium ${
               flag.danger ? "text-danger" : "text-warning"
             }`}
           >
@@ -218,18 +271,21 @@ function DealCard({
         ) : null}
       </div>
 
-      <select
-        value={deal.stage ?? "New Lead"}
-        onChange={(e) => onStageChange(e.target.value as DealStage)}
-        aria-label={`Move ${deal.name} to a different stage`}
-        className="mt-2 w-full rounded-md border border-border-soft bg-surface px-2 py-1 text-[12px] text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        {DEAL_STAGES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+      <div className="relative mt-2 flex items-center gap-1.5">
+        <StageDot stage={(deal.stage ?? "New Lead") as DealStage} />
+        <select
+          value={deal.stage ?? "New Lead"}
+          onChange={(e) => onStageChange(e.target.value as DealStage)}
+          aria-label={`Move ${deal.name} to a different stage`}
+          className="w-full cursor-pointer rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[12px] font-medium text-fg-muted transition-colors hover:border-border-soft hover:bg-surface focus-visible:border-border-soft focus-visible:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {DEAL_STAGES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

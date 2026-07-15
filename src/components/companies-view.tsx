@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company } from "@/lib/crm/types";
-import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
+import { Button, EmptyState, IconButton, Modal, Monogram, PageHeader, Skeleton } from "@/components/ui";
 import { HealthBadge, LifecycleBadge } from "@/components/badges";
 import { CompanyForm } from "@/components/forms";
 import { formatMoney } from "@/lib/format";
@@ -71,105 +71,130 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Companies</h1>
-          <p className="text-[13px] text-fg-subtle">
-            {companies.length} {companies.length === 1 ? "record" : "records"}
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search
-              size={15}
-              strokeWidth={1.75}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search companies..."
-              aria-label="Search companies"
-              className="w-44 rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
-            />
-            {loading && (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle">
-                <Spinner />
-              </span>
-            )}
+      <PageHeader
+        title="Companies"
+        description={`${companies.length} ${companies.length === 1 ? "record" : "records"}`}
+        actions={
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <div className="relative w-full sm:w-64">
+              <Search
+                size={16}
+                strokeWidth={1.75}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+              />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search companies..."
+                aria-label="Search companies"
+                className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[14px] text-fg placeholder:text-fg-subtle shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              />
+            </div>
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} strokeWidth={2} /> New company
+            </Button>
           </div>
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} strokeWidth={2} /> New company
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
-      {companies.length === 0 ? (
-        <EmptyState
-          title={q ? "No companies match your search" : "No companies yet"}
-          hint={q ? undefined : "Add your first account, or run the Monday import to seed the pipeline."}
-          action={
-            q ? undefined : (
-              <Button onClick={() => setCreating(true)}>
-                <Plus size={16} strokeWidth={2} /> New company
-              </Button>
-            )
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full min-w-[680px] text-[14px]">
-            <thead>
-              <tr className="border-b border-border-soft text-left text-[12px] font-medium text-fg-subtle">
-                <th className="px-4 py-2.5">Name</th>
-                <th className="px-4 py-2.5">Type</th>
-                <th className="px-4 py-2.5">Lifecycle</th>
-                <th className="px-4 py-2.5">Health</th>
-                <th className="px-4 py-2.5">Country</th>
-                <th className="px-4 py-2.5 text-right">MRR</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((c) => (
-                <tr key={c.id} className="border-b border-border-soft last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-2.5">
-                    <Link
-                      href={`/companies/${c.id}`}
-                      className="font-medium text-fg hover:text-accent-strong"
-                    >
-                      {c.name || "Untitled"}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-fg-muted">{c.type ?? "—"}</td>
-                  <td className="px-4 py-2.5">
-                    <LifecycleBadge value={c.lifecycleStage} />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <HealthBadge value={c.accountHealth} />
-                  </td>
-                  <td className="px-4 py-2.5 text-fg-muted">{c.country ?? "—"}</td>
-                  <td className="tnum px-4 py-2.5 text-right text-fg-muted">{formatMoney(c.mrr)}</td>
-                  <td className="px-2 py-2">
-                    <div className="flex justify-end gap-0.5">
-                      <IconButton label="Edit company" onClick={() => setEditing(c)}>
-                        <Pencil size={16} strokeWidth={1.75} />
-                      </IconButton>
-                      <IconButton
-                        label="Delete company"
-                        onClick={() => remove(c)}
-                        className="hover:text-danger"
-                      >
-                        <Trash2 size={16} strokeWidth={1.75} />
-                      </IconButton>
-                    </div>
-                  </td>
+      <div className="mt-5">
+        {loading ? (
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+            <div className="border-b border-border bg-muted/40 px-4 py-3">
+              <Skeleton className="h-3 w-24" />
+            </div>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 border-b border-border-soft px-4 py-3 last:border-0">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <Skeleton className="h-3 w-1/4" />
+                <Skeleton className="ml-auto h-3 w-16" />
+              </div>
+            ))}
+          </div>
+        ) : companies.length === 0 ? (
+          <EmptyState
+            icon={<Building2 size={20} strokeWidth={1.75} />}
+            title={q ? "No companies match your search" : "No companies yet"}
+            hint={q ? undefined : "Add your first account, or run the Monday import to seed the pipeline."}
+            action={
+              q ? (
+                <Button variant="ghost" onClick={() => setQ("")}>
+                  Clear search
+                </Button>
+              ) : (
+                <Button onClick={() => setCreating(true)}>
+                  <Plus size={16} strokeWidth={2} /> New company
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="luna-fade overflow-hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-card">
+            <table className="w-full min-w-[680px] text-[14px]">
+              <thead className="border-b border-border bg-muted/40">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Name</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Type</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Lifecycle</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Health</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Country</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">MRR</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {companies.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="group border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="relative px-4 py-3 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-accent before:opacity-0 before:transition-opacity group-hover:before:opacity-100">
+                      <div className="flex items-center gap-3">
+                        <Monogram name={c.name} size="sm" tone="navy" />
+                        <Link
+                          href={`/companies/${c.id}`}
+                          className="font-medium text-fg transition-colors hover:text-accent-strong"
+                        >
+                          {c.name || "Untitled"}
+                        </Link>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted">{c.type ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <LifecycleBadge value={c.lifecycleStage} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <HealthBadge value={c.accountHealth} />
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted">{c.country ?? "—"}</td>
+                    <td className="tnum px-4 py-3 text-right">
+                      {c.mrr == null ? (
+                        <span className="text-fg-subtle">—</span>
+                      ) : (
+                        <span className="font-medium text-fg">{formatMoney(c.mrr)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+                        <IconButton label="Edit company" onClick={() => setEditing(c)}>
+                          <Pencil size={16} strokeWidth={1.75} />
+                        </IconButton>
+                        <IconButton
+                          label="Delete company"
+                          onClick={() => remove(c)}
+                          className="hover:text-danger"
+                        >
+                          <Trash2 size={16} strokeWidth={1.75} />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <Modal
         open={creating}

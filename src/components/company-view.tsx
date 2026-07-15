@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { ComponentType, ReactNode, useState } from "react";
 import {
   ArrowLeft,
+  Briefcase,
   CheckCircle2,
   Circle,
   ExternalLink,
   HeartHandshake,
+  ListTodo,
   Mail,
   Megaphone,
   MonitorPlay,
@@ -25,8 +27,17 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Activity, ActivityType, Company, Contact, Deal, Task } from "@/lib/crm/types";
-import { Button, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
-import { HealthBadge, LifecycleBadge, StageBadge } from "@/components/badges";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  InlineAlert,
+  Modal,
+  Monogram,
+  Spinner,
+} from "@/components/ui";
+import { HealthBadge, LifecycleBadge, StageBadge, stageColor } from "@/components/badges";
+import type { BadgeColor } from "@/components/ui";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
 import { OutreachModal } from "@/components/outreach-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -53,6 +64,17 @@ const ACTIVITY_ICON: Record<string, ComponentType<{ size?: number; strokeWidth?:
 function activityIcon(type?: ActivityType) {
   return ACTIVITY_ICON[type ?? "Note"] ?? StickyNote;
 }
+
+/** CSS-var token per badge colour, so a row rail matches its stage badge. */
+const RAIL_TOKEN: Record<BadgeColor, string> = {
+  neutral: "--color-fg-subtle",
+  navy: "--color-navy",
+  accent: "--color-accent-strong",
+  success: "--color-success",
+  warning: "--color-warning",
+  danger: "--color-danger",
+  info: "--color-info",
+};
 
 export function CompanyView({
   company: initialCompany,
@@ -233,11 +255,12 @@ export function CompanyView({
       </Link>
 
       {/* Header */}
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <div className="flex flex-wrap items-start gap-3">
+      <div className="luna-fade rounded-2xl border border-border bg-card p-5 shadow-card">
+        <div className="flex flex-wrap items-start gap-4">
+          <Monogram name={company.name} size="lg" tone="navy" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight text-fg">{company.name}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-fg">{company.name}</h1>
               <LifecycleBadge value={company.lifecycleStage} />
               <HealthBadge value={company.accountHealth} />
             </div>
@@ -275,11 +298,11 @@ export function CompanyView({
               />
               {company.watchlist ? "Watching" : "Watch"}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setOutreachOpen(true)}>
-              <Mail size={15} strokeWidth={1.75} /> Outreach
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditingCompany(true)}>
+            <Button variant="ghost" size="sm" onClick={() => setEditingCompany(true)}>
               <Pencil size={15} strokeWidth={1.75} /> Edit
+            </Button>
+            <Button size="sm" onClick={() => setOutreachOpen(true)}>
+              <Mail size={15} strokeWidth={1.75} /> Draft outreach
             </Button>
           </div>
         </div>
@@ -291,17 +314,30 @@ export function CompanyView({
           <Section
             title="Deals"
             action={
-              <Button size="sm" onClick={() => setAddingDeal(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setAddingDeal(true)}>
                 <Plus size={15} strokeWidth={2} /> Add deal
               </Button>
             }
           >
             {deals.length === 0 ? (
-              <EmptyState title="No deals yet" hint="Add the first deal to start the pipeline." />
+              <EmptyState
+                title="No deals yet"
+                hint="Add the first deal to start the pipeline."
+                icon={<Briefcase size={20} strokeWidth={1.75} />}
+              />
             ) : (
               <ul className="divide-y divide-border-soft">
-                {deals.map((d) => (
-                  <li key={d.id} className="flex items-center gap-3 py-2.5">
+                {deals.map((d, i) => (
+                  <li
+                    key={d.id}
+                    className="luna-rise group flex items-center gap-3 py-2.5"
+                    style={{ "--i": Math.min(i, 12) } as React.CSSProperties}
+                  >
+                    <span
+                      className="h-8 w-1 shrink-0 rounded-full"
+                      style={{ backgroundColor: `var(${RAIL_TOKEN[stageColor(d.stage)]})` }}
+                      aria-hidden
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-medium text-fg">{d.name}</p>
                       <p className="mt-0.5 text-[13px] text-fg-subtle">
@@ -312,7 +348,7 @@ export function CompanyView({
                       </p>
                     </div>
                     <StageBadge value={d.stage} />
-                    <span className="tnum w-20 text-right text-[14px] text-fg-muted">
+                    <span className="tnum w-20 text-right text-[14px] font-medium text-fg">
                       {formatMoney(d.mrr)}
                     </span>
                     <RowActions onEdit={() => setEditingDeal(d)} onRemove={() => removeDeal(d)} />
@@ -325,17 +361,26 @@ export function CompanyView({
           <Section
             title="Contacts"
             action={
-              <Button size="sm" onClick={() => setAddingContact(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setAddingContact(true)}>
                 <Plus size={15} strokeWidth={2} /> Add contact
               </Button>
             }
           >
             {contacts.length === 0 ? (
-              <EmptyState title="No contacts yet" hint="Add the people you deal with at this account." />
+              <EmptyState
+                title="No contacts yet"
+                hint="Add the people you deal with at this account."
+                icon={<Users size={20} strokeWidth={1.75} />}
+              />
             ) : (
               <ul className="divide-y divide-border-soft">
-                {contacts.map((c) => (
-                  <li key={c.id} className="flex items-center gap-3 py-2.5">
+                {contacts.map((c, i) => (
+                  <li
+                    key={c.id}
+                    className="luna-rise group flex items-center gap-3 py-2.5"
+                    style={{ "--i": Math.min(i, 12) } as React.CSSProperties}
+                  >
+                    <Monogram name={c.name} size="sm" tone="accent" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-medium text-fg">
                         {c.name}
@@ -355,7 +400,7 @@ export function CompanyView({
           <Section
             title="Activity timeline"
             action={
-              <Button size="sm" onClick={() => setLoggingActivity(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setLoggingActivity(true)}>
                 <Plus size={15} strokeWidth={2} /> Log activity
               </Button>
             }
@@ -364,13 +409,14 @@ export function CompanyView({
               <EmptyState
                 title="No activity yet"
                 hint="Log a note, call, meeting or demo to start the timeline."
+                icon={<StickyNote size={20} strokeWidth={1.75} />}
               />
             ) : (
-              <ul className="divide-y divide-border-soft">
+              <ul className="luna-fade divide-y divide-border-soft">
                 {activities.map((a) => {
                   const Icon = activityIcon(a.type);
                   return (
-                    <li key={a.id} className="flex gap-3 py-2.5">
+                    <li key={a.id} className="group flex gap-3 py-2.5">
                       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-fg-subtle">
                         <Icon size={14} strokeWidth={1.75} />
                       </div>
@@ -394,7 +440,7 @@ export function CompanyView({
                       <IconButton
                         label="Delete activity"
                         onClick={() => removeActivity(a)}
-                        className="hover:text-danger"
+                        className="opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
                       >
                         <Trash2 size={15} strokeWidth={1.75} />
                       </IconButton>
@@ -445,26 +491,34 @@ export function CompanyView({
                 {company.enrichmentSource ? ` · ${company.enrichmentSource}` : ""}
               </p>
             ) : null}
-            {enrichError ? <p className="mt-2 text-[13px] text-danger">{enrichError}</p> : null}
+            {enrichError ? (
+              <div className="mt-3">
+                <InlineAlert variant="danger">{enrichError}</InlineAlert>
+              </div>
+            ) : null}
           </Section>
 
           <Section
             title="Tasks"
             action={
-              <Button size="sm" onClick={() => setAddingTask(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setAddingTask(true)}>
                 <Plus size={15} strokeWidth={2} /> Add
               </Button>
             }
           >
             {tasks.length === 0 ? (
-              <EmptyState title="No tasks" hint="Add a follow-up so nothing slips." />
+              <EmptyState
+                title="No tasks"
+                hint="Add a follow-up so nothing slips."
+                icon={<ListTodo size={20} strokeWidth={1.75} />}
+              />
             ) : (
               <ul className="space-y-0.5">
                 {tasks.map((t) => {
                   const done = t.status === "Done";
                   const overdue = !done && isOverdue(t.dueDate);
                   return (
-                    <li key={t.id} className="flex items-start gap-2 py-1">
+                    <li key={t.id} className="group flex items-start gap-2 py-1">
                       <button
                         onClick={() => toggleTask(t)}
                         aria-label={done ? "Mark not done" : "Mark done"}
@@ -489,7 +543,7 @@ export function CompanyView({
                       <IconButton
                         label="Delete task"
                         onClick={() => removeTask(t)}
-                        className="h-7 w-7 hover:text-danger"
+                        className="h-7 w-7 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
                       >
                         <Trash2 size={14} strokeWidth={1.75} />
                       </IconButton>
@@ -648,7 +702,7 @@ function KV({ label, children }: { label: string; children: ReactNode }) {
 
 function RowActions({ onEdit, onRemove }: { onEdit: () => void; onRemove: () => void }) {
   return (
-    <span className="flex shrink-0 items-center gap-0.5">
+    <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
       <IconButton label="Edit" onClick={onEdit}>
         <Pencil size={16} strokeWidth={1.75} />
       </IconButton>
