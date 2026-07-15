@@ -203,7 +203,7 @@ export function Modal({
       aria-modal="true"
     >
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="luna-pop shadow-float relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="luna-pop shadow-float relative z-10 flex max-h-[calc(100dvh_-_2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
           <h2 className="text-[16px] font-semibold tracking-tight text-fg">{title}</h2>
           <IconButton label="Close" onClick={onClose}>
