@@ -73,6 +73,13 @@ export function BulkEnrich() {
       }
     }
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    // Refresh so the counters + remaining reflect what just got enriched.
+    try {
+      const d = await api<{ companies: Company[] }>("/api/companies");
+      setCompanies(d.companies);
+    } catch {
+      /* keep the current list if the refresh fails */
+    }
     setRunning(false);
   }
 
