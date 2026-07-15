@@ -358,36 +358,50 @@ function progressHealth(raw: string): Health | undefined {
 
 export interface ClientsProgressPlan {
   total: number;
-  unmatched: number;
-  noStatus: number;
   updates: { id: string; name: string; health: Health }[];
+  creates: CompanyInput[];
+  noStatus: number;
 }
 
 export async function planClientsProgress(boardId: string): Promise<ClientsProgressPlan> {
   const [{ items }, companies] = await Promise.all([getBoardItems(boardId), listCompanies()]);
   const byName = new Map(companies.map((c) => [normCompany(c.name), c]));
   const updates: { id: string; name: string; health: Health }[] = [];
+  const creates: CompanyInput[] = [];
   const seen = new Set<string>();
-  let unmatched = 0;
+  const createdKeys = new Set<string>();
   let noStatus = 0;
 
   for (const it of items) {
     const title = (it.name || "").trim();
     if (!title) continue;
-    const company = byName.get(normCompany(companyFromProgressTitle(title)));
-    if (!company) {
-      unmatched++;
-      continue;
-    }
-    if (seen.has(company.id)) continue;
+    const companyName = companyFromProgressTitle(title);
+    const key = normCompany(companyName);
+    if (!key) continue;
     const v = (col: string) => it.values[col.toLowerCase()] ?? "";
     const health = progressHealth(v("status"));
-    if (!health) {
-      noStatus++;
-      continue;
+    const company = byName.get(key);
+
+    if (company) {
+      // Existing customer — overlay health (skip if the status didn't map).
+      if (seen.has(company.id)) continue;
+      if (!health) {
+        noStatus++;
+        continue;
+      }
+      seen.add(company.id);
+      updates.push({ id: company.id, name: company.name, health });
+    } else {
+      // Missing customer — create it (deduped within the batch).
+      if (createdKeys.has(key)) continue;
+      createdKeys.add(key);
+      creates.push({
+        name: companyName,
+        lifecycleStage: "Customer",
+        accountHealth: health ?? "Green",
+        careCadence: "Quarterly",
+      });
     }
-    seen.add(company.id);
-    updates.push({ id: company.id, name: company.name, health });
   }
-  return { total: items.length, unmatched, noStatus, updates };
+  return { total: items.length, updates, creates, noStatus };
 }

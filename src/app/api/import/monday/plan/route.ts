@@ -72,10 +72,15 @@ export async function POST(req: NextRequest) {
     } else if (target === "clientsprogress") {
       const plan = await planClientsProgress(boardId);
       total = plan.total;
-      willCreate = plan.updates.length; // customers whose health will be set
-      duplicates = plan.unmatched; // reused slot: not matched to a Luna customer
-      skipped = plan.noStatus; // reused slot: status didn't map to a health
-      sample = plan.updates.slice(0, 8).map((u) => ({ primary: u.name, detail: u.health }));
+      willCreate = plan.updates.length; // existing customers whose health updates
+      companies = plan.creates.length; // missing customers to create
+      skipped = plan.noStatus; // matched but status didn't map to a health
+      sample = [
+        ...plan.updates.slice(0, 5).map((u) => ({ primary: u.name, detail: `health → ${u.health}` })),
+        ...plan.creates
+          .slice(0, 5)
+          .map((c) => ({ primary: c.name ?? "(no name)", detail: `new customer · ${c.accountHealth ?? "Green"}` })),
+      ];
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });
     }

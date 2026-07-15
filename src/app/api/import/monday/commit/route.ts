@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     } else if (target === "clientsprogress") {
       const plan = await planClientsProgress(boardId);
       created = await updateCompaniesHealth(plan.updates);
-      duplicates = plan.unmatched;
+      companiesCreated = await createCompaniesBatch(plan.creates);
       skipped = plan.noStatus;
     } else {
       return NextResponse.json({ error: "This board's import isn't ready yet." }, { status: 400 });

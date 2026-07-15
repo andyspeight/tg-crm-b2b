@@ -308,7 +308,11 @@ export function MondayImport() {
               {commitResult.target === "clientsprogress" ? (
                 <>
                   Set health on <strong>{commitResult.created}</strong>{" "}
-                  {commitResult.created === 1 ? "customer" : "customers"}.
+                  {commitResult.created === 1 ? "customer" : "customers"}
+                  {commitResult.companies
+                    ? ` and created ${commitResult.companies} new ${commitResult.companies === 1 ? "customer" : "customers"}`
+                    : ""}
+                  .
                 </>
               ) : (
                 <>
@@ -323,7 +327,7 @@ export function MondayImport() {
             </p>
             <p className="text-[13px] text-fg-muted">
               {commitResult.target === "clientsprogress"
-                ? `${commitResult.duplicates} not matched to a Luna customer; ${commitResult.skipped} had no mappable status.`
+                ? `${commitResult.skipped} had no mappable status.`
                 : `${commitResult.duplicates} already in Luna Desk (skipped); ${commitResult.skipped} had no name.`}
             </p>
             <div className="flex justify-end gap-2">
@@ -346,9 +350,15 @@ export function MondayImport() {
             <p className="text-[14px] text-fg">
               {plan.target === "clientsprogress" ? (
                 <>
-                  <strong>{plan.willCreate}</strong>{" "}
-                  {plan.willCreate === 1 ? "customer" : "customers"} will have their health set from
-                  their Clients Progress status.
+                  <strong>{plan.willCreate}</strong> existing{" "}
+                  {plan.willCreate === 1 ? "customer" : "customers"} will have their health updated
+                  {plan.companies ? (
+                    <>
+                      , and <strong>{plan.companies}</strong> new{" "}
+                      {plan.companies === 1 ? "customer" : "customers"} will be created
+                    </>
+                  ) : null}
+                  .
                 </>
               ) : (
                 <>
@@ -367,7 +377,7 @@ export function MondayImport() {
                 </>
               )}
             </p>
-            {plan.companies ? (
+            {plan.companies && plan.target !== "clientsprogress" ? (
               <p className="text-[13px] text-fg-muted">
                 Plus <strong className="text-fg">{plan.companies}</strong> new prospect{" "}
                 {plan.companies === 1 ? "company" : "companies"}.
@@ -375,7 +385,7 @@ export function MondayImport() {
             ) : null}
             <p className="text-[13px] text-fg-muted">
               {plan.target === "clientsprogress"
-                ? `From ${plan.total} rows: ${plan.duplicates} not matched to a Luna customer, ${plan.skipped} had no mappable status.`
+                ? `From ${plan.total} onboarding rows${plan.skipped ? `, ${plan.skipped} had no mappable status` : ""}.`
                 : `From ${plan.total} rows: ${plan.duplicates} already in Luna Desk (skipped), ${plan.skipped} had no name.`}
             </p>
 
@@ -404,10 +414,15 @@ export function MondayImport() {
               <Button variant="secondary" onClick={() => setImporting(null)} disabled={committing}>
                 Cancel
               </Button>
-              <Button onClick={runCommit} disabled={committing || plan.willCreate === 0}>
+              <Button
+                onClick={runCommit}
+                disabled={committing || (plan.willCreate === 0 && !plan.companies)}
+              >
                 {committing ? <Spinner /> : <Download size={15} strokeWidth={1.9} />}{" "}
                 {plan.target === "clientsprogress"
-                  ? `Update ${plan.willCreate} ${plan.willCreate === 1 ? "customer" : "customers"}`
+                  ? `Apply to ${plan.willCreate + (plan.companies ?? 0)} ${
+                      plan.willCreate + (plan.companies ?? 0) === 1 ? "customer" : "customers"
+                    }`
                   : `Import ${plan.willCreate} ${nounFor(plan.target, plan.willCreate)}`}
               </Button>
             </div>
