@@ -1,6 +1,7 @@
 import "server-only";
 import type { EnrichedCompanyData, EnrichedContactData } from "./types";
 import { SIZE_BANDS } from "@/lib/crm/config";
+import { hostBrand } from "@/lib/domain";
 
 /**
  * Bright Data Web Scraper API adapter. Public-data only, via the official API
@@ -186,17 +187,25 @@ export class BrightDataProvider {
     if (results.length === 0) return null;
 
     const links = results.map((r) => r.link);
-    const linkedin = links.find((l) => /linkedin\.com\/company\//i.test(l));
+    let linkedin = links.find((l) => /linkedin\.com\/company\//i.test(l));
     const website = links.find(
       (l) =>
         !/(linkedin\.|facebook\.|instagram\.|twitter\.|x\.com|youtube\.|tiktok\.|wikipedia\.|glassdoor\.|indeed\.|trustpilot\.|yell\.|yelp\.|crunchbase\.|bloomberg\.|google\.|reddit\.)/i.test(l),
     );
+
+    // The company name alone often doesn't surface the LinkedIn page, so if the
+    // first search missed it, ask Google directly for the company page (one extra
+    // SERP call, only when needed — keeps the per-record cost down, brief §7).
+    if (!linkedin) {
+      linkedin = await this.findCompanyLinkedin(name, website);
+    }
 
     // Richest path: a LinkedIn company page we can scrape for full detail.
     if (linkedin) {
       try {
         const data = await this.companyFromUrl(linkedin);
         if (!data.website && website) data.website = website;
+        if (!data.linkedin) data.linkedin = linkedin;
         return data;
       } catch {
         // fall through to website-only if the LinkedIn scrape fails
@@ -215,5 +224,28 @@ export class BrightDataProvider {
       };
     }
     return null;
+  }
+
+  /**
+   * Targeted hunt for a company's LinkedIn page. Tries a couple of specific
+   * queries and returns the first /company/ URL. Website domain is used as a
+   * disambiguator so we don't grab a same-named company in another market.
+   */
+  private async findCompanyLinkedin(name: string, website?: string): Promise<string | undefined> {
+    const brand = website ? hostBrand(website) : "";
+    const queries = [
+      `${name} site:linkedin.com/company`,
+      brand ? `${brand} site:linkedin.com/company` : "",
+    ].filter(Boolean);
+    for (const q of queries) {
+      try {
+        const res = await serpOrganic(q);
+        const hit = res.map((r) => r.link).find((l) => /linkedin\.com\/company\//i.test(l));
+        if (hit) return hit.split("?")[0];
+      } catch {
+        // ignore and try the next query / fall back to website-only
+      }
+    }
+    return undefined;
   }
 }

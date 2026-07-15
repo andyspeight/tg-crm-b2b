@@ -51,6 +51,7 @@ import {
   updateRecord,
   updateRecords,
 } from "@/lib/airtable";
+import { emailBrand, hostBrand, nameKey } from "@/lib/domain";
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -411,6 +412,45 @@ export async function listContactsByCompany(companyId: string): Promise<Contact[
   return listContactsByIds(idList(company.fields[FIELDS.companies.contacts]));
 }
 
+/** The brand tokens that identify a company: its website domain and its name. */
+function companyBrands(company: Pick<Company, "name" | "website">): string[] {
+  const brands = new Set<string>();
+  if (company.website) {
+    const b = hostBrand(company.website);
+    if (b.length >= 3) brands.add(b);
+  }
+  const nk = nameKey(company.name);
+  if (nk.length >= 4) brands.add(nk);
+  return [...brands];
+}
+
+/**
+ * People who almost certainly belong to this account but aren't linked yet —
+ * matched by email domain (e.g. kelly@aarucollective.com -> "A'ARU Collective").
+ * Only unlinked contacts are suggested, so we never poach someone from another
+ * account. Powers the "add these people" prompt on the company page.
+ */
+export async function listSuggestedContactsForCompany(
+  company: Pick<Company, "id" | "name" | "website">,
+  excludeIds: string[] = [],
+): Promise<Contact[]> {
+  const brands = companyBrands(company);
+  if (brands.length === 0) return [];
+  const F = FIELDS.contacts;
+  // Narrow server-side by the "@brand." fragment, then confirm the brand in JS.
+  const clauses = brands.map((b) => `FIND("@${b}.", LOWER({${F.email}}&""))`);
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
+    filterByFormula: clauses.length === 1 ? clauses[0] : `OR(${clauses.join(",")})`,
+    maxRecords: 50,
+  });
+  const brandSet = new Set(brands);
+  const exclude = new Set(excludeIds);
+  return records
+    .map(toContact)
+    .filter((c) => !c.companyId && !exclude.has(c.id) && brandSet.has(emailBrand(c.email)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getContact(id: string): Promise<Contact> {
   const contact = toContact(await getRecord(AIRTABLE_BASE_ID, TABLES.contacts, id));
   await attachCompanyNames([contact]);
@@ -758,6 +798,26 @@ export async function deleteCareTouch(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.careTouches, id);
 }
 
+/**
+ * All care touches for one company (company page). The touch->company link isn't
+ * queryable by record id via formula, so we read the table (small) and filter in
+ * JS on the linked id, exactly as listCareBoard does.
+ */
+export async function listCareTouchesByCompany(companyId: string): Promise<CareTouch[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.careTouches, { maxRecords: 2000 });
+  return records
+    .map(toCareTouch)
+    .filter((t) => t.companyId === companyId)
+    .sort((a, b) => {
+      // Open (Scheduled) first by soonest due, then history by most-recent due.
+      const openA = a.status === "Scheduled" ? 0 : 1;
+      const openB = b.status === "Scheduled" ? 0 : 1;
+      if (openA !== openB) return openA - openB;
+      if (openA === 0) return (a.dueDate || "9999").localeCompare(b.dueDate || "9999");
+      return (b.dueDate || "").localeCompare(a.dueDate || "");
+    });
+}
+
 /** Ensure every cadenced customer with no open Scheduled touch has one. Idempotent. */
 export async function generateDueTouches(): Promise<number> {
   const board = await listCareBoard();
@@ -938,6 +998,82 @@ async function attachDealCompanyNames(deals: Deal[]): Promise<void> {
   if (ids.length === 0) return;
   const map = await companyNameMap(ids);
   for (const d of deals) if (d.companyId) d.companyName = map.get(d.companyId);
+}
+
+// --- contact re-linking (reunite orphaned contacts with their account) -----
+
+export interface ContactLink {
+  contactId: string;
+  contactName: string;
+  email: string;
+  companyId: string;
+  companyName: string;
+}
+
+/**
+ * Propose links for orphaned contacts (no company) by matching their email
+ * domain to a company's website domain or name. Conservative: a brand must map
+ * to exactly one company, so we never guess between same-named accounts. The
+ * Monday import linked contacts by an exact company-name text match only, which
+ * left anyone with a blank/mismatched company field stranded — this reunites them.
+ */
+export async function planContactLinks(): Promise<ContactLink[]> {
+  const [companies, contactRecs] = await Promise.all([
+    listCompanies(),
+    listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
+      filterByFormula: `NOT({${FIELDS.contacts.email}}='')`,
+      maxRecords: 5000,
+    }),
+  ]);
+
+  // brand -> set of company ids. A brand pointing at more than one company is
+  // ambiguous and dropped, so we only ever link when the account is unambiguous.
+  const byBrand = new Map<string, Set<string>>();
+  const add = (brand: string, id: string) => {
+    if (brand.length < 3) return;
+    const s = byBrand.get(brand) ?? new Set<string>();
+    s.add(id);
+    byBrand.set(brand, s);
+  };
+  const nameById = new Map<string, string>();
+  for (const c of companies) {
+    nameById.set(c.id, c.name);
+    if (c.website) add(hostBrand(c.website), c.id);
+    const nk = nameKey(c.name);
+    if (nk.length >= 4) add(nk, c.id);
+  }
+
+  const links: ContactLink[] = [];
+  for (const rec of contactRecs) {
+    const c = toContact(rec);
+    if (c.companyId) continue; // already linked — leave it
+    const brand = emailBrand(c.email);
+    if (!brand) continue;
+    const ids = byBrand.get(brand);
+    if (!ids || ids.size !== 1) continue; // unknown or ambiguous
+    const companyId = [...ids][0];
+    links.push({
+      contactId: c.id,
+      contactName: c.name,
+      email: c.email || "",
+      companyId,
+      companyName: nameById.get(companyId) || "",
+    });
+  }
+  return links.sort((a, b) => a.companyName.localeCompare(b.companyName));
+}
+
+/** Link a batch of contacts to their companies. Returns how many were updated. */
+export async function applyContactLinks(
+  pairs: { contactId: string; companyId: string }[],
+): Promise<number> {
+  const F = FIELDS.contacts;
+  const records = pairs
+    .filter((p) => p.contactId && p.companyId)
+    .map((p) => ({ id: p.contactId, fields: { [F.company]: [p.companyId] } }));
+  if (records.length === 0) return 0;
+  const updated = await updateRecords(AIRTABLE_BASE_ID, TABLES.contacts, records);
+  return updated.length;
 }
 
 // --- integration seam (brief §8): wired in Stage 5 -------------------------

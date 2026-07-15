@@ -12,11 +12,13 @@ export function OutreachModal({
   onClose,
   company,
   contacts,
+  defaultContactId,
 }: {
   open: boolean;
   onClose: () => void;
   company: { id: string; name: string };
   contacts: ContactOption[];
+  defaultContactId?: string;
 }) {
   const [contactId, setContactId] = useState("");
   const [goal, setGoal] = useState("");
@@ -29,7 +31,7 @@ export function OutreachModal({
 
   useEffect(() => {
     if (open) {
-      setContactId(contacts[0]?.id ?? "");
+      setContactId(defaultContactId ?? contacts[0]?.id ?? "");
       setGoal("");
       setError("");
       setSubject("");
@@ -37,7 +39,7 @@ export function OutreachModal({
       setGenerated(false);
       setCopied(false);
     }
-  }, [open, contacts]);
+  }, [open, contacts, defaultContactId]);
 
   async function generate() {
     setError("");
