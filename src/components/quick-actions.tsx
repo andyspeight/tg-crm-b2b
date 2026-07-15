@@ -17,7 +17,7 @@ const ACTIONS: Action[] = [
 export function QuickActions() {
   const router = useRouter();
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       {ACTIONS.map((a) => {
         const Icon = a.icon;
         return (
@@ -28,10 +28,10 @@ export function QuickActions() {
                 ? router.push(a.href)
                 : window.dispatchEvent(new CustomEvent(a.event, { detail: a.detail }))
             }
-            className="group inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-medium text-fg shadow-[0_1px_2px_rgba(8,15,30,0.04)] transition-[transform,background-color,border-color] hover:border-accent-soft hover:bg-accent-soft/30 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="group flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-3 text-left text-[13.5px] font-semibold text-fg shadow-card transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-accent-soft hover:shadow-raise active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-accent-soft/50 text-accent-strong transition-colors group-hover:bg-accent-soft">
-              <Icon size={15} strokeWidth={1.9} />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-strong transition-transform group-hover:scale-[1.06]">
+              <Icon size={16} strokeWidth={2} />
             </span>
             {a.label}
           </button>
