@@ -63,7 +63,7 @@ async function triggerDiscover(
   );
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Bright Data discover failed (${res.status})${body ? `: ${body.slice(0, 300)}` : ""}`);
+    throw new Error(`Bright Data discover failed (${res.status})${body ? `: ${body.slice(0, 1200)}` : ""}`);
   }
   const data = (await res.json()) as { snapshot_id?: string };
   if (!data.snapshot_id) throw new Error("Bright Data discover returned no snapshot id");
