@@ -118,7 +118,7 @@ export function AskLuna() {
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           />
-          <div className="luna-fade relative mx-auto mt-[9vh] flex w-[92%] max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_60px_-15px_rgba(8,15,30,0.45)]">
+          <div className="luna-pop shadow-float relative mx-auto mt-[9vh] flex w-[92%] max-w-xl origin-top flex-col overflow-hidden rounded-2xl border border-border bg-card">
             <form onSubmit={submit} className="flex items-center gap-2 border-b border-border-soft px-3">
               <Sparkles size={17} strokeWidth={1.9} className="shrink-0 text-accent-strong" aria-hidden />
               <input

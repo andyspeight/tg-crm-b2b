@@ -8,7 +8,7 @@ import {
   TextareaHTMLAttributes,
   useEffect,
 } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Info, X } from "lucide-react";
 import Link from "next/link";
 
 export function cn(...xs: (string | false | null | undefined)[]): string {
@@ -299,4 +299,153 @@ export function PageHeader({
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
   return <p className="text-[13px] text-danger">{children}</p>;
+}
+
+// --- Monogram + identity ----------------------------------------------------
+
+/** Initials from a name — first letter of the first and last words. */
+export function initials(name?: string): string {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0][0];
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
+
+export function Monogram({
+  name,
+  size = "sm",
+  tone = "accent",
+}: {
+  name?: string;
+  size?: "sm" | "lg";
+  tone?: "accent" | "navy";
+}) {
+  const dims = size === "lg" ? "h-12 w-12 rounded-xl text-[15px]" : "h-8 w-8 rounded-lg text-[12px]";
+  const toneClass = tone === "navy" ? "bg-navy text-white" : "bg-accent-soft text-accent-strong";
+  return (
+    <span className={cn("grid shrink-0 place-items-center font-semibold", dims, toneClass)} aria-hidden>
+      {initials(name)}
+    </span>
+  );
+}
+
+// --- InlineAlert ------------------------------------------------------------
+
+export function InlineAlert({
+  variant = "danger",
+  children,
+}: {
+  variant?: "danger" | "success" | "info";
+  children: ReactNode;
+}) {
+  if (!children) return null;
+  const map = {
+    danger: { cls: "border-danger/30 bg-danger/10 text-danger", Icon: AlertCircle },
+    success: { cls: "border-success/30 bg-success/10 text-success", Icon: CheckCircle2 },
+    info: { cls: "border-info/30 bg-info/10 text-info", Icon: Info },
+  }[variant];
+  const Icon = map.Icon;
+  return (
+    <div
+      className={cn("luna-fade flex items-start gap-2 rounded-lg border px-3 py-2 text-[13px]", map.cls)}
+      role="alert"
+    >
+      <Icon size={15} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden />
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
+// --- StatTile ---------------------------------------------------------------
+
+export function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  icon,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "warn" | "danger" | "success" | "navy";
+  icon?: ReactNode;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const ring =
+    tone === "danger"
+      ? "ring-danger/30"
+      : tone === "warn"
+        ? "ring-warning/30"
+        : tone === "success"
+          ? "ring-success/30"
+          : "ring-transparent";
+  const valueColor =
+    tone === "danger"
+      ? "text-danger"
+      : tone === "warn"
+        ? "text-warning"
+        : tone === "success"
+          ? "text-success"
+          : "text-fg";
+  const chip =
+    tone === "danger"
+      ? "bg-danger/15 text-danger"
+      : tone === "warn"
+        ? "bg-warning/15 text-warning"
+        : tone === "success"
+          ? "bg-success/15 text-success"
+          : tone === "navy"
+            ? "bg-navy/10 text-navy"
+            : "bg-accent-soft text-accent-strong";
+  const inner = (
+    <>
+      {icon ? <span className={cn("mb-2 grid h-8 w-8 place-items-center rounded-xl", chip)}>{icon}</span> : null}
+      <span className={cn("tnum text-[24px] font-semibold leading-none", valueColor)}>{value}</span>
+      <span className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">{label}</span>
+      {sub ? <span className="mt-0.5 text-[11px] text-fg-subtle">{sub}</span> : null}
+    </>
+  );
+  const base = cn(
+    "flex flex-col rounded-2xl border border-border bg-card p-3.5 text-left shadow-card ring-1 ring-inset",
+    ring,
+    active && "ring-2 ring-accent",
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          base,
+          "cursor-pointer transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-raise focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        )}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={base}>{inner}</div>;
+}
+
+// --- Skeleton (loading) -----------------------------------------------------
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("animate-pulse rounded-md bg-muted", className)} />;
+}
+
+export function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <Skeleton className="h-8 w-8 rounded-lg" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-3 w-1/3" />
+        <Skeleton className="h-2.5 w-1/4" />
+      </div>
+    </div>
+  );
 }

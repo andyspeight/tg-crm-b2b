@@ -4,6 +4,9 @@ import { Badge, type BadgeColor } from "@/components/ui";
 import type { AccountHealth, DealStage, LifecycleStage } from "@/lib/crm/types";
 
 const HEALTH: Record<string, BadgeColor> = { Green: "success", Amber: "warning", Red: "danger" };
+export function healthColor(value?: string): BadgeColor {
+  return HEALTH[value ?? ""] ?? "neutral";
+}
 export function HealthBadge({ value }: { value?: AccountHealth }) {
   if (!value) return null;
   return <Badge color={HEALTH[value] ?? "neutral"}>{value}</Badge>;
@@ -22,9 +25,10 @@ export function LifecycleBadge({ value }: { value?: LifecycleStage }) {
   return <Badge color={LIFECYCLE[value] ?? "neutral"}>{value}</Badge>;
 }
 
+// A deliberate gradient so the pipeline reads as progress, not a grey wall.
 const STAGE: Record<string, BadgeColor> = {
   "New Lead": "neutral",
-  Contacted: "neutral",
+  Contacted: "info",
   "Demo Booked": "info",
   "Demo Done": "info",
   Proposal: "accent",
@@ -32,6 +36,10 @@ const STAGE: Record<string, BadgeColor> = {
   Won: "success",
   Lost: "danger",
 };
+/** Single source of truth for stage colour — used by the badge, pipeline dots and the form. */
+export function stageColor(value?: string): BadgeColor {
+  return STAGE[value ?? ""] ?? "neutral";
+}
 export function StageBadge({ value }: { value?: DealStage }) {
   if (!value) return null;
   return <Badge color={STAGE[value] ?? "neutral"}>{value}</Badge>;

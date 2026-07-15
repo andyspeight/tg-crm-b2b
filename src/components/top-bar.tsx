@@ -132,7 +132,7 @@ function MoreMenu({ onLogout }: { onLogout: () => void }) {
       {open && (
         <div
           role="menu"
-          className="luna-fade absolute right-0 mt-1.5 w-48 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-[0_16px_40px_-12px_rgba(8,15,30,0.3)]"
+          className="luna-pop shadow-float absolute right-0 mt-1.5 w-48 origin-top-right overflow-hidden rounded-xl border border-border bg-card py-1"
         >
           {MORE.map((item) => {
             const Icon = item.icon;
