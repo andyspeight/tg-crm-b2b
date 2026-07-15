@@ -921,6 +921,9 @@ export function CompanyView({
         company={{ id: company.id, name: company.name }}
         contacts={contacts.map((c) => ({ id: c.id, name: c.name, email: c.email, role: c.role }))}
         defaultContactId={outreachContactId}
+        onSent={async () => {
+          await Promise.all([refreshActivities(), refreshCompany()]);
+        }}
       />
     </div>
   );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Search, Sparkles, User, Users, Wand2 } from "lucide-react";
+import { Briefcase, Building2, Columns3, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Search, Settings, Sparkles, User, Users, Wand2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, Spinner } from "@/components/ui";
@@ -27,6 +27,7 @@ const MORE = [
   { href: "/deals", label: "Deals", icon: Briefcase },
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/import", label: "Import", icon: Download },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function TopBar() {

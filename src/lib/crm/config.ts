@@ -16,6 +16,7 @@ export const TABLES = {
   careTouches: "tblZ8hpymrHX08XSZ",
   signals: "tbleJMlld1U0IjMG4",
   campaignEngagement: "tbljhb1tn3302SPgP",
+  appSettings: "tbllri9bVn8QfPsA7",
 } as const;
 
 // --- Select option sets (must match the Airtable single-select choices exactly) ---
@@ -193,5 +194,10 @@ export const FIELDS = {
     status: "Status",
     outcomeNotes: "Outcome Notes",
     company: "Company",
+  },
+  appSettings: {
+    key: "Key",
+    value: "Value",
+    updated: "Updated",
   },
 } as const;
