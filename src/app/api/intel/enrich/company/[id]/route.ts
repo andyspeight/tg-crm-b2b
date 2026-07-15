@@ -13,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
   try {
-    const limit = rateLimit(`intel:${clientIp(req)}`, 30, 60 * 1000);
+    const limit = rateLimit(`intel:${clientIp(req)}`, 150, 60 * 1000);
     if (!limit.ok) {
       return NextResponse.json(
         { error: "Too many lookups. Try again shortly." },
