@@ -3,6 +3,7 @@ import { getCompany, updateCompany } from "@/lib/crm/data";
 import type { CompanyInput, SizeBand } from "@/lib/crm/types";
 import { SIZE_BANDS } from "@/lib/crm/config";
 import { IntelNotConfiguredError, getProvider } from "@/lib/intel/provider";
+import type { EnrichedCompanyData } from "@/lib/intel/types";
 import { errorResponse } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -22,18 +23,25 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     const { id } = await params;
     const company = await getCompany(id);
-    if (!company.linkedin) {
+
+    const provider = getProvider();
+    let data: EnrichedCompanyData | null;
+    if (company.linkedin) {
+      data = await provider.companyFromUrl(company.linkedin);
+    } else {
+      // Name-only record: find it on LinkedIn from the name first.
+      data = await provider.discoverCompany(company.name);
+    }
+    if (!data) {
       return NextResponse.json(
-        { error: "Add the company's LinkedIn URL first, then enrich." },
-        { status: 400 },
+        { error: `Couldn't find "${company.name}" on LinkedIn. Add its LinkedIn URL and try again.` },
+        { status: 404 },
       );
     }
 
-    const data = await getProvider().companyFromUrl(company.linkedin);
-
     const patch: CompanyInput = {
       enrichedAt: new Date().toISOString(),
-      enrichmentSource: "LinkedIn (Bright Data)",
+      enrichmentSource: company.linkedin ? "LinkedIn (Bright Data)" : "Discovered via Bright Data",
     };
     if (data.description) patch.description = data.description;
     if (data.sizeBand && (SIZE_BANDS as readonly string[]).includes(data.sizeBand)) {
@@ -41,6 +49,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     }
     if (data.country && !company.country) patch.country = data.country;
     if (data.website && !company.website) patch.website = data.website;
+    if (data.linkedin && !company.linkedin) patch.linkedin = data.linkedin;
 
     const updated = await updateCompany(id, patch);
     return NextResponse.json({ company: updated });

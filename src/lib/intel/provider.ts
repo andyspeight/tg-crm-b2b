@@ -6,6 +6,7 @@ import { BrightDataProvider } from "./brightdata";
 export interface IntelProvider {
   profileFromUrl(url: string): Promise<EnrichedContactData>;
   companyFromUrl(url: string): Promise<EnrichedCompanyData>;
+  discoverCompany(name: string): Promise<EnrichedCompanyData | null>;
 }
 
 export class IntelNotConfiguredError extends Error {

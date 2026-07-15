@@ -24,6 +24,10 @@ function key(): string {
 const PROFILE_DATASET = process.env.BRIGHTDATA_LINKEDIN_PROFILE_DATASET || "gd_l1viktl72bvl7bjuj0";
 const COMPANY_DATASET = process.env.BRIGHTDATA_LINKEDIN_COMPANY_DATASET || "gd_l1vikfnt1wgvvqz95w";
 
+// discover-by-name inputs vary per account/dataset; keep them overridable without a code change.
+const COMPANY_DISCOVER_BY = process.env.BRIGHTDATA_COMPANY_DISCOVER_BY || "name";
+const COMPANY_DISCOVER_FIELD = process.env.BRIGHTDATA_COMPANY_DISCOVER_FIELD || "name";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function trigger(datasetId: string, url: string): Promise<string> {
@@ -34,6 +38,27 @@ async function trigger(datasetId: string, url: string): Promise<string> {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Bright Data trigger failed (${res.status})`);
+  const data = (await res.json()) as { snapshot_id?: string };
+  if (!data.snapshot_id) throw new Error("Bright Data did not return a snapshot id");
+  return data.snapshot_id;
+}
+
+/** Trigger a discover_new job (find pages matching search criteria, not a known URL). */
+async function triggerDiscover(
+  datasetId: string,
+  discoverBy: string,
+  input: Record<string, unknown>,
+): Promise<string> {
+  const res = await fetch(
+    `${API}/trigger?dataset_id=${datasetId}&include_errors=true&type=discover_new&discover_by=${discoverBy}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+      body: JSON.stringify([input]),
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) throw new Error(`Bright Data discover failed (${res.status})`);
   const data = (await res.json()) as { snapshot_id?: string };
   if (!data.snapshot_id) throw new Error("Bright Data did not return a snapshot id");
   return data.snapshot_id;
@@ -135,5 +160,20 @@ export class BrightDataProvider {
     const records = await collect(await trigger(COMPANY_DATASET, url));
     if (records.length === 0) throw new Error("No LinkedIn company data found for that URL");
     return mapCompany(records[0], url);
+  }
+
+  /** Find a company on LinkedIn from its name alone (for name-only records). */
+  async discoverCompany(name: string): Promise<EnrichedCompanyData | null> {
+    const snapshot = await triggerDiscover(COMPANY_DATASET, COMPANY_DISCOVER_BY, {
+      [COMPANY_DISCOVER_FIELD]: name,
+    });
+    const records = await collect(snapshot);
+    if (records.length === 0) return null;
+    // Prefer an exact name match, else the first (most relevant) result.
+    const target = name.trim().toLowerCase();
+    const best =
+      records.find((r) => (pick(r, ["name", "company_name"]) || "").toLowerCase() === target) || records[0];
+    const url = pick(best, ["url", "input_url", "linkedin_url"]) || "";
+    return mapCompany(best, url);
   }
 }
