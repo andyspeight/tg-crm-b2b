@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company } from "@/lib/crm/types";
@@ -50,6 +50,18 @@ export function QuickAdd() {
   const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
   const [tidying, setTidying] = useState(false);
   const [tidyError, setTidyError] = useState("");
+
+  // Let other screens (e.g. Today's quick actions) open this in a chosen mode.
+  useEffect(() => {
+    function onOpen(e: Event) {
+      const mode = (e as CustomEvent).detail?.mode;
+      if (mode === "task" || mode === "note" || mode === "linkedin") setMode(mode);
+      openModal();
+    }
+    window.addEventListener("luna:quickadd", onOpen);
+    return () => window.removeEventListener("luna:quickadd", onOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function openModal() {
     setOpen(true);

@@ -1,9 +1,11 @@
 import { activityRecency, listCareBoard, listCompanies, listDeals, listOpenTasks } from "@/lib/crm/data";
 import { computeNextActions } from "@/lib/crm/next-actions";
 import type { CareTouch } from "@/lib/crm/types";
-import { TodayView, type CareDueItem } from "@/components/today-view";
+import { TodayView, type CareDueItem, type NurtureItem, type Vitals } from "@/components/today-view";
 
 export const dynamic = "force-dynamic";
+
+const isOpen = (stage?: string) => stage !== "Won" && stage !== "Lost";
 
 export default async function TodayPage() {
   const [tasks, companies, deals, recency, careBoard] = await Promise.all([
@@ -27,7 +29,7 @@ export default async function TodayPage() {
     lastByDeal: recency.byDeal,
   });
 
-  // Care touches that are overdue or fall due within the next 14 days.
+  // Care touches overdue or falling due within the next 14 days.
   const cutoff = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   const careDue: CareDueItem[] = careBoard
@@ -42,5 +44,25 @@ export default async function TodayPage() {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 10);
 
-  return <TodayView tasks={tasks} nextActions={nextActions} careDue={careDue} />;
+  const customers = companies.filter((c) => c.lifecycleStage === "Customer");
+  const openDeals = deals.filter((d) => isOpen(d.stage));
+  const vitals: Vitals = {
+    customers: customers.length,
+    prospects: companies.filter((c) => c.lifecycleStage === "Prospect").length,
+    openDeals: openDeals.length,
+    openMrr: openDeals.reduce((t, d) => t + (d.mrr ?? 0), 0),
+    needsAttention: customers.filter((c) => c.accountHealth === "Amber" || c.accountHealth === "Red").length,
+    careDue: careDue.length,
+  };
+
+  // Customers longest without a meaningful touch — shown when nothing is urgent.
+  const nurture: NurtureItem[] = customers
+    .map((c) => ({ id: c.id, name: c.name, last: c.lastMeaningfulContact || recency.byCompany[c.id] || "" }))
+    .sort((a, b) => (a.last || "0").localeCompare(b.last || "0"))
+    .slice(0, 3)
+    .map((n) => ({ id: n.id, name: n.name, last: n.last || undefined }));
+
+  return (
+    <TodayView tasks={tasks} nextActions={nextActions} careDue={careDue} vitals={vitals} nurture={nurture} />
+  );
 }

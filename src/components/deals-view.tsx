@@ -18,6 +18,14 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
   const [editing, setEditing] = useState<Deal | null>(null);
   const first = useRef(true);
 
+  // Opened from Today's "New deal" quick action.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1") {
+      setCreating(true);
+      window.history.replaceState({}, "", "/deals");
+    }
+  }, []);
+
   async function refresh(term = q) {
     setLoading(true);
     try {

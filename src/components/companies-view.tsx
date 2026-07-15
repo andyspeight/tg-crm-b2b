@@ -16,7 +16,18 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
+  const [newLifecycle, setNewLifecycle] = useState<"" | "Customer" | "Prospect">("");
   const first = useRef(true);
+
+  // Opened from Today's "New lead" / "New customer" quick actions.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("new");
+    if (p === "customer" || p === "prospect") {
+      setNewLifecycle(p === "customer" ? "Customer" : "Prospect");
+      setCreating(true);
+      window.history.replaceState({}, "", "/companies");
+    }
+  }, []);
 
   async function refresh(term = q) {
     setLoading(true);
@@ -43,6 +54,7 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
   async function create(payload: Record<string, unknown>) {
     await api("/api/companies", { method: "POST", body: JSON.stringify(payload) });
     setCreating(false);
+    setNewLifecycle("");
     await refresh();
   }
   async function update(payload: Record<string, unknown>) {
@@ -159,8 +171,23 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
         </div>
       )}
 
-      <Modal open={creating} onClose={() => setCreating(false)} title="New company">
-        <CompanyForm onSave={create} onCancel={() => setCreating(false)} submitLabel="Create company" />
+      <Modal
+        open={creating}
+        onClose={() => {
+          setCreating(false);
+          setNewLifecycle("");
+        }}
+        title={newLifecycle === "Customer" ? "New customer" : newLifecycle === "Prospect" ? "New lead" : "New company"}
+      >
+        <CompanyForm
+          initial={newLifecycle ? { lifecycleStage: newLifecycle } : undefined}
+          onSave={create}
+          onCancel={() => {
+            setCreating(false);
+            setNewLifecycle("");
+          }}
+          submitLabel="Create company"
+        />
       </Modal>
       <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit company">
         {editing && (
