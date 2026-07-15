@@ -1,16 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Download, RefreshCw, Table2 } from "lucide-react";
+import { Download, LayoutGrid, RefreshCw, Table2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { BoardPreview, MondayBoard } from "@/lib/monday/types";
-import { Button, Modal, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  InlineAlert,
+  Modal,
+  Monogram,
+  PageHeader,
+  SkeletonRow,
+  Spinner,
+} from "@/components/ui";
+import type { BadgeColor } from "@/components/ui";
+
+type Target = "companies" | "contacts" | "deals" | "leads" | "clientsprogress";
 
 /** Board names Luna Desk knows how to import, and the Luna object they map to. */
-function inferTarget(
-  name: string,
-): "companies" | "contacts" | "deals" | "leads" | "clientsprogress" | null {
+function inferTarget(name: string): Target | null {
   const n = name.toLowerCase().trim();
   if (n === "companies") return "companies";
   if (n === "contacts" || n === "contacts type") return "contacts";
@@ -19,6 +31,15 @@ function inferTarget(
   if (n === "clients progress") return "clientsprogress";
   return null;
 }
+
+/** Human label + Badge colour for each Luna import target. */
+const TARGET_META: Record<Target, { label: string; color: BadgeColor }> = {
+  companies: { label: "Companies", color: "navy" },
+  contacts: { label: "Contacts", color: "info" },
+  deals: { label: "Deals", color: "accent" },
+  leads: { label: "Leads", color: "accent" },
+  clientsprogress: { label: "Client health", color: "success" },
+};
 
 const NOUNS: Record<string, [string, string]> = {
   contacts: ["contact", "contacts"],
@@ -137,52 +158,70 @@ export function MondayImport() {
   }
 
   return (
-    <div>
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Import from Monday</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-fg-muted">
-            <strong>Preview</strong> samples a board's rows (writes nothing).{" "}
-            <strong>Import</strong> shows you a count and only writes when you confirm. Companies is
-            ready first; the other boards follow.
-          </p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
-          {loading ? <Spinner /> : <RefreshCw size={14} strokeWidth={1.75} />} Refresh
-        </Button>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        title="Import from Monday"
+        description="Preview samples a board's rows and writes nothing. Import shows you a count and only writes when you confirm. Companies is ready first; the other boards follow."
+        actions={
+          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+            {loading ? <Spinner /> : <RefreshCw size={14} strokeWidth={1.75} />} Refresh
+          </Button>
+        }
+      />
 
       {loading ? (
-        <p className="flex items-center gap-2 text-[13px] text-fg-subtle">
-          <Spinner /> Reading your Monday boards...
-        </p>
-      ) : error ? (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[13px] font-medium text-danger">{error}</p>
-          <p className="mt-1.5 text-[12px] text-fg-muted">
-            If you have just added the token in Vercel, give the deploy a minute, then hit Refresh.
-          </p>
+        <div className="space-y-3">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </div>
+      ) : error ? (
+        <InlineAlert variant="danger">
+          <span className="font-medium">{error}</span>
+          <span className="mt-1 block text-fg-muted">
+            If you have just added the token in Vercel, give the deploy a minute, then hit Refresh.
+          </span>
+        </InlineAlert>
       ) : boards.length === 0 ? (
-        <p className="text-[13px] text-fg-subtle">No boards found on this Monday account.</p>
+        <EmptyState
+          icon={<LayoutGrid size={20} strokeWidth={1.75} />}
+          title="No boards found"
+          hint="Nothing on this Monday account yet. Check the token, then hit Refresh."
+          action={
+            <Button variant="secondary" size="sm" onClick={load}>
+              <RefreshCw size={14} strokeWidth={1.75} /> Refresh
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
-          <p className="text-[12px] text-fg-subtle">
+          <p className="tnum text-[12px] text-fg-subtle">
             {boards.length} board{boards.length === 1 ? "" : "s"} found
           </p>
-          {boards.map((b) => {
+          {boards.map((b, i) => {
             const target = inferTarget(b.name);
+            const meta = target ? TARGET_META[target] : null;
             return (
-              <div key={b.id} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Building2 size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" />
-                    <h2 className="truncate text-[14px] font-semibold text-fg">{b.name}</h2>
+              <div key={b.id} className="luna-rise" style={{ "--i": Math.min(i, 12) } as CSSProperties}>
+                <Card interactive className="group p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Monogram name={b.name} tone="navy" />
+                    <div className="min-w-0">
+                      <h2 className="truncate text-[14px] font-semibold text-fg">{b.name}</h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {meta ? (
+                          <Badge color={meta.color}>→ {meta.label}</Badge>
+                        ) : (
+                          <Badge color="neutral">Not mapped</Badge>
+                        )}
+                        <span className="tnum text-[12px] text-fg-subtle">
+                          {b.itemsCount ?? "—"} item{b.itemsCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="tnum mr-1 text-[12px] text-fg-subtle">
-                      {b.itemsCount ?? "?"} item{b.itemsCount === 1 ? "" : "s"}
-                    </span>
+                  <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -199,7 +238,7 @@ export function MondayImport() {
                   </div>
                 </div>
                 {b.columns.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border-soft pt-3">
                     {b.columns.map((c) => (
                       <span
                         key={c.id}
@@ -211,6 +250,7 @@ export function MondayImport() {
                     ))}
                   </div>
                 ) : null}
+                </Card>
               </div>
             );
           })}
@@ -228,7 +268,7 @@ export function MondayImport() {
             <Spinner /> Reading rows from Monday...
           </p>
         ) : previewError ? (
-          <p className="text-[13px] text-danger">{previewError}</p>
+          <InlineAlert variant="danger">{previewError}</InlineAlert>
         ) : preview ? (
           <div className="space-y-5">
             <p className="text-[13px] text-fg-muted">
@@ -301,10 +341,10 @@ export function MondayImport() {
             <Spinner /> Preparing the import...
           </p>
         ) : planError ? (
-          <p className="text-[13px] text-danger">{planError}</p>
+          <InlineAlert variant="danger">{planError}</InlineAlert>
         ) : commitResult ? (
           <div className="space-y-4">
-            <p className="text-[14px] text-fg">
+            <InlineAlert variant="success">
               {commitResult.target === "clientsprogress" ? (
                 <>
                   Set health on <strong>{commitResult.created}</strong>{" "}
@@ -324,7 +364,7 @@ export function MondayImport() {
                   .
                 </>
               )}
-            </p>
+            </InlineAlert>
             <p className="text-[13px] text-fg-muted">
               {commitResult.target === "clientsprogress"
                 ? `${commitResult.skipped} had no mappable status.`
@@ -408,7 +448,7 @@ export function MondayImport() {
               </div>
             ) : null}
 
-            {commitError ? <p className="text-[13px] text-danger">{commitError}</p> : null}
+            {commitError ? <InlineAlert variant="danger">{commitError}</InlineAlert> : null}
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="secondary" onClick={() => setImporting(null)} disabled={committing}>

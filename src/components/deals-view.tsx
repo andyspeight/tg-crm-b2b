@@ -2,10 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Briefcase, Download, Layers, Pencil, Plus, Search, Trash2, TrendingUp } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Deal } from "@/lib/crm/types";
-import { Button, ButtonLink, EmptyState, IconButton, Modal, Spinner } from "@/components/ui";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  EmptyState,
+  IconButton,
+  Modal,
+  Monogram,
+  PageHeader,
+  Spinner,
+  StatTile,
+} from "@/components/ui";
 import { StageBadge } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -66,117 +77,243 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
   }
 
   const totalMrr = deals.reduce((sum, d) => sum + (d.mrr ?? 0), 0);
+  const dealLabel = deals.length === 1 ? "deal" : "deals";
 
   return (
-    <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Deals</h1>
-          <p className="text-[13px] text-fg-subtle">
-            {deals.length} in view · <span className="tnum">{formatMoney(totalMrr)}</span> MRR
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search
-              size={15}
-              strokeWidth={1.75}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search deals..."
-              aria-label="Search deals"
-              className="w-44 rounded-lg border border-border bg-surface py-2 pl-8 pr-8 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
-            />
-            {loading && (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle">
-                <Spinner />
-              </span>
-            )}
-          </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Deals"
+        description="Your new-business pipeline"
+        actions={
           <Button onClick={() => setCreating(true)}>
             <Plus size={16} strokeWidth={2} /> New deal
           </Button>
+        }
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+          <StatTile
+            label="Open deals"
+            value={String(deals.length)}
+            icon={<Layers size={16} strokeWidth={1.75} />}
+          />
+          <StatTile
+            label="Pipeline MRR"
+            value={formatMoney(totalMrr)}
+            tone="navy"
+            icon={<TrendingUp size={16} strokeWidth={1.75} />}
+          />
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search
+            size={16}
+            strokeWidth={1.75}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search deals…"
+            aria-label="Search deals"
+            className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-9 text-[15px] text-fg transition-colors placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+          {loading && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle">
+              <Spinner />
+            </span>
+          )}
         </div>
       </div>
 
       {deals.length === 0 ? (
         <EmptyState
+          icon={<Briefcase size={20} strokeWidth={1.75} />}
           title={q ? "No deals match your search" : "No deals yet"}
           hint={
-            q ? undefined : "Import your pipeline from Monday, or add a deal with the New button above."
+            q
+              ? "Try a different term, or clear the search to see the full pipeline."
+              : "Import your pipeline from Monday, or add a deal with the New deal button above."
           }
           action={
-            q ? undefined : (
-              <ButtonLink href="/import">
+            q ? (
+              <Button variant="ghost" onClick={() => setQ("")}>
+                Clear search
+              </Button>
+            ) : (
+              <ButtonLink href="/import" variant="secondary">
                 <Download size={16} strokeWidth={2} /> Import from Monday
               </ButtonLink>
             )
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full min-w-[720px] text-[14px]">
-            <thead>
-              <tr className="border-b border-border-soft text-left text-[12px] font-medium text-fg-subtle">
-                <th className="px-4 py-2.5">Deal</th>
-                <th className="px-4 py-2.5">Company</th>
-                <th className="px-4 py-2.5">Stage</th>
-                <th className="px-4 py-2.5 text-right">MRR</th>
-                <th className="px-4 py-2.5">Next step</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {deals.map((d) => (
-                <tr key={d.id} className="border-b border-border-soft last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-2.5 font-medium text-fg">{d.name || "Untitled"}</td>
-                  <td className="px-4 py-2.5">
-                    {d.companyId ? (
-                      <Link href={`/companies/${d.companyId}`} className="text-fg hover:text-accent-strong">
-                        {d.companyName || "Company"}
-                      </Link>
-                    ) : (
-                      <span className="text-fg-subtle">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <StageBadge value={d.stage} />
-                  </td>
-                  <td className="tnum px-4 py-2.5 text-right text-fg-muted">{formatMoney(d.mrr)}</td>
-                  <td className="px-4 py-2.5 text-fg-muted">
-                    {d.nextStep ? (
-                      <span>
-                        {d.nextStep}
-                        {d.nextStepDate ? (
-                          <span className="tnum text-fg-subtle"> · {formatDate(d.nextStepDate)}</span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-2 py-2">
-                    <div className="flex justify-end gap-0.5">
-                      <IconButton label="Edit deal" onClick={() => setEditing(d)}>
-                        <Pencil size={16} strokeWidth={1.75} />
-                      </IconButton>
-                      <IconButton
-                        label="Delete deal"
-                        onClick={() => remove(d)}
-                        className="hover:text-danger"
-                      >
-                        <Trash2 size={16} strokeWidth={1.75} />
-                      </IconButton>
-                    </div>
-                  </td>
+        <>
+          {/* Desktop table */}
+          <div className="luna-fade hidden overflow-x-auto overflow-hidden rounded-2xl border border-border bg-card shadow-card sm:block">
+            <table className="w-full text-[14px]">
+              <thead className="border-b border-border bg-muted/40">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Deal
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Company
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Stage
+                  </th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    MRR
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Next step
+                  </th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {deals.map((d) => (
+                  <tr
+                    key={d.id}
+                    className="group border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-4 py-3 group-hover:[box-shadow:inset_3px_0_0_var(--accent-strong)]">
+                      <div className="flex items-center gap-3">
+                        <Monogram name={d.name || "Untitled"} tone="navy" />
+                        <span className="font-medium text-fg">{d.name || "Untitled"}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {d.companyId ? (
+                        <Link
+                          href={`/companies/${d.companyId}`}
+                          className="text-fg transition-colors hover:text-accent-strong"
+                        >
+                          {d.companyName || "Company"}
+                        </Link>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StageBadge value={d.stage} />
+                    </td>
+                    <td
+                      className={
+                        d.mrr == null
+                          ? "tnum px-4 py-3 text-right text-fg-subtle"
+                          : "tnum px-4 py-3 text-right font-medium text-fg"
+                      }
+                    >
+                      {formatMoney(d.mrr)}
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted">
+                      {d.nextStep ? (
+                        <span>
+                          {d.nextStep}
+                          {d.nextStepDate ? (
+                            <span className="tnum text-fg-subtle"> · {formatDate(d.nextStepDate)}</span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+                        <IconButton label="Edit deal" onClick={() => setEditing(d)}>
+                          <Pencil size={16} strokeWidth={1.75} />
+                        </IconButton>
+                        <IconButton
+                          label="Delete deal"
+                          onClick={() => remove(d)}
+                          className="hover:text-danger"
+                        >
+                          <Trash2 size={16} strokeWidth={1.75} />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/40">
+                  <td
+                    colSpan={3}
+                    className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
+                  >
+                    Total pipeline · {deals.length} {dealLabel}
+                  </td>
+                  <td className="tnum px-4 py-3 text-right font-semibold text-fg">
+                    {formatMoney(totalMrr)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <ul className="space-y-3 sm:hidden">
+            {deals.map((d, i) => (
+              <li key={d.id} className="luna-rise" style={{ "--i": Math.min(i, 12) } as React.CSSProperties}>
+                <Card>
+                  <div className="flex items-start gap-3 p-4">
+                    <Monogram name={d.name || "Untitled"} tone="navy" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="truncate font-medium text-fg">{d.name || "Untitled"}</span>
+                        <span
+                          className={
+                            d.mrr == null
+                              ? "tnum shrink-0 text-fg-subtle"
+                              : "tnum shrink-0 font-medium text-fg"
+                          }
+                        >
+                          {formatMoney(d.mrr)}
+                        </span>
+                      </div>
+                      {d.companyId ? (
+                        <Link
+                          href={`/companies/${d.companyId}`}
+                          className="mt-0.5 block truncate text-[13px] text-fg-muted transition-colors hover:text-accent-strong"
+                        >
+                          {d.companyName || "Company"}
+                        </Link>
+                      ) : (
+                        <span className="mt-0.5 block text-[13px] text-fg-subtle">—</span>
+                      )}
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <StageBadge value={d.stage} />
+                        <div className="flex gap-0.5">
+                          <IconButton label="Edit deal" onClick={() => setEditing(d)}>
+                            <Pencil size={16} strokeWidth={1.75} />
+                          </IconButton>
+                          <IconButton
+                            label="Delete deal"
+                            onClick={() => remove(d)}
+                            className="hover:text-danger"
+                          >
+                            <Trash2 size={16} strokeWidth={1.75} />
+                          </IconButton>
+                        </div>
+                      </div>
+                      {d.nextStep ? (
+                        <p className="mt-2 text-[13px] text-fg-muted">
+                          {d.nextStep}
+                          {d.nextStepDate ? (
+                            <span className="tnum text-fg-subtle"> · {formatDate(d.nextStepDate)}</span>
+                          ) : null}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <Modal open={creating} onClose={() => setCreating(false)} title="New deal">

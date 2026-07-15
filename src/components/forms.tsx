@@ -15,7 +15,7 @@ import {
   TASK_STATUSES,
 } from "@/lib/crm/config";
 import type { Activity, Company, Contact, Deal, Task } from "@/lib/crm/types";
-import { Button, ErrorText, Field, Input, Select, Textarea } from "@/components/ui";
+import { Button, Field, InlineAlert, Input, Select, Textarea } from "@/components/ui";
 
 export type CompanyOption = { id: string; name: string };
 
@@ -54,11 +54,11 @@ function FormShell({
         e.preventDefault();
         onSubmit();
       }}
-      className="space-y-4"
+      className="luna-fade space-y-4"
     >
       {children}
-      <ErrorText>{error}</ErrorText>
-      <div className="flex justify-end gap-2 pt-1">
+      {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}
+      <div className="-mx-6 flex justify-end gap-2 border-t border-border-soft bg-surface px-6 py-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
@@ -131,7 +131,7 @@ export function CompanyForm({
       <Field label="Company name">
         <Input value={f.name} onChange={set("name")} autoFocus placeholder="Coastline Travel Group" />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Type">
           <Select value={f.type} onChange={set("type")}>
             {blankOption()}
@@ -161,10 +161,11 @@ export function CompanyForm({
         </Field>
       </div>
 
-      <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+      <p className="flex items-center gap-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+        <span className="h-3 w-1 rounded-full bg-accent-strong" aria-hidden />
         Customer details
       </p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Account health">
           <Select value={f.accountHealth} onChange={set("accountHealth")}>
             {blankOption()}
@@ -263,7 +264,7 @@ export function ContactForm({
       <Field label="Name">
         <Input value={f.name} onChange={set("name")} autoFocus placeholder="Priya Nair" />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Role">
           <Input value={f.role} onChange={set("role")} placeholder="Operations Manager" />
         </Field>
@@ -363,7 +364,7 @@ export function DealForm({
       <Field label="Deal name">
         <Input value={f.name} onChange={set("name")} autoFocus placeholder="Coastline Travel - platform switch" />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Stage">
           <Select value={f.stage} onChange={set("stage")}>
             {options(DEAL_STAGES)}
@@ -465,7 +466,7 @@ export function ActivityForm({
 
   return (
     <FormShell onSubmit={submit} onCancel={onCancel} submitLabel={submitLabel} error={error} saving={saving}>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Type">
           <Select value={f.type} onChange={set("type")}>
             {options(ACTIVITY_TYPES)}
@@ -479,7 +480,7 @@ export function ActivityForm({
         <Input value={f.summary} onChange={set("summary")} autoFocus placeholder="Intro call with Hannah" />
       </Field>
       {(contacts?.length || deals?.length) ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {contacts?.length ? (
             <Field label="Contact">
               <Select value={f.contactId} onChange={set("contactId")}>
@@ -563,7 +564,7 @@ export function TaskForm({
       <Field label="Title">
         <Input value={f.title} onChange={set("title")} autoFocus placeholder="Send revised proposal" />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Due date">
           <Input type="date" value={f.dueDate} onChange={set("dueDate")} />
         </Field>

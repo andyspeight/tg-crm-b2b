@@ -554,42 +554,53 @@ export function CompanyView({
             )}
           </Section>
 
-          <Section
-            title="AI brief"
-            action={
-              company.aiBrief ? (
+          <section className="rail-accent luna-fade overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+            <div className="flex items-center justify-between gap-2 border-b border-border-soft bg-accent-soft/60 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} strokeWidth={1.75} className="text-accent-strong" />
+                <h2 className="text-[14px] font-semibold text-fg">AI brief</h2>
+              </div>
+              {company.aiBrief ? (
                 <Button variant="secondary" size="sm" onClick={generateBrief} disabled={briefLoading}>
-                  {briefLoading ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Refresh
+                  {briefLoading ? <Spinner /> : <RefreshCw size={14} strokeWidth={1.75} />} Refresh
                 </Button>
-              ) : null
-            }
-          >
-            {company.aiBrief ? (
-              <div className="space-y-3">
-                <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-fg-muted">
-                  {company.aiBrief}
-                </p>
-                {company.nextBestAction ? (
-                  <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
-                      Next best action
-                    </p>
-                    <p className="mt-0.5 text-[13px] text-fg">{company.nextBestAction}</p>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="text-center">
-                <Button onClick={generateBrief} disabled={briefLoading}>
-                  {briefLoading ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Generate brief
-                </Button>
-                <p className="mt-2 text-[12px] text-fg-subtle">
-                  Summarises the account, deal state and the next move.
-                </p>
-              </div>
-            )}
-            {briefError ? <p className="mt-2 text-[13px] text-danger">{briefError}</p> : null}
-          </Section>
+              ) : null}
+            </div>
+            <div className="p-4">
+              {company.aiBrief ? (
+                <div className="space-y-3">
+                  <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-fg-muted">
+                    {company.aiBrief}
+                  </p>
+                  {company.nextBestAction ? (
+                    <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
+                        Next best action
+                      </p>
+                      <p className="mt-0.5 text-[13px] text-fg">{company.nextBestAction}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center py-2 text-center">
+                  <span className="mb-3 grid h-11 w-11 place-items-center rounded-full bg-accent-soft text-accent-strong">
+                    <Sparkles size={20} strokeWidth={1.75} />
+                  </span>
+                  <Button variant="secondary" onClick={generateBrief} disabled={briefLoading}>
+                    {briefLoading ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Generate brief
+                  </Button>
+                  <p className="mt-2 max-w-xs text-[12px] text-fg-subtle">
+                    Summarises the account, deal state and the next move.
+                  </p>
+                </div>
+              )}
+              {briefError ? (
+                <div className="mt-3">
+                  <InlineAlert variant="danger">{briefError}</InlineAlert>
+                </div>
+              ) : null}
+            </div>
+          </section>
 
           <button
             onClick={deleteCompany}
@@ -681,8 +692,8 @@ export function CompanyView({
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
         <h2 className="text-[14px] font-semibold text-fg">{title}</h2>
         {action}
       </div>
