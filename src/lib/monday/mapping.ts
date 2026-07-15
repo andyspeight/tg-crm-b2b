@@ -323,47 +323,37 @@ export async function planLeads(boardId: string): Promise<LeadsPlan> {
 
 type Health = (typeof ACCOUNT_HEALTH)[number];
 
-const HEALTH_ALIASES: Record<string, Health> = {
-  "on track": "Green",
-  active: "Green",
-  good: "Green",
-  healthy: "Green",
-  green: "Green",
-  live: "Green",
-  happy: "Green",
-  stable: "Green",
-  complete: "Green",
-  completed: "Green",
-  onboarded: "Green",
-  "at risk": "Amber",
-  amber: "Amber",
-  watch: "Amber",
-  monitor: "Amber",
-  "needs attention": "Amber",
-  onboarding: "Amber",
-  pending: "Amber",
-  new: "Amber",
-  red: "Red",
-  critical: "Red",
-  churn: "Red",
-  churning: "Red",
-  churned: "Red",
-  escalation: "Red",
-  escalated: "Red",
-  unhappy: "Red",
-  cancelled: "Red",
-  lost: "Red",
-  stalled: "Red",
-};
+/**
+ * Normalise a company name for matching: lowercase, strip punctuation and
+ * trailing legal suffixes, collapse whitespace. Applied to both sides so
+ * "Acme Travel Ltd." and "Acme Travel" line up.
+ */
+function normCompany(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[.,'’"()]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/\b(ltd|limited|llp|plc|inc|incorporated)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-function mapHealth(raw: string): Health | undefined {
+/** Clients Progress rows are titled "Person - Company"; take the company part. */
+function companyFromProgressTitle(title: string): string {
+  const t = (title || "").trim();
+  const i = t.indexOf(" - ");
+  return i >= 0 ? t.slice(i + 3).trim() : t;
+}
+
+/**
+ * The board's Status is an onboarding stage, not a health rating: "Site Is
+ * Live" is the steady state (Green); anything still in onboarding is in-flight
+ * and worth watching (Amber). Nothing on this board signals churn.
+ */
+function progressHealth(raw: string): Health | undefined {
   const s = norm(raw);
   if (!s) return undefined;
-  if (HEALTH_ALIASES[s]) return HEALTH_ALIASES[s];
-  if (/(risk|amber|watch|onboard|attention|pending)/.test(s)) return "Amber";
-  if (/(churn|critical|escalat|cancel|lost|stall|unhappy|\bred\b)/.test(s)) return "Red";
-  if (/(track|active|good|health|green|live|happy|stable|complet)/.test(s)) return "Green";
-  return undefined;
+  return s === "site is live" ? "Green" : "Amber";
 }
 
 export interface ClientsProgressPlan {
@@ -375,23 +365,23 @@ export interface ClientsProgressPlan {
 
 export async function planClientsProgress(boardId: string): Promise<ClientsProgressPlan> {
   const [{ items }, companies] = await Promise.all([getBoardItems(boardId), listCompanies()]);
-  const byName = new Map(companies.map((c) => [norm(c.name), c]));
+  const byName = new Map(companies.map((c) => [normCompany(c.name), c]));
   const updates: { id: string; name: string; health: Health }[] = [];
   const seen = new Set<string>();
   let unmatched = 0;
   let noStatus = 0;
 
   for (const it of items) {
-    const name = (it.name || "").trim();
-    if (!name) continue;
-    const company = byName.get(norm(name));
+    const title = (it.name || "").trim();
+    if (!title) continue;
+    const company = byName.get(normCompany(companyFromProgressTitle(title)));
     if (!company) {
       unmatched++;
       continue;
     }
     if (seen.has(company.id)) continue;
-    const v = (title: string) => it.values[title.toLowerCase()] ?? "";
-    const health = mapHealth(v("status"));
+    const v = (col: string) => it.values[col.toLowerCase()] ?? "";
+    const health = progressHealth(v("status"));
     if (!health) {
       noStatus++;
       continue;
