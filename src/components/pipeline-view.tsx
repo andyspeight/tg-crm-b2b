@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { AlertTriangle, CircleDashed, Plus } from "lucide-react";
+import { AlertTriangle, CircleDashed, Link2, Pencil, Plus } from "lucide-react";
 import { api } from "@/lib/client";
 import { DEAL_STAGES } from "@/lib/crm/config";
 import type { Deal, DealStage } from "@/lib/crm/types";
@@ -58,6 +58,7 @@ export function PipelineView({
   const [dragOver, setDragOver] = useState<DealStage | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [quickAdd, setQuickAdd] = useState<DealStage | null>(null);
+  const [editing, setEditing] = useState<Deal | null>(null);
   const [error, setError] = useState("");
 
   const byStage = useMemo(() => {
@@ -87,6 +88,15 @@ export function PipelineView({
   async function addDeal(payload: Record<string, unknown>) {
     await api("/api/deals", { method: "POST", body: JSON.stringify(payload) });
     setQuickAdd(null);
+    const data = await api<{ deals: Deal[] }>("/api/deals");
+    setDeals(data.deals);
+  }
+
+  async function editDeal(payload: Record<string, unknown>) {
+    if (!editing) return;
+    await api(`/api/deals/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    setEditing(null);
+    // Re-fetch so the linked company name (and any stage move) is reflected.
     const data = await api<{ deals: Deal[] }>("/api/deals");
     setDeals(data.deals);
   }
@@ -177,6 +187,7 @@ export function PipelineView({
                       }}
                       onDragEnd={() => setDragging(null)}
                       onStageChange={(s) => moveDeal(d.id, s)}
+                      onEdit={() => setEditing(d)}
                     />
                   ))
                 )}
@@ -201,6 +212,18 @@ export function PipelineView({
           />
         )}
       </Modal>
+
+      <Modal open={editing !== null} onClose={() => setEditing(null)} title="Edit deal">
+        {editing !== null && (
+          <DealForm
+            initial={editing}
+            companies={companies}
+            onSave={editDeal}
+            onCancel={() => setEditing(null)}
+            submitLabel="Save changes"
+          />
+        )}
+      </Modal>
     </div>
   );
 }
@@ -213,6 +236,7 @@ function DealCard({
   onDragStart,
   onDragEnd,
   onStageChange,
+  onEdit,
 }: {
   deal: Deal;
   index: number;
@@ -221,6 +245,7 @@ function DealCard({
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onStageChange: (stage: DealStage) => void;
+  onEdit: () => void;
 }) {
   const flag = dealFlag(deal, lastActivity);
 
@@ -237,9 +262,14 @@ function DealCard({
       <div className="flex items-start gap-2.5">
         <Monogram name={deal.companyName || deal.name} size="sm" tone="navy" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium leading-snug text-fg">
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Edit this deal"
+            className="block w-full truncate text-left text-[13px] font-medium leading-snug text-fg hover:text-accent-strong focus-visible:outline-none focus-visible:text-accent-strong"
+          >
             {deal.name || "Untitled"}
-          </p>
+          </button>
           {deal.companyId ? (
             <Link
               href={`/companies/${deal.companyId}`}
@@ -247,8 +277,23 @@ function DealCard({
             >
               {deal.companyName || "Company"}
             </Link>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-fg-subtle transition-colors hover:text-accent-strong"
+            >
+              <Link2 size={12} strokeWidth={2} /> Link company
+            </button>
+          )}
         </div>
+        <IconButton
+          label="Edit deal"
+          onClick={onEdit}
+          className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+        >
+          <Pencil size={14} strokeWidth={1.75} />
+        </IconButton>
       </div>
 
       <div className="mt-2.5 flex items-center justify-between gap-2">
