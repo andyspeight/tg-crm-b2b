@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Globe,
   HeartHandshake,
+  LifeBuoy,
   Linkedin,
   ListTodo,
   Mail,
@@ -92,6 +93,7 @@ const ACTIVITY_ICON: Record<string, ComponentType<{ size?: number; strokeWidth?:
   "Care Touch": HeartHandshake,
   Campaign: Megaphone,
   Signal: Radar,
+  Support: LifeBuoy,
   Note: StickyNote,
 };
 function activityIcon(type?: ActivityType) {
@@ -165,6 +167,11 @@ export function CompanyView({
   const nextTouch = careTouches.find((t) => t.status === "Scheduled");
   const careHistory = careTouches.filter((t) => t.status !== "Scheduled");
   const showCare = isCustomer || careTouches.length > 0;
+  const hasSupport =
+    company.supportUpdated != null ||
+    company.supportOpenTickets != null ||
+    company.supportTickets30d != null ||
+    company.supportLastIssue != null;
 
   async function refreshCompany() {
     const data = await api<{ company: Company }>(`/api/companies/${company.id}`);
@@ -777,6 +784,53 @@ export function CompanyView({
             </Section>
           ) : null}
 
+          {/* Support (synced from the support desk) */}
+          {hasSupport ? (
+            <Section title="Support">
+              <dl className="divide-y divide-border-soft">
+                <div className="flex items-center justify-between gap-4 py-1.5">
+                  <dt className="text-[13px] text-fg-subtle">Open tickets</dt>
+                  <dd className="tnum text-right text-[14px] font-medium text-fg">
+                    {company.supportOpenTickets ?? 0}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-1.5">
+                  <dt className="text-[13px] text-fg-subtle">Last 30 days</dt>
+                  <dd className="tnum text-right text-[14px] text-fg">{company.supportTickets30d ?? 0}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-1.5">
+                  <dt className="text-[13px] text-fg-subtle">Sentiment</dt>
+                  <dd className="text-right">
+                    {company.supportSentiment ? (
+                      <SupportSentimentBadge value={company.supportSentiment} />
+                    ) : (
+                      <span className="text-[14px] text-fg-subtle">—</span>
+                    )}
+                  </dd>
+                </div>
+                <Fact
+                  label="Last ticket"
+                  value={company.supportLastContact ? formatDate(company.supportLastContact) : undefined}
+                />
+              </dl>
+
+              {company.supportLastIssue ? (
+                <div className="mt-3 border-t border-border-soft pt-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Last issue
+                  </p>
+                  <p className="text-[13px] leading-relaxed text-fg-muted">{company.supportLastIssue}</p>
+                </div>
+              ) : null}
+
+              <p className="mt-3 text-[11px] text-fg-subtle">
+                {company.supportUpdated
+                  ? `Synced from the support desk · ${formatDateTime(company.supportUpdated)}`
+                  : "Synced from the support desk."}
+              </p>
+            </Section>
+          ) : null}
+
           {/* Tasks */}
           <Section
             title="Tasks"
@@ -1144,6 +1198,26 @@ function healthTone(health?: string): "success" | "warn" | "danger" | undefined 
   if (c === "warning") return "warn";
   if (c === "danger") return "danger";
   return undefined;
+}
+
+/** Support sentiment chip — mirrors the support desk's Improving / Stable / Declining read. */
+function SupportSentimentBadge({ value }: { value: string }) {
+  const tone =
+    value === "Declining"
+      ? "bg-danger/15 text-danger"
+      : value === "Improving"
+        ? "bg-success/15 text-success"
+        : "bg-muted text-fg-subtle";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
+        tone,
+      )}
+    >
+      {value}
+    </span>
+  );
 }
 
 function withProtocol(url: string): string {

@@ -25,6 +25,7 @@ export type SizeBand = (typeof SIZE_BANDS)[number];
 export type DealStage = (typeof DEAL_STAGES)[number];
 export type DealSource = (typeof DEAL_SOURCES)[number];
 export type MarketingOptIn = (typeof MARKETING_OPT_IN)[number];
+export type SupportSentiment = "Improving" | "Stable" | "Declining";
 
 export interface Company {
   id: string;
@@ -51,6 +52,13 @@ export interface Company {
   watchlist?: boolean;
   aiBrief?: string;
   nextBestAction?: string;
+  // Support 360 — synced from TG Support Desk, read-only in the CRM.
+  supportOpenTickets?: number;
+  supportTickets30d?: number;
+  supportLastIssue?: string;
+  supportLastContact?: string;
+  supportSentiment?: SupportSentiment;
+  supportUpdated?: string;
   contactIds: string[];
   dealIds: string[];
   activityIds: string[];

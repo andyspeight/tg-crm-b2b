@@ -136,6 +136,13 @@ export const FIELDS = {
     watchlist: "Watchlist",
     aiBrief: "AI Brief",
     nextBestAction: "Next Best Action",
+    // Support 360 — written by TG Support Desk (read-only here).
+    supportOpenTickets: "Support Open Tickets",
+    supportTickets30d: "Support Tickets 30d",
+    supportLastIssue: "Support Last Issue",
+    supportLastContact: "Support Last Contact",
+    supportSentiment: "Support Sentiment",
+    supportUpdated: "Support Updated",
     contacts: "Contacts",
     deals: "Deals",
     activities: "Activities",
