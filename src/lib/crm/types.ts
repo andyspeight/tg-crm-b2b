@@ -5,7 +5,6 @@ import {
   ACCOUNT_HEALTH,
   CARE_CADENCES,
   SIZE_BANDS,
-  DEAL_STAGES,
   DEAL_SOURCES,
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
@@ -22,8 +21,19 @@ export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];
 export type AccountHealth = (typeof ACCOUNT_HEALTH)[number];
 export type CareCadence = (typeof CARE_CADENCES)[number];
 export type SizeBand = (typeof SIZE_BANDS)[number];
-export type DealStage = (typeof DEAL_STAGES)[number];
+// Stages are user-editable, so a deal's stage is just its (current) stage name.
+export type DealStage = string;
 export type DealSource = (typeof DEAL_SOURCES)[number];
+
+/** How a stage behaves: terminal won/lost, or a live "open" column. */
+export type StageKind = "open" | "won" | "lost";
+
+/** A pipeline column (editable). Stored in App Settings; order = array order. */
+export interface PipelineStage {
+  name: string;
+  color: string;
+  kind: StageKind;
+}
 export type MarketingOptIn = (typeof MARKETING_OPT_IN)[number];
 export type SupportSentiment = "Improving" | "Stable" | "Declining";
 

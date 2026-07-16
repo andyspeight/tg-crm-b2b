@@ -20,10 +20,16 @@ export function daysSince(s?: string): number {
 /**
  * One priority flag for a deal, shared by the pipeline and the Today view.
  * Missing next step and 30-day staleness are red; overdue next step and
- * 14-day staleness are amber. Closed deals (Won/Lost) never flag.
+ * 14-day staleness are amber. Closed deals never flag — callers that know the
+ * stage's kind (won/lost) pass isClosed; otherwise we fall back to the default
+ * stage names.
  */
-export function dealFlag(deal: Deal, lastActivity?: string): { label: string; danger: boolean } | null {
-  if (deal.stage === "Won" || deal.stage === "Lost") return null;
+export function dealFlag(
+  deal: Deal,
+  lastActivity?: string,
+  isClosed: boolean = deal.stage === "Won" || deal.stage === "Lost",
+): { label: string; danger: boolean } | null {
+  if (isClosed) return null;
   if (!deal.nextStep && !deal.nextStepDate) return { label: "No next step", danger: true };
   const stale = daysSince(lastActivity);
   if (stale >= 30) return { label: "Stale 30d+", danger: true };

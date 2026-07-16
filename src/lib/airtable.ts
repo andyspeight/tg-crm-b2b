@@ -96,14 +96,21 @@ export function getRecord<T = Record<string, unknown>>(
   return request<AirtableRecord<T>>(`${baseId}/${tableId}/${recordId}`);
 }
 
+/** Write options. typecast lets Airtable coerce strings (and auto-create a new
+ *  single-select option by name — used when pipeline stages are renamed/added). */
+export interface WriteOptions {
+  typecast?: boolean;
+}
+
 export function createRecord<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,
   fields: Record<string, unknown>,
+  opts: WriteOptions = {},
 ): Promise<AirtableRecord<T>> {
   return request<AirtableRecord<T>>(`${baseId}/${tableId}`, {
     method: "POST",
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields, typecast: opts.typecast || undefined }),
   });
 }
 
@@ -112,6 +119,7 @@ export async function createRecords<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,
   fieldsList: Record<string, unknown>[],
+  opts: WriteOptions = {},
 ): Promise<AirtableRecord<T>[]> {
   const out: AirtableRecord<T>[] = [];
   for (let i = 0; i < fieldsList.length; i += 10) {
@@ -119,7 +127,7 @@ export async function createRecords<T = Record<string, unknown>>(
     const chunk = fieldsList.slice(i, i + 10).map((fields) => ({ fields }));
     const data = await request<{ records: AirtableRecord<T>[] }>(`${baseId}/${tableId}`, {
       method: "POST",
-      body: JSON.stringify({ records: chunk }),
+      body: JSON.stringify({ records: chunk, typecast: opts.typecast || undefined }),
     });
     out.push(...(data.records || []));
   }
@@ -131,6 +139,7 @@ export async function updateRecords<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,
   records: { id: string; fields: Record<string, unknown> }[],
+  opts: WriteOptions = {},
 ): Promise<AirtableRecord<T>[]> {
   const out: AirtableRecord<T>[] = [];
   for (let i = 0; i < records.length; i += 10) {
@@ -138,7 +147,7 @@ export async function updateRecords<T = Record<string, unknown>>(
     const chunk = records.slice(i, i + 10);
     const data = await request<{ records: AirtableRecord<T>[] }>(`${baseId}/${tableId}`, {
       method: "PATCH",
-      body: JSON.stringify({ records: chunk }),
+      body: JSON.stringify({ records: chunk, typecast: opts.typecast || undefined }),
     });
     out.push(...(data.records || []));
   }
@@ -150,10 +159,11 @@ export function updateRecord<T = Record<string, unknown>>(
   tableId: string,
   recordId: string,
   fields: Record<string, unknown>,
+  opts: WriteOptions = {},
 ): Promise<AirtableRecord<T>> {
   return request<AirtableRecord<T>>(`${baseId}/${tableId}/${recordId}`, {
     method: "PATCH",
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields, typecast: opts.typecast || undefined }),
   });
 }
 

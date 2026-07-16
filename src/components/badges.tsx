@@ -36,11 +36,11 @@ const STAGE: Record<string, BadgeColor> = {
   Won: "success",
   Lost: "danger",
 };
-/** Single source of truth for stage colour — used by the badge, pipeline dots and the form. */
+/** Default stage colour by name (fallback for custom stages that pass their own). */
 export function stageColor(value?: string): BadgeColor {
   return STAGE[value ?? ""] ?? "neutral";
 }
-export function StageBadge({ value }: { value?: DealStage }) {
+export function StageBadge({ value, color }: { value?: DealStage; color?: BadgeColor }) {
   if (!value) return null;
-  return <Badge color={STAGE[value] ?? "neutral"}>{value}</Badge>;
+  return <Badge color={color ?? STAGE[value] ?? "neutral"}>{value}</Badge>;
 }

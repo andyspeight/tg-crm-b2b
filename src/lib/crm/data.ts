@@ -16,7 +16,6 @@ import {
   ACCOUNT_HEALTH,
   CARE_CADENCES,
   SIZE_BANDS,
-  DEAL_STAGES,
   DEAL_SOURCES,
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
@@ -26,6 +25,10 @@ import {
   TASK_CREATED_BY,
   TOUCH_TYPES,
   CARE_STATUSES,
+  DEFAULT_PIPELINE_STAGES,
+  PIPELINE_STAGES_KEY,
+  STAGE_COLORS,
+  STAGE_KINDS,
 } from "./config";
 import type {
   Activity,
@@ -38,6 +41,8 @@ import type {
   ContactInput,
   Deal,
   DealInput,
+  PipelineStage,
+  StageKind,
   Task,
   TaskInput,
 } from "./types";
@@ -51,6 +56,7 @@ import {
   updateRecord,
   updateRecords,
 } from "@/lib/airtable";
+import { getSetting, setSetting } from "@/lib/settings";
 import { emailBrand, hostBrand, nameKey } from "@/lib/domain";
 
 export class ValidationError extends Error {
@@ -297,7 +303,9 @@ function buildDealFields(input: DealInput, partial: boolean): Record<string, unk
   const has = (k: keyof DealInput) => Object.prototype.hasOwnProperty.call(input, k);
 
   if (!partial || has("name")) f[F.name] = requiredText(input.name, "Deal name");
-  if (has("stage")) f[F.stage] = enumOrNull(input.stage, DEAL_STAGES, "stage");
+  // Stage is a user-editable pipeline column, so accept any name; writes typecast
+  // so a new/renamed stage auto-creates its Airtable single-select option.
+  if (has("stage")) f[F.stage] = text(input.stage);
   if (has("mrr")) f[F.mrr] = numberOrNull(input.mrr);
   if (has("setupFee")) f[F.setupFee] = numberOrNull(input.setupFee);
   if (has("source")) f[F.source] = enumOrNull(input.source, DEAL_SOURCES, "source");
@@ -521,24 +529,112 @@ export async function getDeal(id: string): Promise<Deal> {
 
 export async function createDeal(input: DealInput): Promise<Deal> {
   const fields = buildDealFields(input, false);
-  return toDeal(await createRecord(AIRTABLE_BASE_ID, TABLES.deals, fields));
+  return toDeal(await createRecord(AIRTABLE_BASE_ID, TABLES.deals, fields, { typecast: true }));
 }
 
 /** Bulk-create deals (Monday import), chunked to Airtable's 10-per-request limit. */
 export async function createDealsBatch(inputs: DealInput[]): Promise<number> {
   if (inputs.length === 0) return 0;
   const fieldsList = inputs.map((i) => buildDealFields(i, false));
-  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.deals, fieldsList);
+  const created = await createRecords(AIRTABLE_BASE_ID, TABLES.deals, fieldsList, { typecast: true });
   return created.length;
 }
 
 export async function updateDeal(id: string, input: DealInput): Promise<Deal> {
   const fields = buildDealFields(input, true);
-  return toDeal(await updateRecord(AIRTABLE_BASE_ID, TABLES.deals, id, fields));
+  return toDeal(await updateRecord(AIRTABLE_BASE_ID, TABLES.deals, id, fields, { typecast: true }));
 }
 
 export async function deleteDeal(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.deals, id);
+}
+
+// --- pipeline stages (editable) --------------------------------------------
+
+/** Coerce arbitrary input into a clean, de-duplicated stage list. */
+function normalizeStages(input: unknown): PipelineStage[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: PipelineStage[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue; // stage names must be unique
+    seen.add(key);
+    const color = (STAGE_COLORS as readonly string[]).includes(String(o.color)) ? String(o.color) : "neutral";
+    const kind = (STAGE_KINDS as readonly string[]).includes(String(o.kind))
+      ? (String(o.kind) as StageKind)
+      : "open";
+    out.push({ name, color, kind });
+  }
+  return out;
+}
+
+/** The live pipeline columns — the stored config, or the defaults until customised. */
+export async function getPipelineStages(): Promise<PipelineStage[]> {
+  const raw = await getSetting(PIPELINE_STAGES_KEY).catch(() => null);
+  if (raw) {
+    try {
+      const parsed = normalizeStages(JSON.parse(raw));
+      if (parsed.length) return parsed;
+    } catch {
+      /* fall through to defaults on a corrupt value */
+    }
+  }
+  return normalizeStages(DEFAULT_PIPELINE_STAGES);
+}
+
+async function savePipelineStages(stages: PipelineStage[]): Promise<void> {
+  if (stages.length === 0) throw new ValidationError("A pipeline needs at least one stage");
+  await setSetting(PIPELINE_STAGES_KEY, JSON.stringify(stages));
+}
+
+/** Relabel every deal currently in `from` to `to`. Small table, filtered in JS. */
+async function moveDealsStage(from: string, to: string): Promise<number> {
+  if (!from || !to || from === to) return 0;
+  const F = FIELDS.deals;
+  const recs = await listRecords(AIRTABLE_BASE_ID, TABLES.deals, {
+    fields: [F.stage],
+    maxRecords: 5000,
+  });
+  const targets = recs
+    .filter((r) => str(r.fields[F.stage]) === from)
+    .map((r) => ({ id: r.id, fields: { [F.stage]: to } }));
+  if (targets.length === 0) return 0;
+  const updated = await updateRecords(AIRTABLE_BASE_ID, TABLES.deals, targets, { typecast: true });
+  return updated.length;
+}
+
+/**
+ * Apply an edit to the pipeline: rename cascades every deal old->new, remove
+ * reassigns a column's deals to another stage, then the final column list is
+ * saved. Adds/reorders/recolours are just the new list.
+ */
+export async function applyStageChanges(input: {
+  stages: unknown;
+  renames?: { from: string; to: string }[];
+  removals?: { name: string; moveTo: string }[];
+}): Promise<PipelineStage[]> {
+  const stages = normalizeStages(input.stages);
+  if (stages.length === 0) throw new ValidationError("A pipeline needs at least one stage");
+  const names = new Set(stages.map((s) => s.name));
+
+  for (const r of input.renames ?? []) {
+    if (r && r.from && r.to && r.from !== r.to) await moveDealsStage(r.from, r.to);
+  }
+  for (const rm of input.removals ?? []) {
+    if (!rm || !rm.name) continue;
+    if (!rm.moveTo || !names.has(rm.moveTo)) {
+      throw new ValidationError(`Choose where to move deals from "${rm.name}"`);
+    }
+    await moveDealsStage(rm.name, rm.moveTo);
+  }
+
+  await savePipelineStages(stages);
+  return stages;
 }
 
 // --- activities (append-only timeline) -------------------------------------

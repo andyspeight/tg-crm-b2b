@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ACCOUNT_HEALTH,
   ACTIVITY_TYPES,
@@ -15,6 +15,7 @@ import {
   TASK_STATUSES,
 } from "@/lib/crm/config";
 import type { Activity, Company, Contact, Deal, Task } from "@/lib/crm/types";
+import { api } from "@/lib/client";
 import { Button, Field, InlineAlert, Input, Select, Textarea } from "@/components/ui";
 
 export type CompanyOption = { id: string; name: string };
@@ -309,6 +310,7 @@ export function DealForm({
   initial,
   companies,
   lockedCompanyId,
+  stageNames,
   onSave,
   onCancel,
   submitLabel = "Save",
@@ -316,10 +318,24 @@ export function DealForm({
   initial?: Partial<Deal>;
   companies?: CompanyOption[];
   lockedCompanyId?: string;
+  stageNames?: string[];
   onSave: (payload: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
   submitLabel?: string;
 }) {
+  // Stages are editable, so use the live list. Callers on the pipeline pass it;
+  // elsewhere the form fetches it (falling back to the defaults meanwhile).
+  const [stages, setStages] = useState<string[]>(stageNames ?? [...DEAL_STAGES]);
+  useEffect(() => {
+    if (stageNames) {
+      setStages(stageNames);
+      return;
+    }
+    api<{ stages: { name: string }[] }>("/api/stages")
+      .then((d) => setStages(d.stages.map((s) => s.name)))
+      .catch(() => {});
+  }, [stageNames]);
+
   const [f, setF] = useState({
     name: initial?.name ?? "",
     stage: initial?.stage ?? "New Lead",
@@ -367,7 +383,8 @@ export function DealForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Stage">
           <Select value={f.stage} onChange={set("stage")}>
-            {options(DEAL_STAGES)}
+            {stages.includes(f.stage) ? null : <option value={f.stage}>{f.stage}</option>}
+            {options(stages)}
           </Select>
         </Field>
         {!lockedCompanyId && (

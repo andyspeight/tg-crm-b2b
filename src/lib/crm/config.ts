@@ -48,7 +48,10 @@ export const CARE_CADENCES = ["Monthly", "Quarterly", "None"] as const;
 
 export const SIZE_BANDS = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"] as const;
 
-// Pipeline stages — LOCKED per brief §4 / §13.
+// Pipeline stages. These were the original locked set (brief §4/§13) and are now
+// the DEFAULTS: the live stage list is editable and stored in App Settings
+// (key "pipeline_stages"). This array is the seed used until an admin customises
+// the pipeline, and the fallback if the stored config is ever unreadable.
 export const DEAL_STAGES = [
   "New Lead",
   "Contacted",
@@ -59,6 +62,35 @@ export const DEAL_STAGES = [
   "Won",
   "Lost",
 ] as const;
+
+// A stage's kind drives the maths that must survive a rename: "won"/"lost" are
+// terminal (never flagged as stale, excluded from open pipeline), "open" is live.
+export const STAGE_KINDS = ["open", "won", "lost"] as const;
+
+// The colour palette a stage can use (matches the badge colours).
+export const STAGE_COLORS = [
+  "neutral",
+  "navy",
+  "accent",
+  "success",
+  "warning",
+  "danger",
+  "info",
+] as const;
+
+// Default pipeline (name, colour, kind) — mirrors the original stage colours.
+export const DEFAULT_PIPELINE_STAGES: { name: string; color: string; kind: string }[] = [
+  { name: "New Lead", color: "neutral", kind: "open" },
+  { name: "Contacted", color: "info", kind: "open" },
+  { name: "Demo Booked", color: "info", kind: "open" },
+  { name: "Demo Done", color: "info", kind: "open" },
+  { name: "Proposal", color: "accent", kind: "open" },
+  { name: "Negotiation", color: "navy", kind: "open" },
+  { name: "Won", color: "success", kind: "won" },
+  { name: "Lost", color: "danger", kind: "lost" },
+];
+
+export const PIPELINE_STAGES_KEY = "pipeline_stages";
 
 export const DEAL_SOURCES = [
   "Referral",
