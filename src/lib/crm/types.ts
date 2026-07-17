@@ -92,6 +92,7 @@ export interface Contact {
   companyId?: string;
   /** Resolved from the linked company where available (convenience for list views). */
   companyName?: string;
+  companyLifecycle?: LifecycleStage;
   createdTime?: string;
 }
 
@@ -161,7 +162,7 @@ export type CareTouchInput = Partial<Omit<CareTouch, "id" | "createdTime">>;
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">
 >;
-export type ContactInput = Partial<Omit<Contact, "id" | "companyName" | "createdTime">>;
+export type ContactInput = Partial<Omit<Contact, "id" | "companyName" | "companyLifecycle" | "createdTime">>;
 export type DealInput = Partial<Omit<Deal, "id" | "companyName" | "createdTime">>;
 export type ActivityInput = Partial<Omit<Activity, "id" | "createdTime">>;
 export type TaskInput = Partial<Omit<Task, "id" | "companyName" | "createdTime">>;

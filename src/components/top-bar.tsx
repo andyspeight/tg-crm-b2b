@@ -17,6 +17,7 @@ const NAV = [
   { href: "/today", label: "Today", icon: Home },
   { href: "/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/companies", label: "Companies", icon: Building2 },
+  { href: "/contacts", label: "People", icon: Users },
   { href: "/care", label: "Care", icon: HeartHandshake },
 ];
 
@@ -25,7 +26,6 @@ const MORE = [
   { href: "/enrich", label: "Enrich data", icon: Wand2 },
   { href: "/relink", label: "Link contacts", icon: Link2 },
   { href: "/deals", label: "Deals", icon: Briefcase },
-  { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/import", label: "Import", icon: Download },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

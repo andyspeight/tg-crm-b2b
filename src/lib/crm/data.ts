@@ -1088,11 +1088,85 @@ async function companyNameMap(ids: string[]): Promise<Map<string, string>> {
   return map;
 }
 
+/** Company name + lifecycle for the contact/People list (customer vs lead lens). */
+async function companyMetaMap(ids: string[]): Promise<Map<string, { name: string; lifecycle?: string }>> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  const map = new Map<string, { name: string; lifecycle?: string }>();
+  if (unique.length === 0) return map;
+  const F = FIELDS.companies;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.companies, {
+    filterByFormula: idFormula(unique),
+    fields: [F.name, F.lifecycleStage],
+    maxRecords: unique.length,
+  });
+  for (const rec of records) {
+    map.set(rec.id, {
+      name: str(rec.fields[F.name]) ?? "",
+      lifecycle: str(rec.fields[F.lifecycleStage]),
+    });
+  }
+  return map;
+}
+
 async function attachCompanyNames(contacts: Contact[]): Promise<void> {
   const ids = contacts.map((c) => c.companyId).filter((x): x is string => !!x);
   if (ids.length === 0) return;
-  const map = await companyNameMap(ids);
-  for (const c of contacts) if (c.companyId) c.companyName = map.get(c.companyId);
+  const map = await companyMetaMap(ids);
+  for (const c of contacts) {
+    if (!c.companyId) continue;
+    const meta = map.get(c.companyId);
+    if (meta) {
+      c.companyName = meta.name;
+      c.companyLifecycle = meta.lifecycle as Contact["companyLifecycle"];
+    }
+  }
+}
+
+/**
+ * Quick-add a lead or customer as the AMs think of it: a person at a company on
+ * a package. Finds the company by name (or creates it, stamped with the chosen
+ * lifecycle + package) and links the person to it. Company-only adds are allowed
+ * (no person name), and an existing company is reused rather than duplicated.
+ */
+export async function quickAddPerson(input: {
+  name?: string;
+  email?: string;
+  phone?: string;
+  companyName: string;
+  packageTier?: string;
+  lifecycleStage?: string;
+}): Promise<{ company: Company; contact: Contact | null }> {
+  const companyName = (input.companyName || "").trim();
+  if (!companyName) throw new ValidationError("Company name is required");
+  const lifecycle = enumOrNull(input.lifecycleStage, LIFECYCLE_STAGES, "lifecycle stage");
+  const pkg = text(input.packageTier);
+
+  let company = await findCompanyByLinkedinOrName("", companyName);
+  if (!company) {
+    company = await createCompany({
+      name: companyName,
+      lifecycleStage: lifecycle ?? undefined,
+      planTier: pkg ?? undefined,
+    });
+  } else {
+    // Reuse the existing account; only fill blanks, never overwrite.
+    const patch: CompanyInput = {};
+    if (pkg && !company.planTier) patch.planTier = pkg;
+    if (lifecycle && !company.lifecycleStage) patch.lifecycleStage = lifecycle;
+    if (Object.keys(patch).length) company = await updateCompany(company.id, patch);
+  }
+
+  let contact: Contact | null = null;
+  const name = (input.name || "").trim();
+  if (name) {
+    contact = await createContact({
+      name,
+      email: text(input.email) ?? undefined,
+      phone: text(input.phone) ?? undefined,
+      companyId: company.id,
+    });
+  }
+  return { company, contact };
 }
 
 async function attachDealCompanyNames(deals: Deal[]): Promise<void> {
