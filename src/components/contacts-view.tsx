@@ -210,7 +210,16 @@ export function ContactsView({
                 {shown.map((c) => (
                   <tr
                     key={c.id}
-                    className="group border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50"
+                    onClick={() => setEditing(c)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditing(c);
+                      }
+                    }}
+                    className="group cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
                   >
                     <td className="relative px-4 py-3">
                       <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -221,7 +230,11 @@ export function ContactsView({
                     </td>
                     <td className="px-4 py-3">
                       {c.companyId ? (
-                        <Link href={`/companies/${c.companyId}`} className="text-fg hover:text-accent-strong">
+                        <Link
+                          href={`/companies/${c.companyId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-fg hover:text-accent-strong"
+                        >
                           {c.companyName || "Company"}
                         </Link>
                       ) : (
@@ -237,7 +250,11 @@ export function ContactsView({
                     </td>
                     <td className="px-4 py-3 text-fg-muted">
                       {c.email ? (
-                        <a href={`mailto:${c.email}`} className="hover:text-accent-strong">
+                        <a
+                          href={`mailto:${c.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-accent-strong"
+                        >
                           {c.email}
                         </a>
                       ) : (
@@ -248,7 +265,10 @@ export function ContactsView({
                       {c.phone ?? <span className="text-fg-subtle">—</span>}
                     </td>
                     <td className="px-2 py-2">
-                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
+                      >
                         <IconButton label="Edit contact" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
@@ -266,13 +286,13 @@ export function ContactsView({
           {/* Mobile card list */}
           <div className="luna-fade space-y-2.5 sm:hidden">
             {shown.map((c) => (
-              <Card key={c.id} className="p-3.5">
+              <Card key={c.id} onClick={() => setEditing(c)} className="p-3.5">
                 <div className="flex items-start gap-3">
                   <Monogram name={c.name || "Unnamed"} size="sm" tone="accent" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <span className="truncate font-medium text-fg">{c.name || "Unnamed"}</span>
-                      <div className="flex shrink-0 gap-0.5">
+                      <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-0.5">
                         <IconButton label="Edit contact" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
@@ -285,6 +305,7 @@ export function ContactsView({
                       {c.companyId ? (
                         <Link
                           href={`/companies/${c.companyId}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="text-[13px] text-fg hover:text-accent-strong"
                         >
                           {c.companyName || "Company"}
@@ -294,7 +315,11 @@ export function ContactsView({
                     </div>
                     <div className="mt-1.5 space-y-0.5 text-[13px] text-fg-muted">
                       {c.email ? (
-                        <a href={`mailto:${c.email}`} className="block truncate hover:text-accent-strong">
+                        <a
+                          href={`mailto:${c.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="block truncate hover:text-accent-strong"
+                        >
                           {c.email}
                         </a>
                       ) : null}

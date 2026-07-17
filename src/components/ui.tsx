@@ -266,17 +266,21 @@ export function EmptyState({
 export function Card({
   className,
   interactive,
+  onClick,
   children,
 }: {
   className?: string;
   interactive?: boolean;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   return (
     <div
+      onClick={onClick}
       className={cn(
         "rounded-2xl border border-border bg-card shadow-card",
         interactive && "transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-raise",
+        onClick && "cursor-pointer",
         className,
       )}
     >
