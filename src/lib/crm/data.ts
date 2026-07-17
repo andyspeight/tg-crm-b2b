@@ -496,6 +496,28 @@ export async function deleteContact(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.contacts, id);
 }
 
+const CUSTOMER_LIFECYCLES = new Set(["Customer", "At Risk"]);
+const LEAD_LIFECYCLES = new Set(["Prospect", "Engaged", "Opportunity"]);
+
+/**
+ * Move a contact's account between the Leads and Customers lists (the People
+ * filter reads the company lifecycle). Only crosses groups — an account already
+ * in the target group is left alone, so a specific stage like Opportunity isn't
+ * flattened back to Prospect just by re-saving a contact.
+ */
+export async function applyLeadCustomerStatus(
+  companyId: string,
+  status: "customer" | "lead",
+): Promise<void> {
+  const company = await getCompany(companyId);
+  const current = company.lifecycleStage ?? "";
+  if (status === "customer" && !CUSTOMER_LIFECYCLES.has(current)) {
+    await updateCompany(companyId, { lifecycleStage: "Customer" });
+  } else if (status === "lead" && !LEAD_LIFECYCLES.has(current)) {
+    await updateCompany(companyId, { lifecycleStage: "Prospect" });
+  }
+}
+
 // --- deals ------------------------------------------------------------------
 
 export async function listDeals(opts: { q?: string; limit?: number } = {}): Promise<Deal[]> {

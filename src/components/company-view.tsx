@@ -232,7 +232,7 @@ export function CompanyView({
       await api(`/api/contacts`, { method: "POST", body: JSON.stringify(payload) });
       setAddingContact(false);
     }
-    await refreshContacts();
+    await Promise.all([refreshContacts(), refreshCompany()]);
   }
   async function removeContact(c: Contact) {
     if (!confirm(`Remove ${c.name}?`)) return;

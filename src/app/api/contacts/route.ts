@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createContact, listContacts, listContactsByCompany } from "@/lib/crm/data";
+import {
+  applyLeadCustomerStatus,
+  createContact,
+  listContacts,
+  listContactsByCompany,
+} from "@/lib/crm/data";
 import { errorResponse, readJson } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -17,7 +22,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const contact = await createContact(await readJson(req));
+    const body = await readJson(req);
+    const contact = await createContact(body);
+    if ((body.setStatus === "customer" || body.setStatus === "lead") && contact.companyId) {
+      await applyLeadCustomerStatus(contact.companyId, body.setStatus);
+    }
     return NextResponse.json({ contact }, { status: 201 });
   } catch (e) {
     return errorResponse(e);
