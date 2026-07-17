@@ -265,10 +265,7 @@ export function ContactsView({
                       {c.phone ?? <span className="text-fg-subtle">—</span>}
                     </td>
                     <td className="px-2 py-2">
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
-                      >
+                      <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
                         <IconButton label="Edit contact" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
