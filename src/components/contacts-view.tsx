@@ -203,7 +203,7 @@ export function ContactsView({
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Status</th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Email</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Phone</th>
-                  <th className="px-4 py-3" />
+                  <th className="sticky right-0 z-10 bg-card px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -233,7 +233,7 @@ export function ContactsView({
                         <Link
                           href={`/companies/${c.companyId}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-fg hover:text-accent-strong"
+                          className="block max-w-[170px] truncate text-fg hover:text-accent-strong"
                         >
                           {c.companyName || "Company"}
                         </Link>
@@ -253,7 +253,7 @@ export function ContactsView({
                         <a
                           href={`mailto:${c.email}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="hover:text-accent-strong"
+                          className="block max-w-[220px] truncate hover:text-accent-strong"
                         >
                           {c.email}
                         </a>
@@ -264,7 +264,7 @@ export function ContactsView({
                     <td className="tnum px-4 py-3 text-right text-fg-muted">
                       {c.phone ?? <span className="text-fg-subtle">—</span>}
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="sticky right-0 z-10 bg-card px-2 py-2 group-hover:bg-muted">
                       <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
                         <IconButton label="Edit contact" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
