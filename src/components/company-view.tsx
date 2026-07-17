@@ -24,6 +24,7 @@ import {
   Plus,
   Radar,
   RefreshCw,
+  Rocket,
   Sparkles,
   Star,
   StickyNote,
@@ -67,7 +68,10 @@ import {
 import type { BadgeColor } from "@/components/ui";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
 import { OutreachModal } from "@/components/outreach-modal";
+import { StartOnboardingModal } from "@/components/start-onboarding-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+
+const ONBOARDING_URL = process.env.NEXT_PUBLIC_ONBOARDING_URL;
 
 function isOverdue(dateStr?: string): boolean {
   if (!dateStr) return false;
@@ -153,6 +157,7 @@ export function CompanyView({
   const [briefError, setBriefError] = useState("");
   const [outreachOpen, setOutreachOpen] = useState(false);
   const [outreachContactId, setOutreachContactId] = useState<string | undefined>(undefined);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [enrichError, setEnrichError] = useState("");
 
@@ -397,6 +402,23 @@ export function CompanyView({
             <Button variant="secondary" size="sm" onClick={() => setLoggingActivity(true)}>
               <Plus size={15} strokeWidth={1.75} /> Log activity
             </Button>
+            {company.onboardingClientId ? (
+              ONBOARDING_URL ? (
+                <a
+                  href={`${ONBOARDING_URL.replace(/\/+$/, "")}/admin/clients/${company.onboardingClientId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button variant="secondary" size="sm">
+                    <Rocket size={15} strokeWidth={1.75} /> Onboarding
+                  </Button>
+                </a>
+              ) : null
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setOnboardingOpen(true)}>
+                <Rocket size={15} strokeWidth={1.75} /> Start onboarding
+              </Button>
+            )}
             <Button size="sm" onClick={() => openEmail(undefined)}>
               <Mail size={15} strokeWidth={1.75} /> Email
             </Button>
@@ -977,6 +999,16 @@ export function CompanyView({
         defaultContactId={outreachContactId}
         onSent={async () => {
           await Promise.all([refreshActivities(), refreshCompany()]);
+        }}
+      />
+
+      <StartOnboardingModal
+        open={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+        company={{ id: company.id, name: company.name, planTier: company.planTier }}
+        contacts={contacts.map((c) => ({ id: c.id, name: c.name, email: c.email }))}
+        onStarted={async () => {
+          await Promise.all([refreshCompany(), refreshActivities()]);
         }}
       />
     </div>

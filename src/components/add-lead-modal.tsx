@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { api } from "@/lib/client";
-import { Button, Field, InlineAlert, Input, Modal, Spinner, cn } from "@/components/ui";
+import { PACKAGES } from "@/lib/crm/config";
+import { Button, Field, InlineAlert, Input, Modal, Select, Spinner, cn } from "@/components/ui";
 
 type Lifecycle = "Prospect" | "Customer";
 const TABS: { value: Lifecycle; label: string }[] = [
@@ -109,8 +110,15 @@ export function AddLeadModal({
         <Field label="Company name">
           <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Coastline Travel Group" />
         </Field>
-        <Field label="Package" hint="Their plan / package, e.g. Growth.">
-          <Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="e.g. Growth" />
+        <Field label="Package">
+          <Select value={pkg} onChange={(e) => setPkg(e.target.value)}>
+            <option value="">Select a package</option>
+            {PACKAGES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}

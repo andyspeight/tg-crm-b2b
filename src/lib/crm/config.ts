@@ -48,6 +48,10 @@ export const CARE_CADENCES = ["Monthly", "Quarterly", "None"] as const;
 
 export const SIZE_BANDS = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"] as const;
 
+// Package/plan — aligned with the onboarding tool's plans so a won deal can hand
+// off cleanly. "Bespoke" starts a base journey the team then tailors.
+export const PACKAGES = ["Spark", "Boost", "Ignite", "Bespoke"] as const;
+
 // Pipeline stages. These were the original locked set (brief §4/§13) and are now
 // the DEFAULTS: the live stage list is editable and stored in App Settings
 // (key "pipeline_stages"). This array is the seed used until an admin customises
@@ -175,6 +179,9 @@ export const FIELDS = {
     supportLastContact: "Support Last Contact",
     supportSentiment: "Support Sentiment",
     supportUpdated: "Support Updated",
+    // Onboarding handoff (written when a won deal is sent to tg-onboarding).
+    onboardingClientId: "Onboarding Client ID",
+    onboardingStarted: "Onboarding Started",
     contacts: "Contacts",
     deals: "Deals",
     activities: "Activities",

@@ -10,6 +10,7 @@ import {
   DEAL_STAGES,
   LIFECYCLE_STAGES,
   MARKETING_OPT_IN,
+  PACKAGES,
   REGIONS,
   SIZE_BANDS,
   TASK_STATUSES,
@@ -179,8 +180,14 @@ export function CompanyForm({
             {options(CARE_CADENCES)}
           </Select>
         </Field>
-        <Field label="Plan / tier">
-          <Input value={f.planTier} onChange={set("planTier")} />
+        <Field label="Package">
+          <Select value={f.planTier} onChange={set("planTier")}>
+            <option value="">—</option>
+            {f.planTier && !(PACKAGES as readonly string[]).includes(f.planTier) ? (
+              <option value={f.planTier}>{f.planTier}</option>
+            ) : null}
+            {options(PACKAGES)}
+          </Select>
         </Field>
         <Field label="MRR (£)">
           <Input value={f.mrr} onChange={set("mrr")} inputMode="decimal" placeholder="0.00" />

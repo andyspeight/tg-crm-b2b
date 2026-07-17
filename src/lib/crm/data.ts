@@ -29,6 +29,7 @@ import {
   PIPELINE_STAGES_KEY,
   STAGE_COLORS,
   STAGE_KINDS,
+  PACKAGES,
 } from "./config";
 import type {
   Activity,
@@ -156,6 +157,8 @@ function toCompany(rec: AirtableRecord): Company {
     supportLastContact: str(f[F.supportLastContact]),
     supportSentiment: str(f[F.supportSentiment]) as Company["supportSentiment"],
     supportUpdated: str(f[F.supportUpdated]),
+    onboardingClientId: str(f[F.onboardingClientId]),
+    onboardingStarted: str(f[F.onboardingStarted]),
     contactIds: idList(f[F.contacts]),
     dealIds: idList(f[F.deals]),
     activityIds: idList(f[F.activities]),
@@ -1254,11 +1257,95 @@ export async function applyContactLinks(
 
 // --- integration seam (brief §8): wired in Stage 5 -------------------------
 
+export interface StartOnboardingResult {
+  clientId: string;
+  alreadyStarted: boolean;
+}
+
 /**
- * When a Deal hits "Won", hand off to tg-onboarding (create the client record that
- * kicks off onboarding) and flip the company to Customer with a starter care cadence.
- * Seam designed now; implemented once tg-onboarding's backend lands.
+ * Hand a won account off to tg-onboarding: create the client + kick off their
+ * journey there, then flip this company to Customer with a starter care cadence
+ * and record the onboarding client id so it can't be handed off twice.
+ *
+ * We call the onboarding tool's endpoint (server-to-server, shared secret) so it
+ * owns creating the client and stamping the journey — the CRM never writes into
+ * the onboarding base directly.
  */
-export async function handoffWonDeal(_dealId: string): Promise<never> {
-  throw new Error("handoffWonDeal is not implemented yet (Stage 5 — tg-onboarding seam)");
+export async function startOnboarding(
+  companyId: string,
+  opts: { contactId?: string; plan?: string; startDate?: string; accountManager?: string } = {},
+): Promise<StartOnboardingResult> {
+  const company = await getCompany(companyId);
+  if (company.onboardingClientId) {
+    return { clientId: company.onboardingClientId, alreadyStarted: true };
+  }
+
+  const base = process.env.NEXT_PUBLIC_ONBOARDING_URL;
+  const secret = process.env.CRM_HANDOFF_SECRET;
+  if (!base || !secret) {
+    throw new ValidationError(
+      "Onboarding isn't linked yet. Set NEXT_PUBLIC_ONBOARDING_URL and CRM_HANDOFF_SECRET in Vercel.",
+    );
+  }
+
+  // Who to onboard: the chosen contact, else the first with an email.
+  const contacts = await listContactsByIds(company.contactIds);
+  const contact = opts.contactId
+    ? (contacts.find((c) => c.id === opts.contactId) ?? (await getContact(opts.contactId).catch(() => null)))
+    : contacts.find((c) => c.email);
+  if (!contact || !contact.email) {
+    throw new ValidationError("Add a contact with an email address before starting onboarding.");
+  }
+
+  const plan = (opts.plan || company.planTier || "").trim();
+  if (!(PACKAGES as readonly string[]).includes(plan)) {
+    throw new ValidationError("Set a package (Spark, Boost, Ignite or Bespoke) before starting onboarding.");
+  }
+
+  const startDate =
+    opts.startDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.startDate)
+      ? opts.startDate
+      : new Date().toISOString().slice(0, 10);
+  const accountManager = opts.accountManager?.trim() || "Andy Speight";
+
+  const res = await fetch(`${base.replace(/\/+$/, "")}/api/integrations/crm-handoff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
+    body: JSON.stringify({
+      company: company.name,
+      contactName: contact.name,
+      contactEmail: contact.email,
+      plan,
+      accountManager,
+      startDate,
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("[startOnboarding] onboarding responded", res.status, detail.slice(0, 200));
+    throw new Error("The onboarding tool couldn't start this client. Please try again.");
+  }
+  const data = (await res.json().catch(() => ({}))) as { clientId?: string };
+  const clientId = data.clientId;
+  if (!clientId) throw new Error("The onboarding tool didn't return a client id.");
+
+  const F = FIELDS.companies;
+  await updateRecord(AIRTABLE_BASE_ID, TABLES.companies, companyId, {
+    [F.onboardingClientId]: clientId,
+    [F.onboardingStarted]: new Date().toISOString(),
+    [F.lifecycleStage]: "Customer",
+    ...(company.careCadence ? {} : { [F.careCadence]: "Quarterly" }),
+  });
+
+  await createActivity({
+    type: "Note",
+    summary: "Onboarding started",
+    rawContent: `Handed off to the onboarding tool on the ${plan} plan for ${contact.name}.`,
+    companyId,
+    contactId: contact.id,
+    date: new Date().toISOString(),
+  }).catch((e) => console.error("[startOnboarding] activity log failed:", e));
+
+  return { clientId, alreadyStarted: false };
 }

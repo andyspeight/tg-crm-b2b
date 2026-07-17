@@ -69,6 +69,9 @@ export interface Company {
   supportLastContact?: string;
   supportSentiment?: SupportSentiment;
   supportUpdated?: string;
+  // Onboarding handoff — set when a won deal is handed to tg-onboarding.
+  onboardingClientId?: string;
+  onboardingStarted?: string;
   contactIds: string[];
   dealIds: string[];
   activityIds: string[];
