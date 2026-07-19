@@ -256,7 +256,7 @@ export function ContactForm({
 
   async function submit() {
     if (!f.name.trim()) {
-      setError("Contact name is required");
+      setError("Name is required");
       return;
     }
     setSaving(true);

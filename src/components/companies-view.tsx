@@ -162,7 +162,7 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
   async function remove(c: Company) {
     const ok = await confirm({
       title: `Delete ${c.name || "this company"}?`,
-      message: "This removes the account and unlinks its contacts, deals and activity.",
+      message: "This removes the account and unlinks its people, deals and activity.",
       confirmLabel: "Delete",
     });
     if (!ok) return;

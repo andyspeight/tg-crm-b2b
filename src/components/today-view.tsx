@@ -19,11 +19,14 @@ import { api } from "@/lib/client";
 import type { Task } from "@/lib/crm/types";
 import type { NextAction } from "@/lib/crm/next-actions";
 import { isPast } from "@/lib/deal-flags";
-import { EmptyState } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 import { QuickActions } from "@/components/quick-actions";
+import { LogTouchModal } from "@/components/log-touch-modal";
+import { useToast } from "@/components/feedback";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export type CareDueItem = {
+  touchId: string;
   companyId: string;
   companyName: string;
   dueDate: string;
@@ -33,7 +36,7 @@ export type CareDueItem = {
 
 export type Vitals = {
   customers: number;
-  prospects: number;
+  leads: number;
   openDeals: number;
   openMrr: number;
   needsAttention: number;
@@ -56,6 +59,9 @@ export function TodayView({
   nurture: NurtureItem[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
+  const [careList, setCareList] = useState(careDue);
+  const [logging, setLogging] = useState<CareDueItem | null>(null);
+  const toast = useToast();
 
   async function toggle(t: Task) {
     const next = t.status === "Done" ? "Open" : "Done";
@@ -97,7 +103,7 @@ export function TodayView({
           href="/companies"
           label="Customers"
           value={String(vitals.customers)}
-          sub={`${vitals.prospects} prospects`}
+          sub={`${vitals.leads} ${vitals.leads === 1 ? "lead" : "leads"}`}
           icon={<Users size={16} strokeWidth={2} />}
           live
         />
@@ -120,10 +126,10 @@ export function TodayView({
         <VitalTile
           href="/care"
           label="Care due"
-          value={String(vitals.careDue)}
+          value={String(careList.length)}
           sub="next 14 days"
           icon={<HeartHandshake size={16} strokeWidth={2} />}
-          tone={careDue.some((c) => c.overdue) ? "danger" : undefined}
+          tone={careList.some((c) => c.overdue) ? "danger" : undefined}
         />
       </div>
 
@@ -183,13 +189,13 @@ export function TodayView({
           )}
         </Section>
 
-        <Section title="Care touches due" count={careDue.length} icon={<HeartHandshake size={14} strokeWidth={2} />}>
-          {careDue.length === 0 ? (
+        <Section title="Care touches due" count={careList.length} icon={<HeartHandshake size={14} strokeWidth={2} />}>
+          {careList.length === 0 ? (
             <EmptyState title="No care touches due" hint="Scheduled touches surface here as they approach." />
           ) : (
             <ul className="divide-y divide-border-soft">
-              {careDue.map((c) => (
-                <li key={`${c.companyId}:${c.dueDate}`} className="flex items-center gap-3 py-2.5">
+              {careList.map((c) => (
+                <li key={c.touchId} className="flex items-center gap-3 py-2.5">
                   <HeartHandshake
                     size={16}
                     strokeWidth={1.75}
@@ -200,12 +206,18 @@ export function TodayView({
                     <Link href={`/companies/${c.companyId}`} className="text-[14px] text-fg hover:text-accent-strong">
                       {c.companyName}
                     </Link>
-                    <p className="text-[12px] text-fg-subtle">{c.touchType ?? "Care touch"}</p>
+                    <p className="text-[12px] text-fg-subtle">
+                      {c.touchType ?? "Care touch"}
+                      <span className={`tnum ${c.overdue ? "text-danger" : "text-fg-subtle"}`}>
+                        {" · "}
+                        {c.overdue ? "Overdue · " : ""}
+                        {formatDate(c.dueDate)}
+                      </span>
+                    </p>
                   </div>
-                  <span className={`tnum shrink-0 text-[12px] ${c.overdue ? "text-danger" : "text-fg-muted"}`}>
-                    {c.overdue ? "Overdue · " : ""}
-                    {formatDate(c.dueDate)}
-                  </span>
+                  <Button variant="secondary" size="sm" onClick={() => setLogging(c)}>
+                    <CheckCircle2 size={15} strokeWidth={1.75} /> Log
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -217,6 +229,20 @@ export function TodayView({
         <Sparkles size={13} strokeWidth={1.75} aria-hidden />
         Signal monitoring — watched accounts&rsquo; news and social — arrives next in Stage 5.
       </p>
+
+      <LogTouchModal
+        open={!!logging}
+        onClose={() => setLogging(null)}
+        touchId={logging?.touchId}
+        companyName={logging?.companyName}
+        defaultTouchType={logging?.touchType}
+        onLogged={() => {
+          const id = logging?.touchId;
+          setCareList((xs) => xs.filter((x) => x.touchId !== id));
+          setLogging(null);
+          toast.success("Touch logged", { description: "The next one is scheduled per cadence." });
+        }}
+      />
     </div>
   );
 }

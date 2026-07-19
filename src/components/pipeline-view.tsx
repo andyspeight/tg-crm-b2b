@@ -7,18 +7,24 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDashed,
+  Columns3,
   Link2,
   Pencil,
   Plus,
+  Rows3,
+  Search,
   Settings2,
   Trash2,
 } from "lucide-react";
 import { api } from "@/lib/client";
 import { STAGE_COLORS, STAGE_KINDS } from "@/lib/crm/config";
-import type { Deal, DealStage, PipelineStage, StageKind } from "@/lib/crm/types";
+import type { Deal, PipelineStage, StageKind } from "@/lib/crm/types";
 import { dealFlag } from "@/lib/deal-flags";
 import {
   Button,
+  Card,
+  cn,
+  EmptyState,
   IconButton,
   InlineAlert,
   Modal,
@@ -28,8 +34,10 @@ import {
   Spinner,
   type BadgeColor,
 } from "@/components/ui";
+import { StageBadge } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
-import { formatMoney } from "@/lib/format";
+import { useConfirm, useToast } from "@/components/feedback";
+import { formatDate, formatMoney } from "@/lib/format";
 
 /** CSS-var token for each stage colour, so the lane dot matches the stage badge. */
 const STAGE_DOT_TOKEN: Record<BadgeColor, string> = {
@@ -75,12 +83,26 @@ export function PipelineView({
 }) {
   const [deals, setDeals] = useState<Deal[]>(initial);
   const [stages, setStages] = useState<PipelineStage[]>(initialStages);
+  const [view, setView] = useState<"board" | "table">(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("view") === "table"
+      ? "table"
+      : "board",
+  );
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [quickAdd, setQuickAdd] = useState<string | null>(null);
   const [editing, setEditing] = useState<Deal | null>(null);
   const [managing, setManaging] = useState(false);
   const [error, setError] = useState("");
+  const pending = useRef<Set<string>>(new Set());
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  function changeView(next: "board" | "table") {
+    setView(next);
+    window.history.replaceState({}, "", next === "table" ? "/pipeline?view=table" : "/pipeline");
+  }
 
   const stageNames = useMemo(() => stages.map((s) => s.name), [stages]);
   const colorByName = useMemo(() => new Map(stages.map((s) => [s.name, asColor(s.color)])), [stages]);
@@ -113,20 +135,70 @@ export function PipelineView({
 
   async function refreshDeals() {
     const data = await api<{ deals: Deal[] }>("/api/deals");
-    setDeals(data.deals);
+    setDeals(data.deals.filter((d) => !pending.current.has(d.id)));
   }
 
   async function addDeal(payload: Record<string, unknown>) {
-    await api("/api/deals", { method: "POST", body: JSON.stringify(payload) });
-    setQuickAdd(null);
-    await refreshDeals();
+    try {
+      await api("/api/deals", { method: "POST", body: JSON.stringify(payload) });
+      setQuickAdd(null);
+      await refreshDeals();
+      toast.success("Deal added");
+    } catch (e) {
+      toast.error("Couldn't add deal", { description: (e as Error).message });
+    }
   }
 
   async function editDeal(payload: Record<string, unknown>) {
     if (!editing) return;
-    await api(`/api/deals/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-    setEditing(null);
-    await refreshDeals();
+    const name = editing.name;
+    try {
+      await api(`/api/deals/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      setEditing(null);
+      await refreshDeals();
+      toast.success(`${name || "Deal"} updated`);
+    } catch (e) {
+      toast.error("Couldn't save changes", { description: (e as Error).message });
+    }
+  }
+
+  async function removeDeal(d: Deal) {
+    const ok = await confirm({
+      title: `Delete ${d.name || "this deal"}?`,
+      message: "This removes the deal from your pipeline.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    const idx = deals.findIndex((x) => x.id === d.id);
+    pending.current.add(d.id);
+    setDeals((xs) => xs.filter((x) => x.id !== d.id));
+    let undone = false;
+    toast.success(`${d.name || "Deal"} deleted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          pending.current.delete(d.id);
+          setDeals((xs) => {
+            if (xs.some((x) => x.id === d.id)) return xs;
+            const next = [...xs];
+            next.splice(Math.min(idx, next.length), 0, d);
+            return next;
+          });
+        },
+      },
+    });
+    window.setTimeout(async () => {
+      if (undone) return;
+      try {
+        await api(`/api/deals/${d.id}`, { method: "DELETE" });
+      } catch (e) {
+        toast.error(`Couldn't delete ${d.name || "deal"}`, { description: (e as Error).message });
+        await refreshDeals();
+      } finally {
+        pending.current.delete(d.id);
+      }
+    }, 6000);
   }
 
   async function saveStages(payload: {
@@ -148,7 +220,11 @@ export function PipelineView({
     <div>
       <PageHeader
         title="Pipeline"
-        description={`${deals.length} ${deals.length === 1 ? "deal" : "deals"} · drag a card, edit it, or manage your stages`}
+        description={
+          view === "board"
+            ? `${deals.length} ${deals.length === 1 ? "deal" : "deals"} · drag a card, edit it, or manage your stages`
+            : `${deals.length} ${deals.length === 1 ? "deal" : "deals"} · filter, sort and edit in one list`
+        }
         actions={
           <>
             <Button variant="secondary" onClick={() => setManaging(true)}>
@@ -161,13 +237,39 @@ export function PipelineView({
         }
       />
 
+      <div className="mt-4">
+        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
+          <button
+            type="button"
+            onClick={() => changeView("board")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
+              view === "board" ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
+            )}
+          >
+            <Columns3 size={15} strokeWidth={1.9} /> Board
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("table")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
+              view === "table" ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
+            )}
+          >
+            <Rows3 size={15} strokeWidth={1.9} /> Table
+          </button>
+        </div>
+      </div>
+
       {error ? (
         <div className="mt-4">
           <InlineAlert variant="danger">{error}</InlineAlert>
         </div>
       ) : null}
 
-      <div className="-mx-1 mt-5 flex gap-3 overflow-x-auto px-1 pb-3">
+      {view === "board" ? (
+      <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-3">
         {stages.map((stage) => {
           const items = byStage.get(stage.name) ?? [];
           const total = items.reduce((s, d) => s + (d.mrr ?? 0), 0);
@@ -251,6 +353,16 @@ export function PipelineView({
           );
         })}
       </div>
+      ) : (
+        <div className="mt-4">
+          <DealsTable
+            deals={deals}
+            stageNames={stageNames}
+            onEdit={(d) => setEditing(d)}
+            onDelete={removeDeal}
+          />
+        </div>
+      )}
 
       <Modal
         open={quickAdd !== null}
@@ -401,6 +513,271 @@ function DealCard({
           ))}
         </select>
       </div>
+    </div>
+  );
+}
+
+// --- table view (the folded-in Deals list) ---------------------------------
+
+type DealSort = "nextStep" | "mrr" | "company" | "name" | "recent";
+const DEAL_SORTS: { id: DealSort; label: string }[] = [
+  { id: "nextStep", label: "Next step (soonest)" },
+  { id: "mrr", label: "MRR (high–low)" },
+  { id: "company", label: "Company (A–Z)" },
+  { id: "name", label: "Name (A–Z)" },
+  { id: "recent", label: "Recently added" },
+];
+
+function DealsTable({
+  deals,
+  stageNames,
+  onEdit,
+  onDelete,
+}: {
+  deals: Deal[];
+  stageNames: string[];
+  onEdit: (d: Deal) => void;
+  onDelete: (d: Deal) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const [sort, setSort] = useState<DealSort>("nextStep");
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    const rows = deals.filter(
+      (d) =>
+        (!stageFilter || d.stage === stageFilter) &&
+        (!term ||
+          (d.name || "").toLowerCase().includes(term) ||
+          (d.companyName || "").toLowerCase().includes(term)),
+    );
+    return [...rows].sort((a, b) => {
+      switch (sort) {
+        case "mrr":
+          return (b.mrr ?? -1) - (a.mrr ?? -1);
+        case "company":
+          return (
+            (a.companyName || "~").localeCompare(b.companyName || "~") ||
+            (a.name || "").localeCompare(b.name || "")
+          );
+        case "name":
+          return (a.name || "").localeCompare(b.name || "");
+        case "recent":
+          return (b.createdTime ?? "").localeCompare(a.createdTime ?? "");
+        default:
+          return (a.nextStepDate || "9999-99-99").localeCompare(b.nextStepDate || "9999-99-99");
+      }
+    });
+  }, [deals, q, stageFilter, sort]);
+
+  const totalMrr = shown.reduce((s, d) => s + (d.mrr ?? 0), 0);
+  const filtered = !!q.trim() || !!stageFilter;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative w-full sm:w-56">
+          <Search
+            size={15}
+            strokeWidth={1.75}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search deals…"
+            aria-label="Search deals"
+            className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[14px] text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+        </div>
+        <div className="w-40">
+          <Select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+            aria-label="Filter by stage"
+            className="h-9 text-[13px]"
+          >
+            <option value="">All stages</option>
+            {stageNames.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden text-[12px] text-fg-subtle sm:inline">Sort</span>
+          <div className="w-48">
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as DealSort)}
+              aria-label="Sort deals"
+              className="h-9 text-[13px]"
+            >
+              {DEAL_SORTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {shown.length === 0 ? (
+        <EmptyState
+          title={filtered ? "No deals match these filters" : "No deals yet"}
+          hint={filtered ? "Try clearing the search or stage filter." : "Add one with the New deal button."}
+          action={
+            filtered ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setQ("");
+                  setStageFilter("");
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <>
+          <div className="luna-fade hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-card sm:block">
+            <table className="w-full min-w-[720px] text-[14px]">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Deal</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Company</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Stage</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">MRR</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Next step</th>
+                  <th className="sticky right-0 z-10 bg-card px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((d) => (
+                  <tr
+                    key={d.id}
+                    onClick={() => onEdit(d)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onEdit(d);
+                      }
+                    }}
+                    className="group cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
+                  >
+                    <td className="relative px-4 py-3">
+                      <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
+                      <div className="flex items-center gap-3">
+                        <Monogram name={d.companyName || d.name || "Untitled"} size="sm" tone="navy" />
+                        <span className="font-medium text-fg">{d.name || "Untitled"}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {d.companyId ? (
+                        <Link
+                          href={`/companies/${d.companyId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="block max-w-[200px] truncate text-fg transition-colors hover:text-accent-strong"
+                        >
+                          {d.companyName || "Company"}
+                        </Link>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StageBadge value={d.stage} />
+                    </td>
+                    <td className="tnum px-4 py-3 text-right">
+                      {d.mrr == null ? (
+                        <span className="text-fg-subtle">—</span>
+                      ) : (
+                        <span className="font-medium text-fg">{formatMoney(d.mrr)}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted">
+                      {d.nextStep ? (
+                        <span>
+                          {d.nextStep}
+                          {d.nextStepDate ? (
+                            <span className="tnum text-fg-subtle"> · {formatDate(d.nextStepDate)}</span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="text-fg-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="sticky right-0 z-10 bg-card px-2 py-2 group-hover:bg-muted">
+                      <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
+                        <IconButton label="Edit deal" onClick={() => onEdit(d)}>
+                          <Pencil size={16} strokeWidth={1.75} />
+                        </IconButton>
+                        <IconButton label="Delete deal" onClick={() => onDelete(d)} className="hover:text-danger">
+                          <Trash2 size={16} strokeWidth={1.75} />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/40">
+                  <td colSpan={3} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    Total · {shown.length} {shown.length === 1 ? "deal" : "deals"}
+                  </td>
+                  <td className="tnum px-4 py-3 text-right font-semibold text-fg">{formatMoney(totalMrr)}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="luna-fade space-y-2.5 sm:hidden">
+            {shown.map((d) => (
+              <Card key={d.id} onClick={() => onEdit(d)} className="p-3.5">
+                <div className="flex items-start gap-3">
+                  <Monogram name={d.companyName || d.name || "Untitled"} size="sm" tone="navy" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="truncate font-medium text-fg">{d.name || "Untitled"}</span>
+                      <span className={d.mrr == null ? "tnum shrink-0 text-fg-subtle" : "tnum shrink-0 font-medium text-fg"}>
+                        {formatMoney(d.mrr)}
+                      </span>
+                    </div>
+                    {d.companyId ? (
+                      <Link
+                        href={`/companies/${d.companyId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-0.5 block truncate text-[13px] text-fg-muted hover:text-accent-strong"
+                      >
+                        {d.companyName || "Company"}
+                      </Link>
+                    ) : null}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <StageBadge value={d.stage} />
+                      <div onClick={(e) => e.stopPropagation()} className="flex gap-0.5">
+                        <IconButton label="Edit deal" onClick={() => onEdit(d)}>
+                          <Pencil size={16} strokeWidth={1.75} />
+                        </IconButton>
+                        <IconButton label="Delete deal" onClick={() => onDelete(d)} className="hover:text-danger">
+                          <Trash2 size={16} strokeWidth={1.75} />
+                        </IconButton>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

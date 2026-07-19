@@ -12,7 +12,7 @@ import {
   Download,
 } from "lucide-react";
 import { api } from "@/lib/client";
-import { ACCOUNT_HEALTH, CARE_CADENCES, TOUCH_TYPES } from "@/lib/crm/config";
+import { ACCOUNT_HEALTH, CARE_CADENCES } from "@/lib/crm/config";
 import type { CareTouch, Company } from "@/lib/crm/types";
 import { isPast } from "@/lib/deal-flags";
 import {
@@ -20,17 +20,15 @@ import {
   ButtonLink,
   Card,
   EmptyState,
-  Field,
   InlineAlert,
-  Modal,
   Monogram,
   PageHeader,
   Select,
   Spinner,
   StatTile,
-  Textarea,
 } from "@/components/ui";
 import { HealthBadge, healthColor } from "@/components/badges";
+import { LogTouchModal } from "@/components/log-touch-modal";
 import { useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
 
@@ -363,90 +361,20 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
         </>
       )}
 
-      <Modal
+      <LogTouchModal
         open={!!logging}
         onClose={() => setLogging(null)}
-        title={logging ? `Log touch · ${logging.company.name}` : "Log touch"}
-      >
-        {logging?.nextTouch ? (
-          <LogTouchForm
-            row={logging}
-            onDone={async () => {
-              setLogging(null);
-              await refresh();
-              toast.success("Touch logged", { description: "The next one is scheduled per cadence." });
-            }}
-            onCancel={() => setLogging(null)}
-          />
-        ) : null}
-      </Modal>
+        touchId={logging?.nextTouch?.id}
+        companyName={logging?.company.name}
+        defaultTouchType={logging?.nextTouch?.touchType}
+        cadence={logging?.company.careCadence}
+        onLogged={async () => {
+          setLogging(null);
+          await refresh();
+          toast.success("Touch logged", { description: "The next one is scheduled per cadence." });
+        }}
+      />
     </div>
   );
 }
 
-function LogTouchForm({
-  row,
-  onDone,
-  onCancel,
-}: {
-  row: CareRow;
-  onDone: () => void;
-  onCancel: () => void;
-}) {
-  const touch = row.nextTouch!;
-  const [touchType, setTouchType] = useState(touch.touchType ?? "Check-In Call");
-  const [outcome, setOutcome] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    try {
-      await api("/api/care/log", {
-        method: "POST",
-        body: JSON.stringify({ touchId: touch.id, touchType, outcomeNotes: outcome }),
-      });
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not log touch");
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <p className="text-[13px] text-fg-muted">
-        Marks this touch done and schedules the next one per the {row.company.careCadence ?? "set"}{" "}
-        cadence.
-      </p>
-      <Field label="Touch type">
-        <Select value={touchType} onChange={(e) => setTouchType(e.target.value as typeof touchType)}>
-          {TOUCH_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Outcome notes">
-        <Textarea
-          value={outcome}
-          onChange={(e) => setOutcome(e.target.value)}
-          autoFocus
-          placeholder="How did it go? Anything to follow up?"
-        />
-      </Field>
-      {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}
-      <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Log and reschedule"}
-        </Button>
-      </div>
-    </form>
-  );
-}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { Briefcase, Building2, Columns3, Combine, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Search, Settings, Sparkles, User, Users, Wand2 } from "lucide-react";
+import { Building2, Columns3, Combine, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Search, Settings, Sparkles, User, Users, Wand2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company, Contact } from "@/lib/crm/types";
 import { cn, Spinner } from "@/components/ui";
@@ -26,7 +26,6 @@ const MORE = [
   { href: "/enrich", label: "Enrich data", icon: Wand2 },
   { href: "/relink", label: "Link contacts", icon: Link2 },
   { href: "/tidy", label: "Tidy up", icon: Combine },
-  { href: "/deals", label: "Deals", icon: Briefcase },
   { href: "/import", label: "Import", icon: Download },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -181,10 +180,12 @@ function GlobalSearch() {
     companies: [],
     contacts: [],
   });
+  const [active, setActive] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const term = q.trim();
+    setActive(0);
     if (term.length < 2) {
       setResults({ companies: [], contacts: [] });
       setLoading(false);
@@ -220,7 +221,32 @@ function GlobalSearch() {
     router.push(href);
   }
 
-  const hasResults = results.companies.length > 0 || results.contacts.length > 0;
+  const companyItems = results.companies.slice(0, 6);
+  const contactItems = results.contacts.slice(0, 6);
+  const flatHrefs = [
+    ...companyItems.map((c) => `/companies/${c.id}`),
+    ...contactItems.map((c) => (c.companyId ? `/companies/${c.companyId}` : "/contacts")),
+  ];
+  const activeIdx = flatHrefs.length ? Math.min(active, flatHrefs.length - 1) : 0;
+  const hasResults = companyItems.length > 0 || contactItems.length > 0;
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (!flatHrefs.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => Math.min(a + 1, flatHrefs.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      go(flatHrefs[activeIdx]);
+    }
+  }
 
   return (
     <div ref={boxRef} className="relative">
@@ -236,8 +262,9 @@ function GlobalSearch() {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
         placeholder="Search…"
-        aria-label="Search companies and contacts"
+        aria-label="Search companies and people"
         className="h-9 w-64 rounded-lg border border-transparent bg-muted pl-9 pr-3 text-[13.5px] text-fg transition-colors placeholder:text-fg-subtle hover:bg-muted/70 focus-visible:border-accent focus-visible:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       {open && q.trim().length >= 2 && (
@@ -249,40 +276,47 @@ function GlobalSearch() {
           ) : !hasResults ? (
             <div className="px-4 py-7 text-center">
               <p className="text-[13px] font-medium text-fg-muted">No matches for “{q.trim()}”</p>
-              <p className="mt-0.5 text-[12px] text-fg-subtle">Try a company or contact name.</p>
+              <p className="mt-0.5 text-[12px] text-fg-subtle">Try a company or person name.</p>
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-y-auto py-1.5">
-              {results.companies.length > 0 && (
+              {companyItems.length > 0 && (
                 <div className="pb-1">
                   <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                     Companies
                   </p>
-                  {results.companies.slice(0, 6).map((c) => (
+                  {companyItems.map((c, i) => (
                     <SearchRow
                       key={c.id}
                       icon={<Building2 size={15} strokeWidth={1.75} />}
                       name={c.name}
                       sub={c.type}
+                      active={activeIdx === i}
+                      onMouseEnter={() => setActive(i)}
                       onClick={() => go(`/companies/${c.id}`)}
                     />
                   ))}
                 </div>
               )}
-              {results.contacts.length > 0 && (
-                <div className={results.companies.length > 0 ? "border-t border-border-soft pt-1" : ""}>
+              {contactItems.length > 0 && (
+                <div className={companyItems.length > 0 ? "border-t border-border-soft pt-1" : ""}>
                   <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                    Contacts
+                    People
                   </p>
-                  {results.contacts.slice(0, 6).map((c) => (
-                    <SearchRow
-                      key={c.id}
-                      icon={<User size={15} strokeWidth={1.75} />}
-                      name={c.name}
-                      sub={c.companyName}
-                      onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
-                    />
-                  ))}
+                  {contactItems.map((c, i) => {
+                    const idx = companyItems.length + i;
+                    return (
+                      <SearchRow
+                        key={c.id}
+                        icon={<User size={15} strokeWidth={1.75} />}
+                        name={c.name}
+                        sub={c.companyName}
+                        active={activeIdx === idx}
+                        onMouseEnter={() => setActive(idx)}
+                        onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -302,17 +336,26 @@ function SearchRow({
   icon,
   name,
   sub,
+  active,
+  onMouseEnter,
   onClick,
 }: {
   icon: ReactNode;
   name: string;
   sub?: string;
+  active?: boolean;
+  onMouseEnter?: () => void;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+      onMouseEnter={onMouseEnter}
+      aria-selected={active}
+      className={cn(
+        "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none",
+        active ? "bg-muted" : "hover:bg-muted",
+      )}
     >
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-strong">
         {icon}

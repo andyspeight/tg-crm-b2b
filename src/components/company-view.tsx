@@ -229,7 +229,7 @@ export function CompanyView({
   async function deleteCompany() {
     const ok = await confirm({
       title: `Delete ${company.name || "this company"}?`,
-      message: "This permanently removes the account and unlinks its contacts, deals and activity. This cannot be undone.",
+      message: "This permanently removes the account and unlinks its people, deals and activity. This cannot be undone.",
       confirmLabel: "Delete company",
     });
     if (!ok) return;
@@ -253,14 +253,14 @@ export function CompanyView({
         setAddingContact(false);
       }
       await Promise.all([refreshContacts(), refreshCompany()]);
-      toast.success(editing ? "Contact updated" : "Contact added");
+      toast.success(editing ? "Person updated" : "Person added");
     } catch (e) {
-      toast.error("Couldn't save contact", { description: (e as Error).message });
+      toast.error("Couldn't save person", { description: (e as Error).message });
     }
   }
   async function removeContact(c: Contact) {
     const ok = await confirm({
-      title: `Remove ${c.name || "this contact"}?`,
+      title: `Remove ${c.name || "this person"}?`,
       message: "This deletes the person from Luna Desk.",
       confirmLabel: "Remove",
     });
@@ -268,9 +268,9 @@ export function CompanyView({
     try {
       await api(`/api/contacts/${c.id}`, { method: "DELETE" });
       await refreshContacts();
-      toast.success(`${c.name || "Contact"} removed`);
+      toast.success(`${c.name || "Person"} removed`);
     } catch (e) {
-      toast.error("Couldn't remove contact", { description: (e as Error).message });
+      toast.error("Couldn't remove person", { description: (e as Error).message });
     }
   }
   /** Attach a domain-matched suggestion to this account. */
@@ -586,7 +586,7 @@ export function CompanyView({
             count={contacts.length}
             action={
               <Button variant="secondary" size="sm" onClick={() => setAddingContact(true)}>
-                <Plus size={15} strokeWidth={2} /> Add contact
+                <Plus size={15} strokeWidth={2} /> Add person
               </Button>
             }
           >
@@ -597,7 +597,7 @@ export function CompanyView({
                 icon={<Users size={20} strokeWidth={1.75} />}
                 action={
                   <Button variant="secondary" size="sm" onClick={() => setAddingContact(true)}>
-                    <Plus size={15} strokeWidth={2} /> Add contact
+                    <Plus size={15} strokeWidth={2} /> Add person
                   </Button>
                 }
               />
@@ -772,7 +772,7 @@ export function CompanyView({
               <Fact label="Size band" value={company.sizeBand} onAdd={() => setEditingCompany(true)} />
               {isCustomer ? (
                 <>
-                  <Fact label="Plan / tier" value={company.planTier} onAdd={() => setEditingCompany(true)} />
+                  <Fact label="Package" value={company.planTier} onAdd={() => setEditingCompany(true)} />
                   <Fact
                     label="MRR"
                     value={company.mrr != null ? formatMoney(company.mrr) : undefined}
@@ -1006,7 +1006,7 @@ export function CompanyView({
           setAddingContact(false);
           setEditingContact(null);
         }}
-        title={editingContact ? "Edit contact" : "Add contact"}
+        title={editingContact ? "Edit person" : "Add person"}
       >
         <ContactForm
           initial={editingContact ?? undefined}
@@ -1175,10 +1175,10 @@ function ContactRow({
           <Sparkles size={16} strokeWidth={1.75} />
         </button>
         <span className="ml-0.5 flex items-center gap-0.5">
-          <IconButton label="Edit contact" onClick={onEdit} className="h-8 w-8">
+          <IconButton label="Edit person" onClick={onEdit} className="h-8 w-8">
             <Pencil size={15} strokeWidth={1.75} />
           </IconButton>
-          <IconButton label="Remove contact" onClick={onRemove} className="h-8 w-8 hover:text-danger">
+          <IconButton label="Remove person" onClick={onRemove} className="h-8 w-8 hover:text-danger">
             <Trash2 size={15} strokeWidth={1.75} />
           </IconButton>
         </span>

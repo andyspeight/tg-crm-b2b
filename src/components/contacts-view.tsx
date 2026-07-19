@@ -115,9 +115,9 @@ export function ContactsView({
       await api("/api/contacts", { method: "POST", body: JSON.stringify(payload) });
       setCreating(false);
       await refresh();
-      toast.success("Contact added");
+      toast.success("Person added");
     } catch (e) {
-      toast.error("Couldn't add contact", { description: (e as Error).message });
+      toast.error("Couldn't add person", { description: (e as Error).message });
     }
   }
   async function update(payload: Record<string, unknown>) {
@@ -127,14 +127,14 @@ export function ContactsView({
       await api(`/api/contacts/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
       setEditing(null);
       await refresh();
-      toast.success(`${name || "Contact"} updated`);
+      toast.success(`${name || "Person"} updated`);
     } catch (e) {
       toast.error("Couldn't save changes", { description: (e as Error).message });
     }
   }
   async function remove(c: Contact) {
     const ok = await confirm({
-      title: `Delete ${c.name || "this contact"}?`,
+      title: `Delete ${c.name || "this person"}?`,
       message: "This removes the person from Luna Desk.",
       confirmLabel: "Delete",
     });
@@ -146,7 +146,7 @@ export function ContactsView({
     setContacts((xs) => xs.filter((x) => x.id !== c.id));
 
     let undone = false;
-    toast.success(`${c.name || "Contact"} deleted`, {
+    toast.success(`${c.name || "Person"} deleted`, {
       action: {
         label: "Undo",
         onClick: () => {
@@ -167,7 +167,7 @@ export function ContactsView({
       try {
         await api(`/api/contacts/${c.id}`, { method: "DELETE" });
       } catch (e) {
-        toast.error(`Couldn't delete ${c.name || "contact"}`, { description: (e as Error).message });
+        toast.error(`Couldn't delete ${c.name || "person"}`, { description: (e as Error).message });
         await refresh();
       } finally {
         pending.current.delete(c.id);
@@ -208,7 +208,7 @@ export function ContactsView({
               )}
             </div>
             <Button onClick={() => setCreating(true)}>
-              <Plus size={16} strokeWidth={2} /> New contact
+              <Plus size={16} strokeWidth={2} /> New person
             </Button>
           </div>
         }
@@ -359,10 +359,10 @@ export function ContactsView({
                     </td>
                     <td className="sticky right-0 z-10 bg-card px-2 py-2 group-hover:bg-muted">
                       <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
-                        <IconButton label="Edit contact" onClick={() => setEditing(c)}>
+                        <IconButton label="Edit person" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
-                        <IconButton label="Delete contact" onClick={() => remove(c)} className="hover:text-danger">
+                        <IconButton label="Delete person" onClick={() => remove(c)} className="hover:text-danger">
                           <Trash2 size={16} strokeWidth={1.75} />
                         </IconButton>
                       </div>
@@ -383,10 +383,10 @@ export function ContactsView({
                     <div className="flex items-start justify-between gap-2">
                       <span className="truncate font-medium text-fg">{c.name || "Unnamed"}</span>
                       <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-0.5">
-                        <IconButton label="Edit contact" onClick={() => setEditing(c)}>
+                        <IconButton label="Edit person" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
-                        <IconButton label="Delete contact" onClick={() => remove(c)} className="hover:text-danger">
+                        <IconButton label="Delete person" onClick={() => remove(c)} className="hover:text-danger">
                           <Trash2 size={16} strokeWidth={1.75} />
                         </IconButton>
                       </div>
@@ -423,15 +423,15 @@ export function ContactsView({
         </>
       )}
 
-      <Modal open={creating} onClose={() => setCreating(false)} title="New contact">
+      <Modal open={creating} onClose={() => setCreating(false)} title="New person">
         <ContactForm
           companies={companies}
           onSave={create}
           onCancel={() => setCreating(false)}
-          submitLabel="Create contact"
+          submitLabel="Create person"
         />
       </Modal>
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit contact">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit person">
         {editing && (
           <ContactForm
             initial={editing}

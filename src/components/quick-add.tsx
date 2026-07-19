@@ -485,7 +485,7 @@ function LinkedInImport({ onDone, onCancel }: { onDone: () => void; onCancel: ()
           ) : null}
 
           {alreadyContact ? (
-            <p className="mt-2 text-[13px] text-warning">This person is already a contact.</p>
+            <p className="mt-2 text-[13px] text-warning">This person is already in Luna Desk.</p>
           ) : existingId ? (
             <p className="mt-2 text-[13px] text-warning">Already in Luna Desk.</p>
           ) : null}
@@ -505,7 +505,7 @@ function LinkedInImport({ onDone, onCancel }: { onDone: () => void; onCancel: ()
         ) : result && !alreadyContact ? (
           <Button type="button" onClick={create} disabled={creating}>
             {creating ? <Spinner /> : <Plus size={15} strokeWidth={2} />}{" "}
-            {result.kind === "company" ? "Create company" : "Create contact"}
+            {result.kind === "company" ? "Create company" : "Create person"}
           </Button>
         ) : (
           <Button type="button" onClick={lookup} disabled={loading || !url.trim()}>

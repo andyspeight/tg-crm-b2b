@@ -35,6 +35,7 @@ export default async function TodayPage() {
   const careDue: CareDueItem[] = careBoard
     .filter(({ nextTouch }) => nextTouch?.dueDate && nextTouch.dueDate <= cutoff)
     .map(({ company, nextTouch }) => ({
+      touchId: nextTouch!.id,
       companyId: company.id,
       companyName: company.name,
       dueDate: nextTouch!.dueDate!,
@@ -45,10 +46,11 @@ export default async function TodayPage() {
     .slice(0, 10);
 
   const customers = companies.filter((c) => c.lifecycleStage === "Customer");
+  const leadStages = new Set(["Prospect", "Engaged", "Opportunity"]);
   const openDeals = deals.filter((d) => isOpen(d.stage));
   const vitals: Vitals = {
     customers: customers.length,
-    prospects: companies.filter((c) => c.lifecycleStage === "Prospect").length,
+    leads: companies.filter((c) => leadStages.has(c.lifecycleStage ?? "")).length,
     openDeals: openDeals.length,
     openMrr: openDeals.reduce((t, d) => t + (d.mrr ?? 0), 0),
     needsAttention: customers.filter((c) => c.accountHealth === "Amber" || c.accountHealth === "Red").length,
