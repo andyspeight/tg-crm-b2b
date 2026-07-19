@@ -15,6 +15,7 @@ import {
   Modal,
   Monogram,
   PageHeader,
+  Select,
   SkeletonRow,
   Spinner,
 } from "@/components/ui";
@@ -31,6 +32,13 @@ function group(lc?: string): Group {
   return "other";
 }
 type Tab = "all" | "customer" | "lead";
+type Sort = "name" | "recent" | "company";
+
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "name", label: "Name (A–Z)" },
+  { id: "recent", label: "Recently added" },
+  { id: "company", label: "Company (A–Z)" },
+];
 
 export function ContactsView({
   initial,
@@ -42,6 +50,7 @@ export function ContactsView({
   const [contacts, setContacts] = useState<Contact[]>(initial);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<Tab>("all");
+  const [sort, setSort] = useState<Sort>("name");
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
@@ -84,10 +93,22 @@ export function ContactsView({
     return { all: contacts.length, customer, lead };
   }, [contacts]);
 
-  const shown = useMemo(
-    () => (tab === "all" ? contacts : contacts.filter((c) => group(c.companyLifecycle) === tab)),
-    [contacts, tab],
-  );
+  const shown = useMemo(() => {
+    const rows = tab === "all" ? contacts : contacts.filter((c) => group(c.companyLifecycle) === tab);
+    return [...rows].sort((a, b) => {
+      switch (sort) {
+        case "recent":
+          return (b.createdTime ?? "").localeCompare(a.createdTime ?? "");
+        case "company":
+          return (
+            (a.companyName || "~").localeCompare(b.companyName || "~") ||
+            (a.name || "").localeCompare(b.name || "")
+          );
+        default:
+          return (a.name || "").localeCompare(b.name || "");
+      }
+    });
+  }, [contacts, tab, sort]);
 
   async function create(payload: Record<string, unknown>) {
     try {
@@ -193,22 +214,41 @@ export function ContactsView({
         }
       />
 
-      {/* Customer / lead filter */}
-      <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
-              tab === t.id ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
-            )}
-          >
-            {t.label}
-            <span className="tnum rounded bg-card px-1.5 text-[11px] text-fg-subtle">{t.n}</span>
-          </button>
-        ))}
+      {/* Customer / lead filter + sort */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
+                tab === t.id ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {t.label}
+              <span className="tnum rounded bg-card px-1.5 text-[11px] text-fg-subtle">{t.n}</span>
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden text-[12px] text-fg-subtle sm:inline">Sort</span>
+          <div className="w-44">
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="Sort people"
+              className="h-9 text-[13px]"
+            >
+              {SORTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
       </div>
 
       {loading && contacts.length === 0 ? (
