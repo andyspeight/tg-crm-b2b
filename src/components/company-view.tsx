@@ -67,6 +67,7 @@ import {
 } from "@/components/badges";
 import type { BadgeColor } from "@/components/ui";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
+import { useConfirm, useToast } from "@/components/feedback";
 import { OutreachModal } from "@/components/outreach-modal";
 import { StartOnboardingModal } from "@/components/start-onboarding-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -137,6 +138,8 @@ export function CompanyView({
   initialCareTouches: CareTouch[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [company, setCompany] = useState(initialCompany);
   const [contacts, setContacts] = useState(initialContacts);
   const [suggested, setSuggested] = useState(initialSuggestedContacts);
@@ -204,12 +207,17 @@ export function CompanyView({
   }
 
   async function saveCompany(payload: Record<string, unknown>) {
-    const data = await api<{ company: Company }>(`/api/companies/${company.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
-    setCompany(data.company);
-    setEditingCompany(false);
+    try {
+      const data = await api<{ company: Company }>(`/api/companies/${company.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      setCompany(data.company);
+      setEditingCompany(false);
+      toast.success("Company updated");
+    } catch (e) {
+      toast.error("Couldn't save changes", { description: (e as Error).message });
+    }
   }
   async function toggleWatchlist() {
     const data = await api<{ company: Company }>(`/api/companies/${company.id}`, {
@@ -219,25 +227,51 @@ export function CompanyView({
     setCompany(data.company);
   }
   async function deleteCompany() {
-    if (!confirm(`Delete ${company.name} and unlink its records? This cannot be undone.`)) return;
-    await api(`/api/companies/${company.id}`, { method: "DELETE" });
-    router.push("/companies");
+    const ok = await confirm({
+      title: `Delete ${company.name || "this company"}?`,
+      message: "This permanently removes the account and unlinks its contacts, deals and activity. This cannot be undone.",
+      confirmLabel: "Delete company",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/companies/${company.id}`, { method: "DELETE" });
+      toast.success(`${company.name || "Company"} deleted`);
+      router.push("/companies");
+    } catch (e) {
+      toast.error("Couldn't delete company", { description: (e as Error).message });
+    }
   }
 
   async function saveContact(payload: Record<string, unknown>) {
-    if (editingContact) {
-      await api(`/api/contacts/${editingContact.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-      setEditingContact(null);
-    } else {
-      await api(`/api/contacts`, { method: "POST", body: JSON.stringify(payload) });
-      setAddingContact(false);
+    const editing = !!editingContact;
+    try {
+      if (editingContact) {
+        await api(`/api/contacts/${editingContact.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        setEditingContact(null);
+      } else {
+        await api(`/api/contacts`, { method: "POST", body: JSON.stringify(payload) });
+        setAddingContact(false);
+      }
+      await Promise.all([refreshContacts(), refreshCompany()]);
+      toast.success(editing ? "Contact updated" : "Contact added");
+    } catch (e) {
+      toast.error("Couldn't save contact", { description: (e as Error).message });
     }
-    await Promise.all([refreshContacts(), refreshCompany()]);
   }
   async function removeContact(c: Contact) {
-    if (!confirm(`Remove ${c.name}?`)) return;
-    await api(`/api/contacts/${c.id}`, { method: "DELETE" });
-    await refreshContacts();
+    const ok = await confirm({
+      title: `Remove ${c.name || "this contact"}?`,
+      message: "This deletes the person from Luna Desk.",
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/contacts/${c.id}`, { method: "DELETE" });
+      await refreshContacts();
+      toast.success(`${c.name || "Contact"} removed`);
+    } catch (e) {
+      toast.error("Couldn't remove contact", { description: (e as Error).message });
+    }
   }
   /** Attach a domain-matched suggestion to this account. */
   async function linkSuggested(c: Contact) {
@@ -250,36 +284,72 @@ export function CompanyView({
   }
 
   async function saveDeal(payload: Record<string, unknown>) {
-    if (editingDeal) {
-      await api(`/api/deals/${editingDeal.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-      setEditingDeal(null);
-    } else {
-      await api(`/api/deals`, { method: "POST", body: JSON.stringify(payload) });
-      setAddingDeal(false);
+    const editing = !!editingDeal;
+    try {
+      if (editingDeal) {
+        await api(`/api/deals/${editingDeal.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        setEditingDeal(null);
+      } else {
+        await api(`/api/deals`, { method: "POST", body: JSON.stringify(payload) });
+        setAddingDeal(false);
+      }
+      await refreshDeals();
+      toast.success(editing ? "Deal updated" : "Deal added");
+    } catch (e) {
+      toast.error("Couldn't save deal", { description: (e as Error).message });
     }
-    await refreshDeals();
   }
   async function removeDeal(d: Deal) {
-    if (!confirm(`Remove ${d.name}?`)) return;
-    await api(`/api/deals/${d.id}`, { method: "DELETE" });
-    await refreshDeals();
+    const ok = await confirm({
+      title: `Remove ${d.name || "this deal"}?`,
+      message: "This deletes the deal from your pipeline.",
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/deals/${d.id}`, { method: "DELETE" });
+      await refreshDeals();
+      toast.success(`${d.name || "Deal"} removed`);
+    } catch (e) {
+      toast.error("Couldn't remove deal", { description: (e as Error).message });
+    }
   }
 
   async function logActivity(payload: Record<string, unknown>) {
-    await api(`/api/activities`, { method: "POST", body: JSON.stringify(payload) });
-    setLoggingActivity(false);
-    await Promise.all([refreshActivities(), refreshCompany()]);
+    try {
+      await api(`/api/activities`, { method: "POST", body: JSON.stringify(payload) });
+      setLoggingActivity(false);
+      await Promise.all([refreshActivities(), refreshCompany()]);
+      toast.success("Activity logged");
+    } catch (e) {
+      toast.error("Couldn't log activity", { description: (e as Error).message });
+    }
   }
   async function removeActivity(a: Activity) {
-    if (!confirm("Delete this activity?")) return;
-    await api(`/api/activities/${a.id}`, { method: "DELETE" });
-    await refreshActivities();
+    const ok = await confirm({
+      title: "Delete this activity?",
+      message: "This removes the entry from the timeline.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/activities/${a.id}`, { method: "DELETE" });
+      await refreshActivities();
+      toast.success("Activity deleted");
+    } catch (e) {
+      toast.error("Couldn't delete activity", { description: (e as Error).message });
+    }
   }
 
   async function addTask(payload: Record<string, unknown>) {
-    await api(`/api/tasks`, { method: "POST", body: JSON.stringify(payload) });
-    setAddingTask(false);
-    await refreshTasks();
+    try {
+      await api(`/api/tasks`, { method: "POST", body: JSON.stringify(payload) });
+      setAddingTask(false);
+      await refreshTasks();
+      toast.success("Task added");
+    } catch (e) {
+      toast.error("Couldn't add task", { description: (e as Error).message });
+    }
   }
   async function toggleTask(t: Task) {
     await api(`/api/tasks/${t.id}`, {
@@ -667,7 +737,7 @@ export function CompanyView({
                       <IconButton
                         label="Delete activity"
                         onClick={() => removeActivity(a)}
-                        className="opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                        className="hover:text-danger"
                       >
                         <Trash2 size={15} strokeWidth={1.75} />
                       </IconButton>
@@ -900,7 +970,7 @@ export function CompanyView({
                       <IconButton
                         label="Delete task"
                         onClick={() => removeTask(t)}
-                        className="h-7 w-7 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                        className="h-7 w-7 hover:text-danger"
                       >
                         <Trash2 size={14} strokeWidth={1.75} />
                       </IconButton>
@@ -1104,7 +1174,7 @@ function ContactRow({
         >
           <Sparkles size={16} strokeWidth={1.75} />
         </button>
-        <span className="ml-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+        <span className="ml-0.5 flex items-center gap-0.5">
           <IconButton label="Edit contact" onClick={onEdit} className="h-8 w-8">
             <Pencil size={15} strokeWidth={1.75} />
           </IconButton>
@@ -1141,7 +1211,7 @@ function Fact({ label, value, onAdd }: { label: string; value?: string; onAdd?: 
 
 function RowActions({ onEdit, onRemove }: { onEdit: () => void; onRemove: () => void }) {
   return (
-    <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+    <span className="flex shrink-0 items-center gap-0.5">
       <IconButton label="Edit" onClick={onEdit}>
         <Pencil size={16} strokeWidth={1.75} />
       </IconButton>

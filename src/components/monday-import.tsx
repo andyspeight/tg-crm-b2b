@@ -221,7 +221,7 @@ export function MondayImport() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button
                       variant="secondary"
                       size="sm"

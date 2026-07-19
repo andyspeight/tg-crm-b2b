@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { StageBadge } from "@/components/badges";
 import { DealForm, type CompanyOption } from "@/components/forms";
+import { useConfirm, useToast } from "@/components/feedback";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export function DealsView({ initial, companies }: { initial: Deal[]; companies: CompanyOption[] }) {
@@ -28,6 +29,9 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
   const first = useRef(true);
+  const pending = useRef<Set<string>>(new Set());
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // Opened from Today's "New deal" quick action.
   useEffect(() => {
@@ -43,7 +47,8 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
       const data = await api<{ deals: Deal[] }>(
         `/api/deals${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`,
       );
-      setDeals(data.deals);
+      // Keep optimistically-removed rows hidden until their deferred delete lands.
+      setDeals(data.deals.filter((d) => !pending.current.has(d.id)));
     } finally {
       setLoading(false);
     }
@@ -60,20 +65,68 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
   }, [q]);
 
   async function create(payload: Record<string, unknown>) {
-    await api("/api/deals", { method: "POST", body: JSON.stringify(payload) });
-    setCreating(false);
-    await refresh();
+    try {
+      await api("/api/deals", { method: "POST", body: JSON.stringify(payload) });
+      setCreating(false);
+      await refresh();
+      toast.success("Deal added");
+    } catch (e) {
+      toast.error("Couldn't add deal", { description: (e as Error).message });
+    }
   }
   async function update(payload: Record<string, unknown>) {
     if (!editing) return;
-    await api(`/api/deals/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-    setEditing(null);
-    await refresh();
+    const name = editing.name;
+    try {
+      await api(`/api/deals/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      setEditing(null);
+      await refresh();
+      toast.success(`${name || "Deal"} updated`);
+    } catch (e) {
+      toast.error("Couldn't save changes", { description: (e as Error).message });
+    }
   }
   async function remove(d: Deal) {
-    if (!confirm(`Delete ${d.name}?`)) return;
-    await api(`/api/deals/${d.id}`, { method: "DELETE" });
-    await refresh();
+    const ok = await confirm({
+      title: `Delete ${d.name || "this deal"}?`,
+      message: "This removes the deal from your pipeline.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+
+    // Optimistic: hide now, actually delete when the undo window closes.
+    const idx = deals.findIndex((x) => x.id === d.id);
+    pending.current.add(d.id);
+    setDeals((xs) => xs.filter((x) => x.id !== d.id));
+
+    let undone = false;
+    toast.success(`${d.name || "Deal"} deleted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          pending.current.delete(d.id);
+          setDeals((xs) => {
+            if (xs.some((x) => x.id === d.id)) return xs;
+            const next = [...xs];
+            next.splice(Math.min(idx, next.length), 0, d);
+            return next;
+          });
+        },
+      },
+    });
+
+    window.setTimeout(async () => {
+      if (undone) return;
+      try {
+        await api(`/api/deals/${d.id}`, { method: "DELETE" });
+      } catch (e) {
+        toast.error(`Couldn't delete ${d.name || "deal"}`, { description: (e as Error).message });
+        await refresh();
+      } finally {
+        pending.current.delete(d.id);
+      }
+    }, 6000);
   }
 
   const totalMrr = deals.reduce((sum, d) => sum + (d.mrr ?? 0), 0);
@@ -169,16 +222,26 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                     Next step
                   </th>
-                  <th className="px-4 py-3" />
+                  <th className="sticky right-0 z-10 bg-card px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {deals.map((d) => (
                   <tr
                     key={d.id}
-                    className="group border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50"
+                    onClick={() => setEditing(d)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditing(d);
+                      }
+                    }}
+                    className="group cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
                   >
-                    <td className="px-4 py-3 group-hover:[box-shadow:inset_3px_0_0_var(--accent-strong)]">
+                    <td className="relative px-4 py-3">
+                      <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
                       <div className="flex items-center gap-3">
                         <Monogram name={d.name || "Untitled"} tone="navy" />
                         <span className="font-medium text-fg">{d.name || "Untitled"}</span>
@@ -188,6 +251,7 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
                       {d.companyId ? (
                         <Link
                           href={`/companies/${d.companyId}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="text-fg transition-colors hover:text-accent-strong"
                         >
                           {d.companyName || "Company"}
@@ -220,8 +284,8 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
                         <span className="text-fg-subtle">—</span>
                       )}
                     </td>
-                    <td className="px-2 py-2">
-                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+                    <td className="sticky right-0 z-10 bg-card px-2 py-2 group-hover:bg-muted">
+                      <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
                         <IconButton label="Edit deal" onClick={() => setEditing(d)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
@@ -258,7 +322,7 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
           <ul className="space-y-3 sm:hidden">
             {deals.map((d, i) => (
               <li key={d.id} className="luna-rise" style={{ "--i": Math.min(i, 12) } as React.CSSProperties}>
-                <Card>
+                <Card onClick={() => setEditing(d)}>
                   <div className="flex items-start gap-3 p-4">
                     <Monogram name={d.name || "Untitled"} tone="navy" />
                     <div className="min-w-0 flex-1">
@@ -277,6 +341,7 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
                       {d.companyId ? (
                         <Link
                           href={`/companies/${d.companyId}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="mt-0.5 block truncate text-[13px] text-fg-muted transition-colors hover:text-accent-strong"
                         >
                           {d.companyName || "Company"}
@@ -286,7 +351,7 @@ export function DealsView({ initial, companies }: { initial: Deal[]; companies: 
                       )}
                       <div className="mt-2.5 flex items-center justify-between gap-2">
                         <StageBadge value={d.stage} />
-                        <div className="flex gap-0.5">
+                        <div onClick={(e) => e.stopPropagation()} className="flex gap-0.5">
                           <IconButton label="Edit deal" onClick={() => setEditing(d)}>
                             <Pencil size={16} strokeWidth={1.75} />
                           </IconButton>

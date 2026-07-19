@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -30,6 +31,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { HealthBadge, healthColor } from "@/components/badges";
+import { useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
 
 type CareRow = { company: Company; nextTouch?: CareTouch };
@@ -58,6 +60,8 @@ function categoryOf(r: CareRow): View {
 const CATEGORY_RANK: Record<View, number> = { overdue: 0, unscheduled: 1, ontrack: 2, all: 3 };
 
 export function CareBoardView({ initial }: { initial: CareRow[] }) {
+  const router = useRouter();
+  const toast = useToast();
   const [rows, setRows] = useState<CareRow[]>(initial);
   const [health, setHealth] = useState("");
   const [cadence, setCadence] = useState("");
@@ -239,7 +243,7 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                     Next touch
                   </th>
-                  <th className="px-4 py-3" />
+                  <th className="sticky right-0 z-10 bg-card px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -249,13 +253,23 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
                   return (
                     <tr
                       key={r.company.id}
-                      className={`group border-b border-b-border-soft border-l-2 ${railClass(r.company.accountHealth)} transition-colors last:border-b-0 hover:bg-muted/50`}
+                      onClick={() => router.push(`/companies/${r.company.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/companies/${r.company.id}`);
+                        }
+                      }}
+                      className={`group cursor-pointer border-b border-b-border-soft border-l-2 ${railClass(r.company.accountHealth)} transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none`}
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <Monogram name={r.company.name} size="sm" tone="navy" />
                           <Link
                             href={`/companies/${r.company.id}`}
+                            onClick={(e) => e.stopPropagation()}
                             className="font-medium text-fg hover:text-accent-strong"
                           >
                             {r.company.name}
@@ -281,14 +295,16 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
                           <span className="text-[13px] font-medium text-warning">Not scheduled</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="sticky right-0 z-10 bg-card px-2 py-2 text-right group-hover:bg-muted">
                         {t ? (
-                          <div className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
-                            <Button variant="ghost" size="sm" onClick={() => setLogging(r)}>
+                          <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+                            <Button variant="secondary" size="sm" onClick={() => setLogging(r)}>
                               <CheckCircle2 size={15} strokeWidth={1.75} /> Log touch
                             </Button>
                           </div>
-                        ) : null}
+                        ) : (
+                          <span className="text-fg-subtle">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -304,11 +320,15 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
               const overdue = t ? isPast(t.dueDate) : false;
               return (
                 <div key={r.company.id} className="luna-rise" style={{ "--i": Math.min(i, 12) } as React.CSSProperties}>
-                  <Card className={`border-l-2 ${railClass(r.company.accountHealth)} p-3.5`}>
+                  <Card
+                    onClick={() => router.push(`/companies/${r.company.id}`)}
+                    className={`border-l-2 ${railClass(r.company.accountHealth)} p-3.5`}
+                  >
                     <div className="flex items-center gap-2.5">
                       <Monogram name={r.company.name} size="sm" tone="navy" />
                       <Link
                         href={`/companies/${r.company.id}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="min-w-0 flex-1 truncate font-medium text-fg"
                       >
                         {r.company.name}
@@ -328,9 +348,11 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
                         <span className="font-medium text-warning">Not scheduled</span>
                       )}
                       {t ? (
-                        <Button variant="ghost" size="sm" onClick={() => setLogging(r)}>
-                          <CheckCircle2 size={15} strokeWidth={1.75} /> Log
-                        </Button>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Button variant="secondary" size="sm" onClick={() => setLogging(r)}>
+                            <CheckCircle2 size={15} strokeWidth={1.75} /> Log
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   </Card>
@@ -352,6 +374,7 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
             onDone={async () => {
               setLogging(null);
               await refresh();
+              toast.success("Touch logged", { description: "The next one is scheduled per cadence." });
             }}
             onCancel={() => setLogging(null)}
           />

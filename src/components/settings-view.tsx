@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Mail, Plug } from "lucide-react";
 import { api } from "@/lib/client";
 import { Button, InlineAlert, PageHeader, Spinner } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
 
 type Status = {
@@ -17,6 +18,8 @@ type Status = {
 
 export function SettingsView() {
   const params = useSearchParams();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
@@ -36,12 +39,18 @@ export function SettingsView() {
   }, []);
 
   async function disconnect() {
-    if (!confirm("Disconnect Gmail? You won't be able to send email from Luna Desk until you reconnect.")) return;
+    const ok = await confirm({
+      title: "Disconnect Gmail?",
+      message: "You won't be able to send email from Luna Desk until you reconnect.",
+      confirmLabel: "Disconnect",
+    });
+    if (!ok) return;
     setWorking(true);
     setError("");
     try {
       await api("/api/google/disconnect", { method: "POST" });
       await load();
+      toast.success("Gmail disconnected");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't disconnect");
     } finally {

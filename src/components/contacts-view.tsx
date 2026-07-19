@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
+import { useConfirm, useToast } from "@/components/feedback";
 
 const CUSTOMER_LC = new Set(["Customer", "At Risk"]);
 const LEAD_LC = new Set(["Prospect", "Engaged", "Opportunity"]);
@@ -45,6 +46,9 @@ export function ContactsView({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const first = useRef(true);
+  const pending = useRef<Set<string>>(new Set());
+  const toast = useToast();
+  const confirm = useConfirm();
 
   async function refresh(term = q) {
     setLoading(true);
@@ -52,7 +56,8 @@ export function ContactsView({
       const data = await api<{ contacts: Contact[] }>(
         `/api/contacts${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`,
       );
-      setContacts(data.contacts);
+      // Keep optimistically-removed rows hidden until their deferred delete lands.
+      setContacts(data.contacts.filter((c) => !pending.current.has(c.id)));
     } finally {
       setLoading(false);
     }
@@ -85,20 +90,68 @@ export function ContactsView({
   );
 
   async function create(payload: Record<string, unknown>) {
-    await api("/api/contacts", { method: "POST", body: JSON.stringify(payload) });
-    setCreating(false);
-    await refresh();
+    try {
+      await api("/api/contacts", { method: "POST", body: JSON.stringify(payload) });
+      setCreating(false);
+      await refresh();
+      toast.success("Contact added");
+    } catch (e) {
+      toast.error("Couldn't add contact", { description: (e as Error).message });
+    }
   }
   async function update(payload: Record<string, unknown>) {
     if (!editing) return;
-    await api(`/api/contacts/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-    setEditing(null);
-    await refresh();
+    const name = editing.name;
+    try {
+      await api(`/api/contacts/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      setEditing(null);
+      await refresh();
+      toast.success(`${name || "Contact"} updated`);
+    } catch (e) {
+      toast.error("Couldn't save changes", { description: (e as Error).message });
+    }
   }
   async function remove(c: Contact) {
-    if (!confirm(`Delete ${c.name}?`)) return;
-    await api(`/api/contacts/${c.id}`, { method: "DELETE" });
-    await refresh();
+    const ok = await confirm({
+      title: `Delete ${c.name || "this contact"}?`,
+      message: "This removes the person from Luna Desk.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+
+    // Optimistic: hide now, actually delete when the undo window closes.
+    const idx = contacts.findIndex((x) => x.id === c.id);
+    pending.current.add(c.id);
+    setContacts((xs) => xs.filter((x) => x.id !== c.id));
+
+    let undone = false;
+    toast.success(`${c.name || "Contact"} deleted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          pending.current.delete(c.id);
+          setContacts((xs) => {
+            if (xs.some((x) => x.id === c.id)) return xs;
+            const next = [...xs];
+            next.splice(Math.min(idx, next.length), 0, c);
+            return next;
+          });
+        },
+      },
+    });
+
+    window.setTimeout(async () => {
+      if (undone) return;
+      try {
+        await api(`/api/contacts/${c.id}`, { method: "DELETE" });
+      } catch (e) {
+        toast.error(`Couldn't delete ${c.name || "contact"}`, { description: (e as Error).message });
+        await refresh();
+      } finally {
+        pending.current.delete(c.id);
+      }
+    }, 6000);
   }
 
   const TABS: { id: Tab; label: string; n: number }[] = [
