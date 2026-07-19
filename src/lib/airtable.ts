@@ -174,3 +174,20 @@ export async function deleteRecord(
 ): Promise<void> {
   await request(`${baseId}/${tableId}/${recordId}`, { method: "DELETE" });
 }
+
+/** Delete many records, chunked to Airtable's 10-per-request limit. Returns how many were deleted. */
+export async function deleteRecords(baseId: string, tableId: string, ids: string[]): Promise<number> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  let deleted = 0;
+  for (let i = 0; i < unique.length; i += 10) {
+    if (i > 0) await sleep(220); // stay under Airtable's ~5 req/s limit
+    const params = new URLSearchParams();
+    unique.slice(i, i + 10).forEach((id) => params.append("records[]", id));
+    const data = await request<{ records?: { id: string; deleted?: boolean }[] }>(
+      `${baseId}/${tableId}?${params.toString()}`,
+      { method: "DELETE" },
+    );
+    deleted += (data.records || []).filter((r) => r.deleted).length;
+  }
+  return deleted;
+}

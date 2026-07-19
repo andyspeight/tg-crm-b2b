@@ -52,6 +52,7 @@ import {
   createRecord,
   createRecords,
   deleteRecord,
+  deleteRecords,
   getRecord,
   listRecords,
   updateRecord,
@@ -1370,4 +1371,414 @@ export async function startOnboarding(
   }).catch((e) => console.error("[startOnboarding] activity log failed:", e));
 
   return { clientId, alreadyStarted: false };
+}
+
+// --- tidy: dedupe + junk cleanup (Wave 2) ----------------------------------
+
+export interface DupCompany {
+  id: string;
+  name: string;
+  website?: string;
+  linkedin?: string;
+  lifecycleStage?: string;
+  mrr?: number;
+  country?: string;
+  contacts: number;
+  deals: number;
+  activities: number;
+  createdTime?: string;
+}
+export interface DupContact {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+  role?: string;
+  companyId?: string;
+  companyName?: string;
+  createdTime?: string;
+}
+export interface DupGroup<T> {
+  reason: string;
+  /** The record the app suggests keeping (richest / oldest). */
+  primaryId: string;
+  records: T[];
+}
+export interface JunkRecord {
+  id: string;
+  name: string;
+  reason: string;
+}
+export interface CleanupPlan {
+  duplicateCompanies: DupGroup<DupCompany>[];
+  duplicateContacts: DupGroup<DupContact>[];
+  junkCompanies: JunkRecord[];
+  junkContacts: JunkRecord[];
+}
+
+/** Normalise a LinkedIn (or any) URL into a stable identity key. */
+function urlKey(url?: string): string {
+  const u = (url || "")
+    .toLowerCase()
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("?")[0]
+    .split("#")[0]
+    .replace(/\/+$/, "");
+  return u.length >= 6 ? u : "";
+}
+
+/** Union-find grouping: any two items sharing a signature land in one group. */
+function groupBySignatures<T>(items: T[], sig: (t: T) => string[]): T[][] {
+  const parent = items.map((_, i) => i);
+  const find = (i: number): number => {
+    let r = i;
+    while (parent[r] !== r) r = parent[r];
+    while (parent[i] !== r) {
+      const next = parent[i];
+      parent[i] = r;
+      i = next;
+    }
+    return r;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+  const firstSeen = new Map<string, number>();
+  items.forEach((it, i) => {
+    for (const s of sig(it)) {
+      if (!s) continue;
+      const prev = firstSeen.get(s);
+      if (prev === undefined) firstSeen.set(s, i);
+      else union(prev, i);
+    }
+  });
+  const groups = new Map<number, T[]>();
+  items.forEach((it, i) => {
+    const root = find(i);
+    const g = groups.get(root);
+    if (g) g.push(it);
+    else groups.set(root, [it]);
+  });
+  return [...groups.values()].filter((g) => g.length >= 2);
+}
+
+function companySigs(c: Company): string[] {
+  const out: string[] = [];
+  const nk = nameKey(c.name);
+  if (nk.length >= 3) out.push(`n:${nk}`);
+  if (c.website) {
+    const b = hostBrand(c.website);
+    if (b.length >= 3) out.push(`w:${b}`);
+  }
+  const li = urlKey(c.linkedin);
+  if (li) out.push(`l:${li}`);
+  return out;
+}
+function contactSigs(c: Contact): string[] {
+  const out: string[] = [];
+  const email = (c.email || "").toLowerCase().trim();
+  if (email.includes("@")) out.push(`e:${email}`);
+  const li = urlKey(c.linkedin);
+  if (li) out.push(`l:${li}`);
+  const nk = nameKey(c.name);
+  if (nk.length >= 4 && c.companyId) out.push(`nc:${nk}:${c.companyId}`);
+  return out;
+}
+
+function companyScore(c: Company): number {
+  let s =
+    c.contactIds.length * 3 +
+    c.dealIds.length * 3 +
+    c.activityIds.length * 2 +
+    c.taskIds.length;
+  for (const v of [
+    c.website,
+    c.type,
+    c.country,
+    c.linkedin,
+    c.description,
+    c.mrr,
+    c.accountHealth,
+    c.careCadence,
+    c.planTier,
+  ]) {
+    if (v != null && v !== "") s += 1;
+  }
+  if (c.lifecycleStage && CUSTOMER_LIFECYCLES.has(c.lifecycleStage)) s += 5;
+  return s;
+}
+function contactScore(c: Contact): number {
+  let s = 0;
+  for (const v of [c.email, c.phone, c.linkedin, c.role, c.notes, c.headline, c.location]) {
+    if (v) s += 1;
+  }
+  if (c.companyId) s += 3;
+  return s;
+}
+
+function companyReason(recs: Company[]): string {
+  const nk = recs.map((c) => nameKey(c.name));
+  if (nk.every((k) => k && k === nk[0])) return "Same name";
+  const wb = recs.map((c) => (c.website ? hostBrand(c.website) : ""));
+  if (wb.every((b) => b && b === wb[0])) return "Same website";
+  const li = recs.map((c) => urlKey(c.linkedin));
+  if (li.every((k) => k && k === li[0])) return "Same LinkedIn";
+  return "Likely the same";
+}
+function contactReason(recs: Contact[]): string {
+  const em = recs.map((c) => (c.email || "").toLowerCase().trim());
+  if (em.every((e) => e && e === em[0])) return "Same email";
+  const li = recs.map((c) => urlKey(c.linkedin));
+  if (li.every((k) => k && k === li[0])) return "Same LinkedIn";
+  return "Same name at company";
+}
+
+function toDupCompany(c: Company): DupCompany {
+  return {
+    id: c.id,
+    name: c.name,
+    website: c.website,
+    linkedin: c.linkedin,
+    lifecycleStage: c.lifecycleStage,
+    mrr: c.mrr,
+    country: c.country,
+    contacts: c.contactIds.length,
+    deals: c.dealIds.length,
+    activities: c.activityIds.length,
+    createdTime: c.createdTime,
+  };
+}
+function toDupContact(c: Contact): DupContact {
+  return {
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    linkedin: c.linkedin,
+    role: c.role,
+    companyId: c.companyId,
+    companyName: c.companyName,
+    createdTime: c.createdTime,
+  };
+}
+
+/**
+ * Find likely-duplicate companies and people, plus junk/orphan records — all as a
+ * preview. Nothing is changed here; the UI shows this and the human confirms every
+ * merge or deletion (brief zero-admin bias, but never a silent edit).
+ */
+export async function planCleanup(): Promise<CleanupPlan> {
+  const [companies, contacts] = await Promise.all([listCompanies(), listContacts()]);
+
+  const olderFirst = (a: { createdTime?: string }, b: { createdTime?: string }) =>
+    (a.createdTime || "").localeCompare(b.createdTime || "");
+
+  const duplicateCompanies: DupGroup<DupCompany>[] = groupBySignatures(companies, companySigs)
+    .map((recs) => {
+      const ranked = [...recs].sort((a, b) => companyScore(b) - companyScore(a) || olderFirst(a, b));
+      return {
+        reason: companyReason(recs),
+        primaryId: ranked[0].id,
+        records: ranked.map(toDupCompany),
+      };
+    })
+    .sort((a, b) => b.records.length - a.records.length);
+
+  const duplicateContacts: DupGroup<DupContact>[] = groupBySignatures(contacts, contactSigs)
+    .map((recs) => {
+      const ranked = [...recs].sort((a, b) => contactScore(b) - contactScore(a) || olderFirst(a, b));
+      return {
+        reason: contactReason(recs),
+        primaryId: ranked[0].id,
+        records: ranked.map(toDupContact),
+      };
+    })
+    .sort((a, b) => b.records.length - a.records.length);
+
+  const junkCompanies: JunkRecord[] = companies
+    .filter((c) => nameKey(c.name) === "")
+    .map((c) => ({ id: c.id, name: c.name || "(no name)", reason: "No name" }));
+
+  const junkContacts: JunkRecord[] = contacts
+    .filter((c) => !c.companyId && !c.email && !c.phone && !c.linkedin)
+    .map((c) => ({ id: c.id, name: c.name || "(no name)", reason: "No company, email or phone" }));
+
+  return { duplicateCompanies, duplicateContacts, junkCompanies, junkContacts };
+}
+
+/** Re-point a set of child records at a new company (linked-record field). */
+async function relinkToCompany(
+  tableId: string,
+  companyField: string,
+  ids: string[],
+  companyId: string,
+): Promise<number> {
+  const records = [...new Set(ids)]
+    .filter(Boolean)
+    .map((id) => ({ id, fields: { [companyField]: [companyId] } }));
+  if (records.length === 0) return 0;
+  const updated = await updateRecords(AIRTABLE_BASE_ID, tableId, records);
+  return updated.length;
+}
+
+/** Fill only the primary's blank fields from the secondaries — never overwrite. */
+function fillCompanyBlanks(primary: Company, secondaries: Company[]): CompanyInput {
+  const keys: (keyof CompanyInput)[] = [
+    "website",
+    "type",
+    "country",
+    "region",
+    "linkedin",
+    "socials",
+    "lifecycleStage",
+    "planTier",
+    "mrr",
+    "goLiveDate",
+    "renewalDate",
+    "accountHealth",
+    "careCadence",
+    "productsUsed",
+    "description",
+    "sizeBand",
+  ];
+  const patch: CompanyInput = {};
+  for (const k of keys) {
+    const cur = primary[k as keyof Company];
+    if (cur != null && cur !== "") continue;
+    for (const s of secondaries) {
+      const v = s[k as keyof Company];
+      if (v != null && v !== "") {
+        (patch as Record<string, unknown>)[k] = v;
+        break;
+      }
+    }
+  }
+  return patch;
+}
+
+function fillContactBlanks(primary: Contact, secondaries: Contact[]): ContactInput {
+  const keys: (keyof ContactInput)[] = [
+    "role",
+    "email",
+    "phone",
+    "linkedin",
+    "marketingOptIn",
+    "notes",
+    "headline",
+    "location",
+    "companyId",
+  ];
+  const patch: ContactInput = {};
+  for (const k of keys) {
+    const cur = primary[k as keyof Contact];
+    if (cur != null && cur !== "") continue;
+    for (const s of secondaries) {
+      const v = s[k as keyof Contact];
+      if (v != null && v !== "") {
+        (patch as Record<string, unknown>)[k] = v;
+        break;
+      }
+    }
+  }
+  return patch;
+}
+
+/**
+ * Merge duplicate companies into one. The primary is kept; every secondary's
+ * contacts, deals, activities, tasks and care touches are re-pointed at the
+ * primary, the primary's blank fields are filled from the secondaries, then the
+ * secondaries are deleted. Returns how many child records moved.
+ */
+export async function mergeCompanies(
+  primaryId: string,
+  secondaryIds: string[],
+): Promise<{ moved: number; merged: number }> {
+  const secondaries = [...new Set(secondaryIds)].filter((id) => id && id !== primaryId);
+  if (secondaries.length === 0) return { moved: 0, merged: 0 };
+
+  const primary = await getCompany(primaryId);
+  const secCompanies: Company[] = [];
+  for (const id of secondaries) secCompanies.push(await getCompany(id));
+
+  const contactIds = new Set<string>();
+  const dealIds = new Set<string>();
+  const activityIds = new Set<string>();
+  const taskIds = new Set<string>();
+  for (const s of secCompanies) {
+    s.contactIds.forEach((x) => contactIds.add(x));
+    s.dealIds.forEach((x) => dealIds.add(x));
+    s.activityIds.forEach((x) => activityIds.add(x));
+    s.taskIds.forEach((x) => taskIds.add(x));
+  }
+
+  let moved = 0;
+  moved += await relinkToCompany(TABLES.contacts, FIELDS.contacts.company, [...contactIds], primaryId);
+  moved += await relinkToCompany(TABLES.deals, FIELDS.deals.company, [...dealIds], primaryId);
+  moved += await relinkToCompany(TABLES.activities, FIELDS.activities.company, [...activityIds], primaryId);
+  moved += await relinkToCompany(TABLES.tasks, FIELDS.tasks.company, [...taskIds], primaryId);
+
+  // Care touches link to a company but aren't in the reverse-link set — scan + move.
+  const secSet = new Set(secondaries);
+  const careRecs = await listRecords(AIRTABLE_BASE_ID, TABLES.careTouches, {
+    fields: [FIELDS.careTouches.company],
+    maxRecords: 5000,
+  });
+  const careMove = careRecs
+    .filter((r) => secSet.has(firstId(r.fields[FIELDS.careTouches.company]) ?? ""))
+    .map((r) => r.id);
+  moved += await relinkToCompany(TABLES.careTouches, FIELDS.careTouches.company, careMove, primaryId);
+
+  const patch = fillCompanyBlanks(primary, secCompanies);
+  if (Object.keys(patch).length) await updateCompany(primaryId, patch);
+
+  await deleteRecords(AIRTABLE_BASE_ID, TABLES.companies, secondaries);
+  return { moved, merged: secondaries.length };
+}
+
+/**
+ * Merge duplicate people into one. The primary is kept; each secondary's linked
+ * activities are re-pointed at the primary, blank fields are filled from the
+ * secondaries, then the secondaries are deleted.
+ */
+export async function mergeContacts(
+  primaryId: string,
+  secondaryIds: string[],
+): Promise<{ moved: number; merged: number }> {
+  const secondaries = [...new Set(secondaryIds)].filter((id) => id && id !== primaryId);
+  if (secondaries.length === 0) return { moved: 0, merged: 0 };
+
+  const primary = await getContact(primaryId);
+  const secContacts: Contact[] = [];
+  for (const id of secondaries) secContacts.push(await getContact(id));
+
+  const secSet = new Set(secondaries);
+  const actRecs = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    fields: [FIELDS.activities.contact],
+    maxRecords: 5000,
+  });
+  const moveIds = actRecs
+    .filter((r) => secSet.has(firstId(r.fields[FIELDS.activities.contact]) ?? ""))
+    .map((r) => ({ id: r.id, fields: { [FIELDS.activities.contact]: [primaryId] } }));
+  let moved = 0;
+  if (moveIds.length) moved = (await updateRecords(AIRTABLE_BASE_ID, TABLES.activities, moveIds)).length;
+
+  const patch = fillContactBlanks(primary, secContacts);
+  if (Object.keys(patch).length) await updateContact(primaryId, patch);
+
+  await deleteRecords(AIRTABLE_BASE_ID, TABLES.contacts, secondaries);
+  return { moved, merged: secondaries.length };
+}
+
+/** Bulk-delete junk companies (their child links simply clear on delete). */
+export async function deleteCompanies(ids: string[]): Promise<number> {
+  return deleteRecords(AIRTABLE_BASE_ID, TABLES.companies, ids);
+}
+/** Bulk-delete junk contacts. */
+export async function deleteContacts(ids: string[]): Promise<number> {
+  return deleteRecords(AIRTABLE_BASE_ID, TABLES.contacts, ids);
 }
