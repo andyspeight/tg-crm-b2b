@@ -269,7 +269,7 @@ export function PipelineView({
       ) : null}
 
       {view === "board" ? (
-      <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-3">
+      <div className="-mx-1 mt-4 flex items-start gap-3 overflow-x-auto px-1 pb-3">
         {stages.map((stage) => {
           const items = byStage.get(stage.name) ?? [];
           const total = items.reduce((s, d) => s + (d.mrr ?? 0), 0);
@@ -314,7 +314,7 @@ export function PipelineView({
                 </IconButton>
               </div>
 
-              <div className="flex min-h-16 flex-1 flex-col gap-2 p-2">
+              <div className="flex max-h-[calc(100dvh-15rem)] min-h-16 flex-1 flex-col gap-2 overflow-y-auto p-2">
                 {items.length === 0 ? (
                   <p className="luna-fade px-1 py-6 text-center text-[12px] text-fg-subtle">
                     {active ? "Drop here" : "No deals"}
