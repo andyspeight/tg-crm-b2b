@@ -83,6 +83,13 @@ function firstId(v: unknown): string | undefined {
   return idList(v)[0];
 }
 
+// List views load the whole directory (paginated), not a truncated page — the
+// old 1,000 cap silently cut the People/Companies lists off partway (e.g. at "S").
+const LIST_CAP = 50000;
+// Above this many ids, filter-by-record-id formulas risk Airtable's length limit,
+// so we scan the (small) companies table once instead.
+const ID_FILTER_MAX = 100;
+
 // --- write validation helpers ----------------------------------------------
 
 /** Trim to a non-empty string, or null to clear the field. */
@@ -336,7 +343,7 @@ export async function listCompanies(opts: { q?: string; limit?: number } = {}): 
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.companies, {
     filterByFormula,
     sort: [{ field: F.name, direction: "asc" }],
-    maxRecords: opts.limit ?? 1000,
+    maxRecords: opts.limit ?? LIST_CAP,
   });
   return records.map(toCompany);
 }
@@ -411,7 +418,7 @@ export async function listContacts(opts: { q?: string; limit?: number } = {}): P
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
     filterByFormula,
     sort: [{ field: F.name, direction: "asc" }],
-    maxRecords: opts.limit ?? 1000,
+    maxRecords: opts.limit ?? LIST_CAP,
   });
   const contacts = records.map(toContact);
   await attachCompanyNames(contacts);
@@ -530,7 +537,7 @@ export async function listDeals(opts: { q?: string; limit?: number } = {}): Prom
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.deals, {
     filterByFormula,
     sort: [{ field: F.name, direction: "asc" }],
-    maxRecords: opts.limit ?? 1000,
+    maxRecords: opts.limit ?? LIST_CAP,
   });
   const deals = records.map(toDeal);
   await attachDealCompanyNames(deals);
@@ -1105,10 +1112,13 @@ async function companyNameMap(ids: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (unique.length === 0) return map;
   const F = FIELDS.companies;
+  // Small sets: fetch by id. Large sets (full list views): one scan of the table,
+  // to stay clear of Airtable's filterByFormula length limit.
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.companies, {
-    filterByFormula: idFormula(unique),
+    ...(unique.length <= ID_FILTER_MAX
+      ? { filterByFormula: idFormula(unique), maxRecords: unique.length }
+      : { maxRecords: LIST_CAP }),
     fields: [F.name],
-    maxRecords: unique.length,
   });
   for (const rec of records) map.set(rec.id, str(rec.fields[F.name]) ?? "");
   return map;
@@ -1121,9 +1131,10 @@ async function companyMetaMap(ids: string[]): Promise<Map<string, { name: string
   if (unique.length === 0) return map;
   const F = FIELDS.companies;
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.companies, {
-    filterByFormula: idFormula(unique),
+    ...(unique.length <= ID_FILTER_MAX
+      ? { filterByFormula: idFormula(unique), maxRecords: unique.length }
+      : { maxRecords: LIST_CAP }),
     fields: [F.name, F.lifecycleStage],
-    maxRecords: unique.length,
   });
   for (const rec of records) {
     map.set(rec.id, {
