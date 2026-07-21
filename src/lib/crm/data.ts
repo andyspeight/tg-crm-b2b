@@ -60,6 +60,7 @@ import {
 } from "@/lib/airtable";
 import { getSetting, setSetting } from "@/lib/settings";
 import { emailBrand, hostBrand, nameKey } from "@/lib/domain";
+import { normalizePhone } from "@/lib/format";
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -216,7 +217,7 @@ function toContact(rec: AirtableRecord): Contact {
     name: str(f[F.name]) ?? "",
     role: str(f[F.role]),
     email: str(f[F.email]),
-    phone: str(f[F.phone]),
+    phone: normalizePhone(str(f[F.phone])),
     linkedin: str(f[F.linkedin]),
     marketingOptIn: str(f[F.marketingOptIn]) as Contact["marketingOptIn"],
     notes: str(f[F.notes]),
@@ -292,7 +293,7 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
   if (!partial || has("name")) f[F.name] = requiredText(input.name, "Contact name");
   if (has("role")) f[F.role] = text(input.role);
   if (has("email")) f[F.email] = text(input.email);
-  if (has("phone")) f[F.phone] = text(input.phone);
+  if (has("phone")) f[F.phone] = normalizePhone(text(input.phone)) ?? null;
   if (has("linkedin")) f[F.linkedin] = text(input.linkedin);
   if (has("marketingOptIn"))
     f[F.marketingOptIn] = enumOrNull(input.marketingOptIn, MARKETING_OPT_IN, "marketing opt-in");

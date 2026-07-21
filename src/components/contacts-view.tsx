@@ -40,6 +40,13 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "company", label: "Company (A–Z)" },
 ];
 
+const ALPHABET = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))];
+/** Index letter for a name — first letter uppercased, or "#" for anything else. */
+function firstLetter(name?: string): string {
+  const ch = (name || "").trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(ch) ? ch : "#";
+}
+
 export function ContactsView({
   initial,
   companies,
@@ -109,6 +116,34 @@ export function ContactsView({
       }
     });
   }, [contacts, tab, sort]);
+
+  // A–Z jump bar — only meaningful when the list is in name order.
+  const jumpEnabled = sort === "name";
+  const presentLetters = useMemo(
+    () => new Set(shown.map((c) => firstLetter(c.name))),
+    [shown],
+  );
+  // The contact id that starts each letter block (gets the scroll anchor).
+  const anchorLetterById = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!jumpEnabled) return map;
+    const seen = new Set<string>();
+    for (const c of shown) {
+      const l = firstLetter(c.name);
+      if (!seen.has(l)) {
+        seen.add(l);
+        map.set(c.id, l);
+      }
+    }
+    return map;
+  }, [shown, jumpEnabled]);
+
+  function jumpTo(letter: string) {
+    const el = [`ppl-d-${letter}`, `ppl-m-${letter}`]
+      .map((id) => document.getElementById(id))
+      .find((e) => e && e.offsetParent !== null);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function create(payload: Record<string, unknown>) {
     try {
@@ -251,6 +286,31 @@ export function ContactsView({
         </div>
       </div>
 
+      {jumpEnabled && shown.length > 12 ? (
+        <div className="sticky top-[52px] z-10 -mx-1 flex flex-wrap items-center justify-center gap-0.5 rounded-xl border border-border bg-card/90 px-2 py-1.5 shadow-card backdrop-blur">
+          {ALPHABET.map((L) => {
+            const on = presentLetters.has(L);
+            return (
+              <button
+                key={L}
+                type="button"
+                disabled={!on}
+                onClick={() => jumpTo(L)}
+                aria-label={`Jump to ${L === "#" ? "other" : L}`}
+                className={cn(
+                  "h-6 w-6 rounded-md text-[11px] font-semibold transition-colors",
+                  on
+                    ? "text-fg-muted hover:bg-accent-soft hover:text-accent-strong"
+                    : "cursor-default text-fg-subtle/40",
+                )}
+              >
+                {L}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {loading && contacts.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -303,6 +363,7 @@ export function ContactsView({
                 {shown.map((c) => (
                   <tr
                     key={c.id}
+                    id={anchorLetterById.has(c.id) ? `ppl-d-${anchorLetterById.get(c.id)}` : undefined}
                     onClick={() => setEditing(c)}
                     role="button"
                     tabIndex={0}
@@ -312,7 +373,7 @@ export function ContactsView({
                         setEditing(c);
                       }
                     }}
-                    className="group cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
+                    className="group scroll-mt-[104px] cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
                   >
                     <td className="relative px-4 py-3">
                       <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -376,7 +437,12 @@ export function ContactsView({
           {/* Mobile card list */}
           <div className="luna-fade space-y-2.5 sm:hidden">
             {shown.map((c) => (
-              <Card key={c.id} onClick={() => setEditing(c)} className="p-3.5">
+              <div
+                key={c.id}
+                id={anchorLetterById.has(c.id) ? `ppl-m-${anchorLetterById.get(c.id)}` : undefined}
+                className="scroll-mt-[104px]"
+              >
+              <Card onClick={() => setEditing(c)} className="p-3.5">
                 <div className="flex items-start gap-3">
                   <Monogram name={c.name || "Unnamed"} size="sm" tone="accent" />
                   <div className="min-w-0 flex-1">
@@ -418,6 +484,7 @@ export function ContactsView({
                   </div>
                 </div>
               </Card>
+              </div>
             ))}
           </div>
         </>
