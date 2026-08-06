@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   ACCOUNT_HEALTH,
   ACTIVITY_TYPES,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/crm/config";
 import type { Activity, Company, Contact, Deal, Task } from "@/lib/crm/types";
 import { api } from "@/lib/client";
-import { Button, Field, InlineAlert, Input, Select, Textarea } from "@/components/ui";
+import { Button, cn, Field, InlineAlert, Input, Select, Textarea } from "@/components/ui";
 
 export type CompanyOption = { id: string; name: string };
 
@@ -33,6 +34,38 @@ function options(values: readonly string[]) {
       {v}
     </option>
   ));
+}
+
+/**
+ * Progressive disclosure. A new record needs only a name (plus the couple of
+ * fields that decide where it lives); everything descriptive lives behind this
+ * toggle so the create form is a few seconds, not a wall of inputs. It opens
+ * automatically when editing a record that already has some of that detail, so
+ * nothing is ever hidden from an edit.
+ */
+function MoreDetail({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-md text-[13px] font-medium text-fg-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <ChevronDown size={15} strokeWidth={2} className={cn("transition-transform", open && "rotate-180")} />
+        {open ? "Hide detail" : "Add detail"}
+      </button>
+      {open ? <div className="luna-fade space-y-4">{children}</div> : null}
+    </div>
+  );
 }
 
 function FormShell({
@@ -106,6 +139,25 @@ export function CompanyForm({
     setF((p) => ({ ...p, [k]: e.target.value }));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDetail, setShowDetail] = useState(
+    () =>
+      !!(
+        initial &&
+        (initial.id ||
+          initial.website ||
+          initial.country ||
+          initial.region ||
+          initial.linkedin ||
+          initial.accountHealth ||
+          initial.careCadence ||
+          initial.planTier ||
+          initial.mrr != null ||
+          initial.sizeBand ||
+          initial.goLiveDate ||
+          initial.renewalDate ||
+          initial.description)
+      ),
+  );
 
   async function submit() {
     if (!f.name.trim()) {
@@ -146,68 +198,73 @@ export function CompanyForm({
             {options(LIFECYCLE_STAGES)}
           </Select>
         </Field>
-        <Field label="Country">
-          <Input value={f.country} onChange={set("country")} placeholder="United Kingdom" />
-        </Field>
-        <Field label="Region">
-          <Select value={f.region} onChange={set("region")}>
-            {blankOption()}
-            {options(REGIONS)}
-          </Select>
-        </Field>
-        <Field label="Website">
-          <Input value={f.website} onChange={set("website")} placeholder="https://" />
-        </Field>
-        <Field label="LinkedIn URL">
-          <Input value={f.linkedin} onChange={set("linkedin")} placeholder="https://linkedin.com/company/" />
-        </Field>
       </div>
 
-      <p className="flex items-center gap-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
-        <span className="h-3 w-1 rounded-full bg-accent-strong" aria-hidden />
-        Customer details
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Account health">
-          <Select value={f.accountHealth} onChange={set("accountHealth")}>
-            {blankOption()}
-            {options(ACCOUNT_HEALTH)}
-          </Select>
+      <MoreDetail open={showDetail} onToggle={() => setShowDetail((v) => !v)}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Country">
+            <Input value={f.country} onChange={set("country")} placeholder="United Kingdom" />
+          </Field>
+          <Field label="Region">
+            <Select value={f.region} onChange={set("region")}>
+              {blankOption()}
+              {options(REGIONS)}
+            </Select>
+          </Field>
+          <Field label="Website">
+            <Input value={f.website} onChange={set("website")} placeholder="https://" />
+          </Field>
+          <Field label="LinkedIn URL">
+            <Input value={f.linkedin} onChange={set("linkedin")} placeholder="https://linkedin.com/company/" />
+          </Field>
+        </div>
+
+        <p className="flex items-center gap-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+          <span className="h-3 w-1 rounded-full bg-accent-strong" aria-hidden />
+          Customer details
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Account health">
+            <Select value={f.accountHealth} onChange={set("accountHealth")}>
+              {blankOption()}
+              {options(ACCOUNT_HEALTH)}
+            </Select>
+          </Field>
+          <Field label="Care cadence">
+            <Select value={f.careCadence} onChange={set("careCadence")}>
+              {blankOption()}
+              {options(CARE_CADENCES)}
+            </Select>
+          </Field>
+          <Field label="Package">
+            <Select value={f.planTier} onChange={set("planTier")}>
+              <option value="">—</option>
+              {f.planTier && !(PACKAGES as readonly string[]).includes(f.planTier) ? (
+                <option value={f.planTier}>{f.planTier}</option>
+              ) : null}
+              {options(PACKAGES)}
+            </Select>
+          </Field>
+          <Field label="MRR (£)">
+            <Input value={f.mrr} onChange={set("mrr")} inputMode="decimal" placeholder="0.00" />
+          </Field>
+          <Field label="Go-live date">
+            <Input type="date" value={f.goLiveDate} onChange={set("goLiveDate")} />
+          </Field>
+          <Field label="Renewal date">
+            <Input type="date" value={f.renewalDate} onChange={set("renewalDate")} />
+          </Field>
+          <Field label="Size band">
+            <Select value={f.sizeBand} onChange={set("sizeBand")}>
+              {blankOption()}
+              {options(SIZE_BANDS)}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Description">
+          <Textarea value={f.description} onChange={set("description")} />
         </Field>
-        <Field label="Care cadence">
-          <Select value={f.careCadence} onChange={set("careCadence")}>
-            {blankOption()}
-            {options(CARE_CADENCES)}
-          </Select>
-        </Field>
-        <Field label="Package">
-          <Select value={f.planTier} onChange={set("planTier")}>
-            <option value="">—</option>
-            {f.planTier && !(PACKAGES as readonly string[]).includes(f.planTier) ? (
-              <option value={f.planTier}>{f.planTier}</option>
-            ) : null}
-            {options(PACKAGES)}
-          </Select>
-        </Field>
-        <Field label="MRR (£)">
-          <Input value={f.mrr} onChange={set("mrr")} inputMode="decimal" placeholder="0.00" />
-        </Field>
-        <Field label="Go-live date">
-          <Input type="date" value={f.goLiveDate} onChange={set("goLiveDate")} />
-        </Field>
-        <Field label="Renewal date">
-          <Input type="date" value={f.renewalDate} onChange={set("renewalDate")} />
-        </Field>
-        <Field label="Size band">
-          <Select value={f.sizeBand} onChange={set("sizeBand")}>
-            {blankOption()}
-            {options(SIZE_BANDS)}
-          </Select>
-        </Field>
-      </div>
-      <Field label="Description">
-        <Textarea value={f.description} onChange={set("description")} />
-      </Field>
+      </MoreDetail>
     </FormShell>
   );
 }
@@ -253,6 +310,21 @@ export function ContactForm({
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDetail, setShowDetail] = useState(
+    () =>
+      !!(
+        initial &&
+        (initial.id ||
+          initial.role ||
+          initial.email ||
+          initial.phone ||
+          initial.linkedin ||
+          initial.marketingOptIn ||
+          initial.headline ||
+          initial.location ||
+          initial.notes)
+      ),
+  );
 
   async function submit() {
     if (!f.name.trim()) {
@@ -280,6 +352,18 @@ export function ContactForm({
       <Field label="Name">
         <Input value={f.name} onChange={set("name")} autoFocus placeholder="Priya Nair" />
       </Field>
+      {!lockedCompanyId && (
+        <Field label="Company">
+          <Select value={f.companyId} onChange={set("companyId")}>
+            {blankOption("No company")}
+            {(companies || []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
       <Field label="Status" hint="Which list they're in. Sets their account's status.">
         <Select value={status} onChange={(e) => setStatus(e.target.value as "" | "customer" | "lead")}>
           <option value="">— Leave as is</option>
@@ -287,41 +371,32 @@ export function ContactForm({
           <option value="customer">Customer</option>
         </Select>
       </Field>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Role">
-          <Input value={f.role} onChange={set("role")} placeholder="Operations Manager" />
-        </Field>
-        {!lockedCompanyId && (
-          <Field label="Company">
-            <Select value={f.companyId} onChange={set("companyId")}>
-              {blankOption("No company")}
-              {(companies || []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+
+      <MoreDetail open={showDetail} onToggle={() => setShowDetail((v) => !v)}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Role">
+            <Input value={f.role} onChange={set("role")} placeholder="Operations Manager" />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={f.email} onChange={set("email")} />
+          </Field>
+          <Field label="Phone">
+            <Input value={f.phone} onChange={set("phone")} />
+          </Field>
+          <Field label="LinkedIn URL">
+            <Input value={f.linkedin} onChange={set("linkedin")} placeholder="https://linkedin.com/in/" />
+          </Field>
+          <Field label="Marketing opt-in">
+            <Select value={f.marketingOptIn} onChange={set("marketingOptIn")}>
+              {blankOption()}
+              {options(MARKETING_OPT_IN)}
             </Select>
           </Field>
-        )}
-        <Field label="Email">
-          <Input type="email" value={f.email} onChange={set("email")} />
+        </div>
+        <Field label="Notes">
+          <Textarea value={f.notes} onChange={set("notes")} />
         </Field>
-        <Field label="Phone">
-          <Input value={f.phone} onChange={set("phone")} />
-        </Field>
-        <Field label="LinkedIn URL">
-          <Input value={f.linkedin} onChange={set("linkedin")} placeholder="https://linkedin.com/in/" />
-        </Field>
-        <Field label="Marketing opt-in">
-          <Select value={f.marketingOptIn} onChange={set("marketingOptIn")}>
-            {blankOption()}
-            {options(MARKETING_OPT_IN)}
-          </Select>
-        </Field>
-      </div>
-      <Field label="Notes">
-        <Textarea value={f.notes} onChange={set("notes")} />
-      </Field>
+      </MoreDetail>
     </FormShell>
   );
 }
@@ -375,6 +450,21 @@ export function DealForm({
     setF((p) => ({ ...p, [k]: e.target.value }));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDetail, setShowDetail] = useState(
+    () =>
+      !!(
+        initial &&
+        (initial.id ||
+          initial.mrr != null ||
+          initial.setupFee != null ||
+          initial.source ||
+          initial.expectedCloseDate ||
+          initial.owner ||
+          initial.nextStep ||
+          initial.nextStepDate ||
+          initial.lostReason)
+      ),
+  );
 
   async function submit() {
     if (!f.name.trim()) {
@@ -421,31 +511,37 @@ export function DealForm({
             </Select>
           </Field>
         )}
-        <Field label="MRR (£)">
-          <Input value={f.mrr} onChange={set("mrr")} inputMode="decimal" placeholder="0.00" />
-        </Field>
-        <Field label="Setup fee (£)">
-          <Input value={f.setupFee} onChange={set("setupFee")} inputMode="decimal" placeholder="0.00" />
-        </Field>
-        <Field label="Source">
-          <Select value={f.source} onChange={set("source")}>
-            {blankOption()}
-            {options(DEAL_SOURCES)}
-          </Select>
-        </Field>
-        <Field label="Expected close">
-          <Input type="date" value={f.expectedCloseDate} onChange={set("expectedCloseDate")} />
-        </Field>
-        <Field label="Owner">
-          <Input value={f.owner} onChange={set("owner")} />
-        </Field>
-        <Field label="Next step">
-          <Input value={f.nextStep} onChange={set("nextStep")} />
-        </Field>
-        <Field label="Next step date">
-          <Input type="date" value={f.nextStepDate} onChange={set("nextStepDate")} />
-        </Field>
       </div>
+
+      <MoreDetail open={showDetail} onToggle={() => setShowDetail((v) => !v)}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="MRR (£)">
+            <Input value={f.mrr} onChange={set("mrr")} inputMode="decimal" placeholder="0.00" />
+          </Field>
+          <Field label="Setup fee (£)">
+            <Input value={f.setupFee} onChange={set("setupFee")} inputMode="decimal" placeholder="0.00" />
+          </Field>
+          <Field label="Source">
+            <Select value={f.source} onChange={set("source")}>
+              {blankOption()}
+              {options(DEAL_SOURCES)}
+            </Select>
+          </Field>
+          <Field label="Expected close">
+            <Input type="date" value={f.expectedCloseDate} onChange={set("expectedCloseDate")} />
+          </Field>
+          <Field label="Owner">
+            <Input value={f.owner} onChange={set("owner")} />
+          </Field>
+          <Field label="Next step">
+            <Input value={f.nextStep} onChange={set("nextStep")} />
+          </Field>
+          <Field label="Next step date">
+            <Input type="date" value={f.nextStepDate} onChange={set("nextStepDate")} />
+          </Field>
+        </div>
+      </MoreDetail>
+
       {f.stage === "Lost" && (
         <Field label="Lost reason">
           <Textarea value={f.lostReason} onChange={set("lostReason")} />
