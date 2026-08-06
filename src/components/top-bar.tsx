@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useRef, useState } from "react";
-import { Building2, Columns3, Combine, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Search, Settings, Sparkles, User, Users, Wand2 } from "lucide-react";
-import { api } from "@/lib/client";
-import type { Company, Contact } from "@/lib/crm/types";
-import { cn, Spinner } from "@/components/ui";
+import { useEffect, useRef, useState } from "react";
+import { Building2, Columns3, Combine, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Settings, Sparkles, Users, Wand2 } from "lucide-react";
+import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAdd } from "@/components/quick-add";
-import { AskLuna } from "@/components/ask-luna";
+import { CommandBar } from "@/components/command-bar";
 
 // Four everyday destinations up top; the rest live in the More menu so a
 // first-time user isn't faced with seven tabs at once.
@@ -75,14 +73,14 @@ export function TopBar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <AskLuna />
-          <div className="hidden sm:block">
-            <GlobalSearch />
-          </div>
-          <QuickAdd />
+          <CommandBar />
           <ThemeToggle />
           <MoreMenu onLogout={logout} />
         </div>
+
+        {/* Trigger-less: hosts the Task / Note / LinkedIn modals opened via the
+            command bar and Today's quick actions (the `luna:quickadd` event). */}
+        <QuickAdd showTrigger={false} />
       </div>
     </header>
   );
@@ -168,202 +166,5 @@ function MoreMenu({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
     </div>
-  );
-}
-
-function GlobalSearch() {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<{ companies: Company[]; contacts: Contact[] }>({
-    companies: [],
-    contacts: [],
-  });
-  const [active, setActive] = useState(0);
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const term = q.trim();
-    setActive(0);
-    if (term.length < 2) {
-      setResults({ companies: [], contacts: [] });
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await api<{ companies: Company[]; contacts: Contact[] }>(
-          `/api/search?q=${encodeURIComponent(term)}`,
-        );
-        setResults(data);
-      } catch {
-        setResults({ companies: [], contacts: [] });
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
-
-  function go(href: string) {
-    setOpen(false);
-    setQ("");
-    router.push(href);
-  }
-
-  const companyItems = results.companies.slice(0, 6);
-  const contactItems = results.contacts.slice(0, 6);
-  const flatHrefs = [
-    ...companyItems.map((c) => `/companies/${c.id}`),
-    ...contactItems.map((c) => (c.companyId ? `/companies/${c.companyId}` : "/contacts")),
-  ];
-  const activeIdx = flatHrefs.length ? Math.min(active, flatHrefs.length - 1) : 0;
-  const hasResults = companyItems.length > 0 || contactItems.length > 0;
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      setOpen(false);
-      return;
-    }
-    if (!flatHrefs.length) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActive((a) => Math.min(a + 1, flatHrefs.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      go(flatHrefs[activeIdx]);
-    }
-  }
-
-  return (
-    <div ref={boxRef} className="relative">
-      <Search
-        size={15}
-        strokeWidth={1.9}
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
-      />
-      <input
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder="Search…"
-        aria-label="Search companies and people"
-        className="h-9 w-64 rounded-lg border border-transparent bg-muted pl-9 pr-3 text-[13.5px] text-fg transition-colors placeholder:text-fg-subtle hover:bg-muted/70 focus-visible:border-accent focus-visible:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      />
-      {open && q.trim().length >= 2 && (
-        <div className="luna-pop shadow-float absolute right-0 z-30 mt-2 w-[23rem] overflow-hidden rounded-2xl border border-border bg-card">
-          {loading ? (
-            <div className="flex items-center gap-2 px-4 py-5 text-[13px] text-fg-subtle">
-              <Spinner /> Searching…
-            </div>
-          ) : !hasResults ? (
-            <div className="px-4 py-7 text-center">
-              <p className="text-[13px] font-medium text-fg-muted">No matches for “{q.trim()}”</p>
-              <p className="mt-0.5 text-[12px] text-fg-subtle">Try a company or person name.</p>
-            </div>
-          ) : (
-            <div className="max-h-[60vh] overflow-y-auto py-1.5">
-              {companyItems.length > 0 && (
-                <div className="pb-1">
-                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                    Companies
-                  </p>
-                  {companyItems.map((c, i) => (
-                    <SearchRow
-                      key={c.id}
-                      icon={<Building2 size={15} strokeWidth={1.75} />}
-                      name={c.name}
-                      sub={c.type}
-                      active={activeIdx === i}
-                      onMouseEnter={() => setActive(i)}
-                      onClick={() => go(`/companies/${c.id}`)}
-                    />
-                  ))}
-                </div>
-              )}
-              {contactItems.length > 0 && (
-                <div className={companyItems.length > 0 ? "border-t border-border-soft pt-1" : ""}>
-                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                    People
-                  </p>
-                  {contactItems.map((c, i) => {
-                    const idx = companyItems.length + i;
-                    return (
-                      <SearchRow
-                        key={c.id}
-                        icon={<User size={15} strokeWidth={1.75} />}
-                        name={c.name}
-                        sub={c.companyName}
-                        active={activeIdx === idx}
-                        onMouseEnter={() => setActive(idx)}
-                        onClick={() => go(c.companyId ? `/companies/${c.companyId}` : "/contacts")}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 border-t border-border-soft bg-muted/40 px-3 py-2 text-[11px] text-fg-subtle">
-            Press
-            <kbd className="rounded border border-border bg-card px-1 font-medium text-fg-muted">⌘K</kbd>
-            to ask Luna anything
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SearchRow({
-  icon,
-  name,
-  sub,
-  active,
-  onMouseEnter,
-  onClick,
-}: {
-  icon: ReactNode;
-  name: string;
-  sub?: string;
-  active?: boolean;
-  onMouseEnter?: () => void;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      aria-selected={active}
-      className={cn(
-        "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none",
-        active ? "bg-muted" : "hover:bg-muted",
-      )}
-    >
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-strong">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-fg">{name}</span>
-        {sub ? <span className="block truncate text-[11px] text-fg-subtle">{sub}</span> : null}
-      </span>
-    </button>
   );
 }

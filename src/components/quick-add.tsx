@@ -30,7 +30,7 @@ const TABS: { id: Mode; label: string }[] = [
   { id: "linkedin", label: "LinkedIn" },
 ];
 
-export function QuickAdd() {
+export function QuickAdd({ showTrigger = true }: { showTrigger?: boolean } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("task");
@@ -165,9 +165,11 @@ export function QuickAdd() {
 
   return (
     <>
-      <IconButton label="Quick add" onClick={openModal}>
-        <Plus size={18} strokeWidth={1.75} />
-      </IconButton>
+      {showTrigger ? (
+        <IconButton label="Quick add" onClick={openModal}>
+          <Plus size={18} strokeWidth={1.75} />
+        </IconButton>
+      ) : null}
       <Modal open={open} onClose={close} title="Quick add">
         <div className="mb-4 inline-flex rounded-lg border border-border p-0.5 text-[13px]">
           {TABS.map((t) => (
