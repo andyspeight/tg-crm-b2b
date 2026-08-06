@@ -1,7 +1,7 @@
-import { MondayImport } from "@/components/monday-import";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default function ImportPage() {
-  return <MondayImport />;
+// Folded into the Data health hub (/data). Kept as a redirect so existing
+// bookmarks and in-app links to /import still land on the right tool.
+export default function ImportRedirect() {
+  redirect("/data?tab=import");
 }

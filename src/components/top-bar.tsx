@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Columns3, Combine, Download, HeartHandshake, Home, Link2, LogOut, Moon, MoreHorizontal, Settings, Sparkles, Users, Wand2 } from "lucide-react";
+import { Building2, Columns3, Database, HeartHandshake, Home, LogOut, Moon, MoreHorizontal, Settings, Sparkles, Users } from "lucide-react";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAdd } from "@/components/quick-add";
@@ -21,10 +21,7 @@ const NAV = [
 
 const MORE = [
   { href: "/digest", label: "Weekly digest", icon: Sparkles },
-  { href: "/enrich", label: "Enrich data", icon: Wand2 },
-  { href: "/relink", label: "Link contacts", icon: Link2 },
-  { href: "/tidy", label: "Tidy up", icon: Combine },
-  { href: "/import", label: "Import", icon: Download },
+  { href: "/data", label: "Data health", icon: Database },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

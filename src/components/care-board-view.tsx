@@ -212,7 +212,7 @@ export function CareBoardView({ initial }: { initial: CareRow[] }) {
           }
           action={
             view === "all" ? (
-              <ButtonLink href="/import">
+              <ButtonLink href="/data?tab=import">
                 <Download size={16} strokeWidth={2} /> Import from Monday
               </ButtonLink>
             ) : (

@@ -338,7 +338,7 @@ export function ContactsView({
                 Clear search
               </Button>
             ) : (
-              <ButtonLink href="/import">
+              <ButtonLink href="/data?tab=import">
                 <Download size={16} strokeWidth={2} /> Import from Monday
               </ButtonLink>
             )

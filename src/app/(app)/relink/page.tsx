@@ -1,7 +1,7 @@
-import { RelinkContacts } from "@/components/relink-contacts";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default function RelinkPage() {
-  return <RelinkContacts />;
+// Folded into the Data health hub (/data). Kept as a redirect so existing
+// bookmarks and in-app links to /relink still land on the right tool.
+export default function RelinkRedirect() {
+  redirect("/data?tab=relink");
 }
