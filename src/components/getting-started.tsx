@@ -18,7 +18,7 @@ const STEPS: Step[] = [
     id: "import",
     title: "Bring your data across",
     hint: "Import companies, contacts, deals and client health from Monday. Tip: your Airtable token needs write access first.",
-    href: "/import",
+    href: "/data?tab=import",
     icon: Download,
   },
   {
