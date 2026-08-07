@@ -131,6 +131,7 @@ export function CompanyView({
   initialActivities,
   initialTasks,
   initialCareTouches,
+  draftAngle,
 }: {
   company: Company;
   initialContacts: Contact[];
@@ -139,6 +140,8 @@ export function CompanyView({
   initialActivities: Activity[];
   initialTasks: Task[];
   initialCareTouches: CareTouch[];
+  /** When set (via ?angle= deep link from a signal), open the composer pre-seeded. */
+  draftAngle?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -162,8 +165,10 @@ export function CompanyView({
   const [loggingCare, setLoggingCare] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState("");
-  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outreachOpen, setOutreachOpen] = useState(!!draftAngle);
   const [outreachContactId, setOutreachContactId] = useState<string | undefined>(undefined);
+  const [outreachAngle, setOutreachAngle] = useState<string | undefined>(draftAngle);
+  const [outreachAutoDraft, setOutreachAutoDraft] = useState(!!draftAngle);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [enrichError, setEnrichError] = useState("");
@@ -406,6 +411,16 @@ export function CompanyView({
 
   function openEmail(contactId?: string) {
     setOutreachContactId(contactId);
+    setOutreachAngle(undefined);
+    setOutreachAutoDraft(false);
+    setOutreachOpen(true);
+  }
+
+  /** Open the composer seeded from a signal, and let Luna draft straight away. */
+  function openDraft(angle: string, contactId?: string) {
+    setOutreachContactId(contactId);
+    setOutreachAngle(angle);
+    setOutreachAutoDraft(true);
     setOutreachOpen(true);
   }
 
@@ -650,7 +665,7 @@ export function CompanyView({
 
           {/* Signals */}
           <Section title="Signals">
-            <CompanySignals companyId={company.id} />
+            <CompanySignals companyId={company.id} onDraft={openDraft} />
           </Section>
 
           {/* Deals */}
@@ -1077,6 +1092,8 @@ export function CompanyView({
         company={{ id: company.id, name: company.name }}
         contacts={contacts.map((c) => ({ id: c.id, name: c.name, email: c.email, role: c.role }))}
         defaultContactId={outreachContactId}
+        defaultAngle={outreachAngle}
+        autoDraft={outreachAutoDraft}
         onSent={async () => {
           await Promise.all([refreshActivities(), refreshCompany()]);
         }}

@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, Radar, RefreshCw, SearchX, X } from "lucide-react";
+import { Check, ExternalLink, ListPlus, Radar, RefreshCw, SearchX, Sparkles, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Signal, SignalStatus, SignalType } from "@/lib/crm/types";
 import { SIGNAL_TYPES } from "@/lib/crm/config";
+import { draftAngleFor } from "@/components/signals-view";
 import {
   Badge,
   type BadgeColor,
@@ -92,6 +93,17 @@ export function SignalsInbox({ initial }: { initial: Signal[] }) {
       await api(`/api/signals/${id}`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) });
     } catch (e) {
       toast.error("Couldn't update", { description: (e as Error).message });
+      await refresh();
+    }
+  }
+
+  async function createTask(id: string) {
+    applyLocal([id], "Actioned");
+    try {
+      await api(`/api/signals/${id}/task`, { method: "POST" });
+      toast.success("Task created", { description: "A follow-up task is on the account, due in 3 days." });
+    } catch (e) {
+      toast.error("Couldn't create task", { description: (e as Error).message });
       await refresh();
     }
   }
@@ -260,6 +272,21 @@ export function SignalsInbox({ initial }: { initial: Signal[] }) {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
+                  {s.companyId ? (
+                    <Link
+                      href={`/companies/${s.companyId}?angle=${encodeURIComponent(draftAngleFor(s))}`}
+                      aria-label="Draft email"
+                      title="Draft email"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-muted hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <Sparkles size={15} strokeWidth={1.9} />
+                    </Link>
+                  ) : null}
+                  {s.status !== "Actioned" ? (
+                    <IconButton label="Create follow-up task" onClick={() => createTask(s.id)} className="hover:text-accent-strong">
+                      <ListPlus size={16} strokeWidth={1.9} />
+                    </IconButton>
+                  ) : null}
                   {s.status !== "Actioned" ? (
                     <IconButton label="Mark actioned" onClick={() => setOne(s.id, "Actioned")} className="hover:text-success">
                       <Check size={16} strokeWidth={2} />

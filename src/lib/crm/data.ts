@@ -2257,6 +2257,10 @@ export async function createSignal(input: SignalInput): Promise<Signal> {
   return toSignal(await createRecord(AIRTABLE_BASE_ID, TABLES.signals, fields));
 }
 
+export async function getSignal(id: string): Promise<Signal> {
+  return toSignal(await getRecord(AIRTABLE_BASE_ID, TABLES.signals, id));
+}
+
 /** All signals for one company, newest first. */
 export async function listSignalsByCompany(companyId: string): Promise<Signal[]> {
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.signals, { maxRecords: 2000 });

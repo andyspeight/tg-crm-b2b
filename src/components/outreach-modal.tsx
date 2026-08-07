@@ -15,6 +15,8 @@ export function OutreachModal({
   company,
   contacts,
   defaultContactId,
+  defaultAngle,
+  autoDraft,
   onSent,
 }: {
   open: boolean;
@@ -22,6 +24,8 @@ export function OutreachModal({
   company: { id: string; name: string };
   contacts: ContactOption[];
   defaultContactId?: string;
+  defaultAngle?: string;
+  autoDraft?: boolean;
   onSent?: () => void | Promise<void>;
 }) {
   const [contactId, setContactId] = useState("");
@@ -42,7 +46,7 @@ export function OutreachModal({
     const first = defaultContactId ?? contacts[0]?.id ?? "";
     setContactId(first);
     setTo(contacts.find((c) => c.id === first)?.email ?? "");
-    setAngle("");
+    setAngle(defaultAngle ?? "");
     setSubject("");
     setBody("");
     setError("");
@@ -52,6 +56,9 @@ export function OutreachModal({
     api<Conn>("/api/google/status")
       .then(setConn)
       .catch(() => setConn({ configured: false, connected: false }));
+    // When opened from a signal with an angle, draft immediately so the user lands
+    // on a ready-to-edit email rather than a blank one.
+    if (autoDraft && defaultAngle) draft(defaultAngle, first);
     // Reset only when the dialog opens or the target contact changes — not on every
     // parent re-render (contacts is a fresh array each time), so a draft isn't wiped.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,13 +70,17 @@ export function OutreachModal({
     if (email !== undefined) setTo(email ?? "");
   }
 
-  async function draft() {
+  async function draft(goalOverride?: string, contactOverride?: string) {
     setError("");
     setDrafting(true);
     try {
       const data = await api<{ subject: string; body: string }>("/api/ai/outreach", {
         method: "POST",
-        body: JSON.stringify({ companyId: company.id, contactId, goal: angle }),
+        body: JSON.stringify({
+          companyId: company.id,
+          contactId: contactOverride ?? contactId,
+          goal: goalOverride ?? angle,
+        }),
       });
       setSubject(data.subject);
       setBody(data.body);
@@ -160,7 +171,7 @@ export function OutreachModal({
               <Input value={angle} onChange={(e) => setAngle(e.target.value)} placeholder="e.g. introduce the AI visibility tool" />
             </Field>
           </div>
-          <Button type="button" variant="secondary" onClick={draft} disabled={drafting}>
+          <Button type="button" variant="secondary" onClick={() => draft()} disabled={drafting}>
             {drafting ? <Spinner /> : <Sparkles size={15} strokeWidth={1.75} />} Draft with Luna
           </Button>
         </div>

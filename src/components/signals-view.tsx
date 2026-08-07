@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, Radar, X } from "lucide-react";
+import { Check, ExternalLink, ListPlus, Radar, Sparkles, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Signal, SignalType } from "@/lib/crm/types";
 import { Badge, type BadgeColor, IconButton, Spinner } from "@/components/ui";
 import { useToast } from "@/components/feedback";
+
+/** The outreach angle Luna drafts from when you act on a signal. */
+export function draftAngleFor(s: Signal): string {
+  return `Following up on this: "${s.headline || "recent news"}"${s.url ? ` — ${s.url}` : ""}`;
+}
 
 const TYPE_COLOR: Record<SignalType, BadgeColor> = {
   Funding: "success",
@@ -28,16 +33,21 @@ function whenLabel(iso?: string): string {
 function SignalRow({
   s,
   showCompany,
+  onDraft,
   onActioned,
   onDismissed,
 }: {
   s: Signal;
   showCompany?: boolean;
+  /** Open the outreach composer in-page, seeded from this signal. When absent, the
+   *  Draft button deep-links to the account instead (e.g. on the Today feed). */
+  onDraft?: (angle: string, contactId?: string) => void;
   onActioned: (id: string) => void;
   onDismissed: (id: string) => void;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const angle = draftAngleFor(s);
 
   async function setStatus(status: "Actioned" | "Dismissed") {
     setBusy(true);
@@ -50,6 +60,21 @@ function SignalRow({
       setBusy(false);
     }
   }
+
+  async function createTask() {
+    setBusy(true);
+    try {
+      await api(`/api/signals/${s.id}/task`, { method: "POST" });
+      toast.success("Task created", { description: "A follow-up task is on the account, due in 3 days." });
+      onActioned(s.id);
+    } catch (e) {
+      toast.error("Couldn't create task", { description: (e as Error).message });
+      setBusy(false);
+    }
+  }
+
+  const draftBtnClass =
+    "inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-muted hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
   return (
     <li className="flex items-start gap-3 rounded-lg border border-border-soft bg-surface px-3 py-2.5">
@@ -78,8 +103,25 @@ function SignalRow({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
+        {onDraft ? (
+          <IconButton label="Draft email" onClick={() => onDraft(angle)} className="hover:text-accent-strong" disabled={busy}>
+            <Sparkles size={15} strokeWidth={1.9} />
+          </IconButton>
+        ) : s.companyId ? (
+          <Link
+            href={`/companies/${s.companyId}?angle=${encodeURIComponent(angle)}`}
+            aria-label="Draft email"
+            title="Draft email"
+            className={draftBtnClass}
+          >
+            <Sparkles size={15} strokeWidth={1.9} />
+          </Link>
+        ) : null}
+        <IconButton label="Create follow-up task" onClick={createTask} className="hover:text-accent-strong" disabled={busy}>
+          {busy ? <Spinner /> : <ListPlus size={15} strokeWidth={1.9} />}
+        </IconButton>
         <IconButton label="Mark actioned" onClick={() => setStatus("Actioned")} className="hover:text-success" disabled={busy}>
-          {busy ? <Spinner /> : <Check size={15} strokeWidth={2} />}
+          <Check size={15} strokeWidth={2} />
         </IconButton>
         <IconButton label="Dismiss" onClick={() => setStatus("Dismissed")} className="hover:text-danger" disabled={busy}>
           <X size={15} strokeWidth={2} />
@@ -120,7 +162,13 @@ export function SignalsFeed() {
 }
 
 /** Company 360 panel: all live signals for one account. */
-export function CompanySignals({ companyId }: { companyId: string }) {
+export function CompanySignals({
+  companyId,
+  onDraft,
+}: {
+  companyId: string;
+  onDraft?: (angle: string, contactId?: string) => void;
+}) {
   const [signals, setSignals] = useState<Signal[] | null>(null);
 
   useEffect(() => {
@@ -146,7 +194,7 @@ export function CompanySignals({ companyId }: { companyId: string }) {
   return (
     <ul className="space-y-1.5">
       {live.map((s) => (
-        <SignalRow key={s.id} s={s} onActioned={remove} onDismissed={remove} />
+        <SignalRow key={s.id} s={s} onDraft={onDraft} onActioned={remove} onDismissed={remove} />
       ))}
     </ul>
   );

@@ -13,8 +13,15 @@ import { CompanyView } from "@/components/company-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CompanyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ angle?: string }>;
+}) {
   const { id } = await params;
+  const { angle } = await searchParams;
 
   let company;
   try {
@@ -42,6 +49,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       initialActivities={activities}
       initialTasks={tasks}
       initialCareTouches={careTouches}
+      draftAngle={angle}
     />
   );
 }
