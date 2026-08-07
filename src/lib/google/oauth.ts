@@ -3,10 +3,11 @@ import "server-only";
 /**
  * Google OAuth for Gmail sending. Single-sender internal tool: one connected
  * Google account (Andy's) whose refresh token is stored encrypted in App Settings.
- * Scopes are the minimum for the job — identity + gmail.send only, no read scope
- * (send-only phase). Because the app is internal to the agendas.group Workspace,
- * the OAuth consent screen is set to "Internal", so these scopes need no Google
- * verification.
+ * Scopes: identity + gmail.send + gmail.metadata. The metadata (read) scope is
+ * header-only — it lets sequences see who a thread's messages are *from* (to
+ * detect a reply and auto-stop) without ever reading message bodies. Because the
+ * app is internal to the agendas.group Workspace, the OAuth consent screen is set
+ * to "Internal", so these scopes need no Google verification.
  */
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
@@ -16,17 +17,22 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 
+/** Header-only read scope: enough to detect a reply in a thread, never bodies. */
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/gmail.send",
+  GMAIL_READ_SCOPE,
 ].join(" ");
 
 const KEY_REFRESH = "google_refresh_token";
 const KEY_EMAIL = "google_email";
 const KEY_NAME = "google_name";
 const KEY_CONNECTED_AT = "google_connected_at";
+const KEY_SCOPES = "google_scopes";
 
 export function googleConfigured(): boolean {
   return !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
@@ -67,6 +73,7 @@ interface TokenResponse {
   refresh_token?: string;
   expires_in?: number;
   id_token?: string;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -118,6 +125,7 @@ export async function completeConnection(code: string, origin: string): Promise<
   await setSetting(KEY_REFRESH, await encryptSecret(data.refresh_token));
   if (email) await setSetting(KEY_EMAIL, email);
   if (name) await setSetting(KEY_NAME, name);
+  await setSetting(KEY_SCOPES, data.scope || "");
   await setSetting(KEY_CONNECTED_AT, new Date().toISOString());
   return { email };
 }
@@ -126,14 +134,29 @@ export interface GoogleConnection {
   email: string;
   name?: string;
   connectedAt?: string;
+  /** True when the stored grant includes a Gmail read scope (reply detection). */
+  canRead: boolean;
+}
+
+function scopeGrantsRead(scopes: string): boolean {
+  return /gmail\.(metadata|readonly|modify)|mail\.google\.com/.test(scopes);
 }
 
 /** The connected account (presence of a stored email = connected), or null. */
 export async function getConnection(): Promise<GoogleConnection | null> {
   const email = await getSetting(KEY_EMAIL);
   if (!email) return null;
-  const [name, connectedAt] = await Promise.all([getSetting(KEY_NAME), getSetting(KEY_CONNECTED_AT)]);
-  return { email, name: name || undefined, connectedAt: connectedAt || undefined };
+  const [name, connectedAt, scopes] = await Promise.all([
+    getSetting(KEY_NAME),
+    getSetting(KEY_CONNECTED_AT),
+    getSetting(KEY_SCOPES),
+  ]);
+  return {
+    email,
+    name: name || undefined,
+    connectedAt: connectedAt || undefined,
+    canRead: scopeGrantsRead(scopes || ""),
+  };
 }
 
 /** A fresh access token plus the sender identity. Throws if not connected. */
@@ -176,5 +199,6 @@ export async function disconnect(): Promise<void> {
     deleteSetting(KEY_EMAIL),
     deleteSetting(KEY_NAME),
     deleteSetting(KEY_CONNECTED_AT),
+    deleteSetting(KEY_SCOPES),
   ]);
 }

@@ -18,6 +18,8 @@ export const TABLES = {
   campaignEngagement: "tbljhb1tn3302SPgP",
   appSettings: "tbllri9bVn8QfPsA7",
   emailTemplates: "tblKthkgFtNyfWszf",
+  sequences: "tblo7qpGAZRHou9py",
+  sequenceEnrollments: "tblIbCHUgRu0lo5bh",
 } as const;
 
 // --- Select option sets (must match the Airtable single-select choices exactly) ---
@@ -147,6 +149,21 @@ export const TOUCH_TYPES = [
 
 export const CARE_STATUSES = ["Scheduled", "Completed", "Skipped"] as const;
 
+// Email sequences (Phase 3). A sequence is Draft while you build it, Active to
+// enrol and send, Paused to hold every enrollment at once.
+export const SEQUENCE_STATUSES = ["Draft", "Active", "Paused"] as const;
+
+// An enrollment's life: Active (sending), auto-stopped on Replied, run to the
+// end (Completed), manually Stopped/Paused, or Failed after a send error.
+export const ENROLLMENT_STATUSES = [
+  "Active",
+  "Replied",
+  "Completed",
+  "Stopped",
+  "Paused",
+  "Failed",
+] as const;
+
 // --- Field-name maps (Airtable addresses fields by name; names are stable in our schema) ---
 export const FIELDS = {
   companies: {
@@ -253,5 +270,26 @@ export const FIELDS = {
     body: "Body",
     description: "Description",
     attachments: "Attachments",
+  },
+  sequences: {
+    name: "Name",
+    description: "Description",
+    status: "Status",
+    steps: "Steps",
+  },
+  sequenceEnrollments: {
+    label: "Label",
+    sequence: "Sequence",
+    contact: "Contact",
+    status: "Status",
+    stepIndex: "Step Index",
+    nextSendAt: "Next Send At",
+    threadId: "Thread Id",
+    threadSubject: "Thread Subject",
+    lastMessageId: "Last Message Id",
+    companyId: "Company Id",
+    lastError: "Last Error",
+    enrolledAt: "Enrolled At",
+    completedAt: "Completed At",
   },
 } as const;

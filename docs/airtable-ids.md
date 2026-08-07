@@ -157,3 +157,45 @@ Primary field: `Name` (`fldrhrluyvsVjejen`)
 | Date | `fldWwfMWtfZEbEKYX` | date |
 | Contact | `fldFuL5AhKRhzzC06` | multipleRecordLinks → Contacts |
 | Company | `fld4oARpxWapRlbfk` | multipleRecordLinks → Companies |
+
+## Email Templates — `tblKthkgFtNyfWszf`
+Reusable email templates (Phase 1). Fields are addressed by name in code.
+
+| Field | Type |
+|---|---|
+| Name | singleLineText (primary) |
+| Subject | singleLineText |
+| Body | multilineText (HTML) |
+| Description | singleLineText |
+| Attachments | multipleAttachments |
+
+## Sequences — `tblo7qpGAZRHou9py`
+Multi-step Gmail sequences (Phase 3). Steps stored as JSON on `Steps`:
+`[{ "templateId": "rec…", "delayDays": 0 }]` (delay = wait after the previous step).
+
+| Field | ID | Type |
+|---|---|---|
+| Name | `fldLfsTldaSShuF5G` | singleLineText (primary) |
+| Description | `fldsn300BB3s5GdMR` | multilineText |
+| Status | `fldoYfpl4YkFE0kNe` | singleSelect (Draft / Active / Paused) |
+| Steps | `fldPTIQjBflk2ynYv` | multilineText (JSON) |
+
+## Sequence Enrollments — `tblIbCHUgRu0lo5bh`
+One contact in one sequence. The engine advances `Step Index`, sends the due step
+at `Next Send At`, and sets `Status` = Replied when the contact replies in the tracked thread.
+
+| Field | ID | Type |
+|---|---|---|
+| Label | `fldeZkqBKZzWsogUl` | singleLineText (primary) |
+| Sequence | `fldMixDoMsH0E89wp` | multipleRecordLinks → Sequences |
+| Contact | `fldE8YLzy8orvlCLG` | multipleRecordLinks → Contacts |
+| Status | `fld5ao6c8SdNuCPCR` | singleSelect (Active / Replied / Completed / Stopped / Paused / Failed) |
+| Step Index | `fldLgACt7Tqgfkvbp` | number |
+| Next Send At | `fldRwVhEX9oxeLAxH` | dateTime |
+| Thread Id | `fldutExxwOA7uORAM` | singleLineText |
+| Thread Subject | `fldPiSDntwdHxmKjC` | singleLineText |
+| Last Message Id | `fldcVUFV54R6MgQOi` | singleLineText |
+| Company Id | `fldI52oKSTHKxGQf6` | singleLineText |
+| Last Error | `fldrjSpHg8LhWzELW` | multilineText |
+| Enrolled At | `fldCXluG7dj5F0vl0` | dateTime |
+| Completed At | `flddzV1s7M36pzTuT` | dateTime |

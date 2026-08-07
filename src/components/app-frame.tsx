@@ -20,6 +20,7 @@ const TITLES: [string, string][] = [
   ["/contacts", "People"],
   ["/care", "Care"],
   ["/templates", "Email templates"],
+  ["/sequences", "Sequences"],
   ["/digest", "Weekly digest"],
   ["/data", "Data health"],
   ["/settings", "Settings"],

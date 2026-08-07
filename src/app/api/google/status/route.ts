@@ -14,6 +14,7 @@ export async function GET() {
       email: conn?.email,
       name: conn?.name,
       connectedAt: conn?.connectedAt,
+      canRead: conn?.canRead ?? false,
     });
   } catch (e) {
     return errorResponse(e);

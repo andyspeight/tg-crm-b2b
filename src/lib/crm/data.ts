@@ -25,6 +25,8 @@ import {
   TASK_CREATED_BY,
   TOUCH_TYPES,
   CARE_STATUSES,
+  SEQUENCE_STATUSES,
+  ENROLLMENT_STATUSES,
   DEFAULT_PIPELINE_STAGES,
   PIPELINE_STAGES_KEY,
   STAGE_COLORS,
@@ -46,6 +48,11 @@ import type {
   EmailTemplate,
   EmailTemplateInput,
   PipelineStage,
+  Sequence,
+  SequenceInput,
+  SequenceStep,
+  SequenceEnrollment,
+  EnrollmentInput,
   StageKind,
   Task,
   TaskInput,
@@ -1901,4 +1908,208 @@ export async function removeTemplateAttachment(id: string, attachmentId: string)
     [FIELDS.emailTemplates.attachments]: keep,
   });
   return getEmailTemplate(id);
+}
+
+// --- Email sequences (Phase 3) ----------------------------------------------
+
+/** Parse the Steps JSON blob into a clean, validated step list. */
+function parseSteps(v: unknown): SequenceStep[] {
+  if (typeof v !== "string" || !v.trim()) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(v);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s): SequenceStep | null => {
+      const o = s as Record<string, unknown>;
+      const templateId = typeof o.templateId === "string" ? o.templateId : "";
+      if (!templateId) return null;
+      const delay = Number(o.delayDays);
+      return { templateId, delayDays: Number.isFinite(delay) && delay > 0 ? Math.floor(delay) : 0 };
+    })
+    .filter((s): s is SequenceStep => s !== null);
+}
+
+/** Validate an incoming step list (from the builder) before we store it. */
+function cleanSteps(v: unknown): SequenceStep[] {
+  if (!Array.isArray(v)) return [];
+  const out: SequenceStep[] = [];
+  for (const s of v) {
+    const o = (s ?? {}) as Record<string, unknown>;
+    const templateId = text(o.templateId);
+    if (!templateId) continue;
+    const delay = Number(o.delayDays);
+    out.push({ templateId, delayDays: Number.isFinite(delay) && delay > 0 ? Math.floor(delay) : 0 });
+  }
+  return out;
+}
+
+function toSequence(rec: AirtableRecord): Sequence {
+  const f = rec.fields;
+  const F = FIELDS.sequences;
+  return {
+    id: rec.id,
+    name: str(f[F.name]) ?? "",
+    description: str(f[F.description]),
+    status: (str(f[F.status]) as Sequence["status"]) ?? "Draft",
+    steps: parseSteps(f[F.steps]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildSequenceFields(input: SequenceInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.sequences;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof SequenceInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (!partial || has("name")) f[F.name] = requiredText(input.name, "Name");
+  if (has("description")) f[F.description] = text(input.description);
+  if (has("status")) f[F.status] = enumOrNull(input.status, SEQUENCE_STATUSES, "status");
+  if (has("steps")) f[F.steps] = JSON.stringify(cleanSteps(input.steps));
+  return f;
+}
+
+export async function listSequences(): Promise<Sequence[]> {
+  const F = FIELDS.sequences;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.sequences, {
+    sort: [{ field: F.name, direction: "asc" }],
+  });
+  return records.map(toSequence);
+}
+
+export async function getSequence(id: string): Promise<Sequence> {
+  return toSequence(await getRecord(AIRTABLE_BASE_ID, TABLES.sequences, id));
+}
+
+export async function createSequence(input: SequenceInput): Promise<Sequence> {
+  const F = FIELDS.sequences;
+  const fields = buildSequenceFields(input, false);
+  if (fields[F.status] == null) fields[F.status] = "Draft";
+  if (fields[F.steps] == null) fields[F.steps] = "[]";
+  return toSequence(await createRecord(AIRTABLE_BASE_ID, TABLES.sequences, fields));
+}
+
+export async function updateSequence(id: string, input: SequenceInput): Promise<Sequence> {
+  const fields = buildSequenceFields(input, true);
+  return toSequence(await updateRecord(AIRTABLE_BASE_ID, TABLES.sequences, id, fields));
+}
+
+export async function deleteSequence(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.sequences, id);
+}
+
+// --- enrollments ------------------------------------------------------------
+
+function toEnrollment(rec: AirtableRecord): SequenceEnrollment {
+  const f = rec.fields;
+  const F = FIELDS.sequenceEnrollments;
+  return {
+    id: rec.id,
+    sequenceId: firstId(f[F.sequence]),
+    contactId: firstId(f[F.contact]),
+    status: (str(f[F.status]) as SequenceEnrollment["status"]) ?? "Active",
+    stepIndex: numv(f[F.stepIndex]) ?? 0,
+    nextSendAt: str(f[F.nextSendAt]),
+    threadId: str(f[F.threadId]),
+    threadSubject: str(f[F.threadSubject]),
+    lastMessageId: str(f[F.lastMessageId]),
+    companyId: str(f[F.companyId]),
+    lastError: str(f[F.lastError]),
+    enrolledAt: str(f[F.enrolledAt]),
+    completedAt: str(f[F.completedAt]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildEnrollmentFields(input: EnrollmentInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.sequenceEnrollments;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof EnrollmentInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (has("sequenceId")) {
+    const id = text(input.sequenceId);
+    f[F.sequence] = id ? [id] : [];
+  }
+  if (has("contactId")) {
+    const id = text(input.contactId);
+    f[F.contact] = id ? [id] : [];
+  }
+  if (has("status")) f[F.status] = enumOrNull(input.status, ENROLLMENT_STATUSES, "status");
+  if (has("stepIndex")) f[F.stepIndex] = input.stepIndex ?? 0;
+  if (has("nextSendAt")) f[F.nextSendAt] = text(input.nextSendAt);
+  if (has("threadId")) f[F.threadId] = text(input.threadId);
+  if (has("threadSubject")) f[F.threadSubject] = text(input.threadSubject);
+  if (has("lastMessageId")) f[F.lastMessageId] = text(input.lastMessageId);
+  if (has("companyId")) f[F.companyId] = text(input.companyId);
+  if (has("lastError")) f[F.lastError] = text(input.lastError);
+  if (has("enrolledAt")) f[F.enrolledAt] = text(input.enrolledAt);
+  if (has("completedAt")) f[F.completedAt] = text(input.completedAt);
+  return f;
+}
+
+/** Fill sequenceName + contactName/email on a set of enrollments (for list views). */
+async function attachEnrollmentJoins(enrollments: SequenceEnrollment[]): Promise<void> {
+  if (enrollments.length === 0) return;
+  const [contactRecs, sequenceRecs] = await Promise.all([
+    recordsByIds(TABLES.contacts, enrollments.map((e) => e.contactId || "")),
+    recordsByIds(TABLES.sequences, enrollments.map((e) => e.sequenceId || "")),
+  ]);
+  const cF = FIELDS.contacts;
+  const contacts = new Map(
+    contactRecs.map((r) => [r.id, { name: str(r.fields[cF.name]) ?? "", email: str(r.fields[cF.email]) }]),
+  );
+  const seqNames = new Map(sequenceRecs.map((r) => [r.id, str(r.fields[FIELDS.sequences.name]) ?? ""]));
+  for (const e of enrollments) {
+    const c = e.contactId ? contacts.get(e.contactId) : undefined;
+    e.contactName = c?.name;
+    e.contactEmail = c?.email;
+    e.sequenceName = e.sequenceId ? seqNames.get(e.sequenceId) : undefined;
+  }
+}
+
+/** Every enrollment (optionally for one sequence), newest first, with joins. */
+export async function listEnrollments(sequenceId?: string): Promise<SequenceEnrollment[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, { maxRecords: 5000 });
+  let rows = records.map(toEnrollment);
+  if (sequenceId) rows = rows.filter((e) => e.sequenceId === sequenceId);
+  rows.sort((a, b) => (b.createdTime || "").localeCompare(a.createdTime || ""));
+  await attachEnrollmentJoins(rows);
+  return rows;
+}
+
+/** Active enrollments whose next step is due on or before `nowIso` (engine). */
+export async function listDueEnrollments(nowIso: string): Promise<SequenceEnrollment[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, { maxRecords: 5000 });
+  return records
+    .map(toEnrollment)
+    .filter((e) => e.status === "Active" && !!e.nextSendAt && e.nextSendAt <= nowIso)
+    .sort((a, b) => (a.nextSendAt || "").localeCompare(b.nextSendAt || ""));
+}
+
+export async function getEnrollment(id: string): Promise<SequenceEnrollment> {
+  return toEnrollment(await getRecord(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, id));
+}
+
+export async function createEnrollmentRecord(fields: EnrollmentInput & { label?: string }): Promise<SequenceEnrollment> {
+  const built = buildEnrollmentFields(fields, false);
+  if (fields.label) built[FIELDS.sequenceEnrollments.label] = text(fields.label);
+  return toEnrollment(await createRecord(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, built));
+}
+
+export async function updateEnrollment(id: string, input: EnrollmentInput): Promise<SequenceEnrollment> {
+  const fields = buildEnrollmentFields(input, true);
+  return toEnrollment(await updateRecord(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, id, fields));
+}
+
+export async function deleteEnrollment(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.sequenceEnrollments, id);
+}
+
+/** True if this contact already has a live (Active/Paused) enrollment in this sequence. */
+export async function hasLiveEnrollment(sequenceId: string, contactId: string): Promise<boolean> {
+  const rows = await listEnrollments(sequenceId);
+  return rows.some(
+    (e) => e.contactId === contactId && (e.status === "Active" || e.status === "Paused"),
+  );
 }

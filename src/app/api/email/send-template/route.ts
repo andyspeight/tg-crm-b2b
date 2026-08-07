@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity, getEmailTemplate } from "@/lib/crm/data";
+import { createActivity } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
-import { sendGmailRich, type RichAttachment } from "@/lib/google/gmail";
+import { sendGmailRich } from "@/lib/google/gmail";
+import { templateAttachmentsAsBase64 } from "@/lib/email/attachments";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -10,31 +11,6 @@ export const maxDuration = 60;
 const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 const MAX_SUBJECT = 500;
 const MAX_HTML = 100_000;
-// Gmail's message-size ceiling is ~25 MB; keep well under it after base64 (+33%).
-const MAX_ATTACH_BYTES = 18 * 1024 * 1024;
-
-/** Turn the template's Airtable attachments into base64 parts for the MIME message. */
-async function resolveTemplateAttachments(templateId: string): Promise<RichAttachment[]> {
-  const template = await getEmailTemplate(templateId);
-  const out: RichAttachment[] = [];
-  let total = 0;
-  for (const a of template.attachments) {
-    if (!a.url) continue;
-    const res = await fetch(a.url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`Couldn't fetch attachment "${a.filename}".`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    total += buf.length;
-    if (total > MAX_ATTACH_BYTES) {
-      throw new Error("The attachments on this template are too large to email together.");
-    }
-    out.push({
-      filename: a.filename,
-      contentType: a.type || res.headers.get("content-type") || "application/octet-stream",
-      base64: buf.toString("base64"),
-    });
-  }
-  return out;
-}
 
 /**
  * Send a rich (HTML + attachments) 1:1 email as the connected Gmail account and
@@ -85,7 +61,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const attachments = templateId ? await resolveTemplateAttachments(templateId) : [];
+    const attachments = templateId ? await templateAttachmentsAsBase64(templateId) : [];
 
     const sent = await sendGmailRich({
       accessToken: sender.accessToken,
