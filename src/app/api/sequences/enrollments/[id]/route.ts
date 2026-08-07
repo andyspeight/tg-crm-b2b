@@ -25,6 +25,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       patch = { status: "Active", nextSendAt: new Date().toISOString(), lastError: "" };
     } else if (action === "stop") {
       patch = { status: "Stopped", completedAt: new Date().toISOString() };
+    } else if (action === "retry") {
+      // Re-arm a failed (or stopped) enrollment to send again on the next tick.
+      patch = { status: "Active", nextSendAt: new Date().toISOString(), completedAt: "", lastError: "" };
     } else {
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
     }

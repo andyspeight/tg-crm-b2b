@@ -2159,6 +2159,56 @@ export async function snoozeAction(key: string): Promise<void> {
   await setSetting(SNOOZE_KEY, JSON.stringify(next));
 }
 
+// --- Today sequences feed (replies to follow up / failed) -------------------
+
+const SEQ_FEED_KEY = "today_seq_dismissed";
+const SEQ_FEED_PRUNE_MS = 45 * 24 * 60 * 60 * 1000;
+// Only surface replies from the recent past so the feed doesn't grow forever.
+const REPLY_WINDOW_MS = 21 * 24 * 60 * 60 * 1000;
+
+async function readSeqFeedMap(): Promise<Record<string, string>> {
+  const raw = await getSetting(SEQ_FEED_KEY);
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? (o as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Enrollments that need the human: replies to follow up, and failed sends. */
+export async function listSequenceFeed(): Promise<{
+  replied: SequenceEnrollment[];
+  failed: SequenceEnrollment[];
+}> {
+  const [rows, dismissedMap] = await Promise.all([listEnrollments(), readSeqFeedMap()]);
+  const drop = new Set(Object.keys(dismissedMap));
+  const cutoff = new Date(Date.now() - REPLY_WINDOW_MS).toISOString();
+  const stamp = (e: SequenceEnrollment) => e.completedAt || e.createdTime || "";
+  const replied = rows
+    .filter((e) => e.status === "Replied" && !drop.has(e.id) && stamp(e) >= cutoff)
+    .sort((a, b) => stamp(b).localeCompare(stamp(a)));
+  const failed = rows
+    .filter((e) => e.status === "Failed" && !drop.has(e.id))
+    .sort((a, b) => (b.createdTime || "").localeCompare(a.createdTime || ""));
+  return { replied, failed };
+}
+
+/** Hide one enrollment from the Today sequences feed; prunes old entries. */
+export async function dismissSequenceFeedItem(id: string): Promise<void> {
+  const clean = id.trim();
+  if (!clean) return;
+  const map = await readSeqFeedMap();
+  const now = Date.now();
+  const next: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (Date.parse(v) > now - SEQ_FEED_PRUNE_MS) next[k] = v;
+  }
+  next[clean] = new Date(now).toISOString();
+  await setSetting(SEQ_FEED_KEY, JSON.stringify(next));
+}
+
 // --- Signals (intel monitoring) ---------------------------------------------
 
 function toSignal(rec: AirtableRecord): Signal {
