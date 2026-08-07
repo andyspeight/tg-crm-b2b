@@ -1197,9 +1197,9 @@ function ContactRow({
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         {c.email ? (
-          <a href={`mailto:${c.email}`} title={`Email ${c.name}`} aria-label={`Email ${c.name}`} className={ICON_LINK}>
+          <button onClick={onDraft} title={`Email ${c.name}`} aria-label={`Email ${c.name}`} className={ICON_LINK}>
             <Mail size={16} strokeWidth={1.75} />
-          </a>
+          </button>
         ) : null}
         {c.phone ? (
           <a href={`tel:${c.phone}`} title={`Call ${c.name}`} aria-label={`Call ${c.name}`} className={ICON_LINK}>
