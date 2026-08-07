@@ -617,7 +617,7 @@ export function ActivityForm({
       {(contacts?.length || deals?.length) ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {contacts?.length ? (
-            <Field label="Contact">
+            <Field label="Person">
               <Select value={f.contactId} onChange={set("contactId")}>
                 {blankOption("None")}
                 {contacts.map((c) => (

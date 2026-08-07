@@ -132,7 +132,7 @@ export function OutreachModal({
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {contacts.length > 0 ? (
-            <Field label="Contact">
+            <Field label="Person">
               <Select value={contactId} onChange={(e) => pickContact(e.target.value)}>
                 <option value="">Someone else…</option>
                 {contacts.map((c) => (
