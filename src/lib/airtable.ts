@@ -191,3 +191,33 @@ export async function deleteRecords(baseId: string, tableId: string, ids: string
   }
   return deleted;
 }
+
+// Attachment uploads use Airtable's separate content host, not the REST API host.
+const CONTENT_BASE = "https://content.airtable.com/v0";
+
+/**
+ * Upload a file straight onto a record's attachment cell (base64), so we don't
+ * need any external blob host. Airtable ingests and re-hosts the file itself.
+ * Returns the updated record.
+ */
+export async function uploadAttachment<T = Record<string, unknown>>(
+  baseId: string,
+  recordId: string,
+  fieldIdOrName: string,
+  file: { filename: string; contentType: string; base64: string },
+): Promise<AirtableRecord<T>> {
+  const res = await fetch(
+    `${CONTENT_BASE}/${baseId}/${recordId}/${encodeURIComponent(fieldIdOrName)}/uploadAttachment`,
+    {
+      method: "POST",
+      headers: { Authorization: authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contentType: file.contentType,
+        filename: file.filename,
+        file: file.base64,
+      }),
+    },
+  );
+  if (!res.ok) throw new AirtableError(res.status, await res.text());
+  return (await res.json()) as AirtableRecord<T>;
+}
