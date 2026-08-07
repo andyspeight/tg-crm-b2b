@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Pencil, Plus, Search, SearchX, Trash2, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Download, Pencil, Plus, SearchX, Trash2, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact } from "@/lib/crm/types";
 import {
@@ -15,13 +15,12 @@ import {
   Modal,
   Monogram,
   PageHeader,
-  Select,
-  SkeletonRow,
-  Spinner,
 } from "@/components/ui";
 import { LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
-import { useConfirm, useToast } from "@/components/feedback";
+import { useToast } from "@/components/feedback";
+import { useList } from "@/components/use-list";
+import { ListSearchField, ListSkeleton, SortSelect, TabPills } from "@/components/list-kit";
 
 const CUSTOMER_LC = new Set(["Customer", "At Risk"]);
 const LEAD_LC = new Set(["Prospect", "Engaged", "Opportunity"]);
@@ -54,40 +53,28 @@ export function ContactsView({
   initial: Contact[];
   companies: CompanyOption[];
 }) {
-  const [contacts, setContacts] = useState<Contact[]>(initial);
-  const [q, setQ] = useState("");
+  const {
+    items: contacts,
+    q,
+    setQ,
+    loading,
+    refresh,
+    remove,
+  } = useList<Contact>({
+    resource: "contacts",
+    responseKey: "contacts",
+    initial,
+    noun: "person",
+    nounCap: "Person",
+    nameOf: (c) => c.name,
+    deleteMessage: "This removes the person from Luna Desk.",
+  });
+
   const [tab, setTab] = useState<Tab>("all");
   const [sort, setSort] = useState<Sort>("name");
-  const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
-  const first = useRef(true);
-  const pending = useRef<Set<string>>(new Set());
   const toast = useToast();
-  const confirm = useConfirm();
-
-  async function refresh(term = q) {
-    setLoading(true);
-    try {
-      const data = await api<{ contacts: Contact[] }>(
-        `/api/contacts${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`,
-      );
-      // Keep optimistically-removed rows hidden until their deferred delete lands.
-      setContacts(data.contacts.filter((c) => !pending.current.has(c.id)));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    const t = setTimeout(() => refresh(q), 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
 
   const counts = useMemo(() => {
     let customer = 0;
@@ -167,48 +154,6 @@ export function ContactsView({
       toast.error("Couldn't save changes", { description: (e as Error).message });
     }
   }
-  async function remove(c: Contact) {
-    const ok = await confirm({
-      title: `Delete ${c.name || "this person"}?`,
-      message: "This removes the person from Luna Desk.",
-      confirmLabel: "Delete",
-    });
-    if (!ok) return;
-
-    // Optimistic: hide now, actually delete when the undo window closes.
-    const idx = contacts.findIndex((x) => x.id === c.id);
-    pending.current.add(c.id);
-    setContacts((xs) => xs.filter((x) => x.id !== c.id));
-
-    let undone = false;
-    toast.success(`${c.name || "Person"} deleted`, {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          undone = true;
-          pending.current.delete(c.id);
-          setContacts((xs) => {
-            if (xs.some((x) => x.id === c.id)) return xs;
-            const next = [...xs];
-            next.splice(Math.min(idx, next.length), 0, c);
-            return next;
-          });
-        },
-      },
-    });
-
-    window.setTimeout(async () => {
-      if (undone) return;
-      try {
-        await api(`/api/contacts/${c.id}`, { method: "DELETE" });
-      } catch (e) {
-        toast.error(`Couldn't delete ${c.name || "person"}`, { description: (e as Error).message });
-        await refresh();
-      } finally {
-        pending.current.delete(c.id);
-      }
-    }, 6000);
-  }
 
   const TABS: { id: Tab; label: string; n: number }[] = [
     { id: "all", label: "Everyone", n: counts.all },
@@ -223,25 +168,13 @@ export function ContactsView({
         description="Everyone across your customers and leads."
         actions={
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-            <div className="relative w-full sm:w-64">
-              <Search
-                size={15}
-                strokeWidth={1.75}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
-              />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search people…"
-                aria-label="Search people"
-                className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-9 text-[15px] text-fg transition-colors placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              />
-              {loading && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle">
-                  <Spinner />
-                </span>
-              )}
-            </div>
+            <ListSearchField
+              value={q}
+              onChange={setQ}
+              placeholder="Search people…"
+              label="Search people"
+              loading={loading}
+            />
             <Button onClick={() => setCreating(true)}>
               <Plus size={16} strokeWidth={2} /> New person
             </Button>
@@ -251,39 +184,8 @@ export function ContactsView({
 
       {/* Customer / lead filter + sort */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
-                tab === t.id ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
-              )}
-            >
-              {t.label}
-              <span className="tnum rounded bg-card px-1.5 text-[11px] text-fg-subtle">{t.n}</span>
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-[12px] text-fg-subtle sm:inline">Sort</span>
-          <div className="w-44">
-            <Select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              aria-label="Sort people"
-              className="h-9 text-[13px]"
-            >
-              {SORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
+        <TabPills tabs={TABS} active={tab} onChange={setTab} />
+        <SortSelect value={sort} onChange={setSort} options={SORTS} label="Sort people" />
       </div>
 
       {jumpEnabled && shown.length > 12 ? (
@@ -312,11 +214,7 @@ export function ContactsView({
       ) : null}
 
       {loading && contacts.length === 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonRow key={i} />
-          ))}
-        </div>
+        <ListSkeleton />
       ) : shown.length === 0 ? (
         <EmptyState
           icon={q ? <SearchX size={20} strokeWidth={1.75} /> : <Users size={20} strokeWidth={1.75} />}
@@ -442,48 +340,48 @@ export function ContactsView({
                 id={anchorLetterById.has(c.id) ? `ppl-m-${anchorLetterById.get(c.id)}` : undefined}
                 className="scroll-mt-[104px]"
               >
-              <Card onClick={() => setEditing(c)} className="p-3.5">
-                <div className="flex items-start gap-3">
-                  <Monogram name={c.name || "Unnamed"} size="sm" tone="accent" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="truncate font-medium text-fg">{c.name || "Unnamed"}</span>
-                      <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-0.5">
-                        <IconButton label="Edit person" onClick={() => setEditing(c)}>
-                          <Pencil size={16} strokeWidth={1.75} />
-                        </IconButton>
-                        <IconButton label="Delete person" onClick={() => remove(c)} className="hover:text-danger">
-                          <Trash2 size={16} strokeWidth={1.75} />
-                        </IconButton>
+                <Card onClick={() => setEditing(c)} className="p-3.5">
+                  <div className="flex items-start gap-3">
+                    <Monogram name={c.name || "Unnamed"} size="sm" tone="accent" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="truncate font-medium text-fg">{c.name || "Unnamed"}</span>
+                        <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-0.5">
+                          <IconButton label="Edit person" onClick={() => setEditing(c)}>
+                            <Pencil size={16} strokeWidth={1.75} />
+                          </IconButton>
+                          <IconButton label="Delete person" onClick={() => remove(c)} className="hover:text-danger">
+                            <Trash2 size={16} strokeWidth={1.75} />
+                          </IconButton>
+                        </div>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {c.companyId ? (
+                          <Link
+                            href={`/companies/${c.companyId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[13px] text-fg hover:text-accent-strong"
+                          >
+                            {c.companyName || "Company"}
+                          </Link>
+                        ) : null}
+                        {c.companyLifecycle ? <LifecycleBadge value={c.companyLifecycle} /> : null}
+                      </div>
+                      <div className="mt-1.5 space-y-0.5 text-[13px] text-fg-muted">
+                        {c.email ? (
+                          <a
+                            href={`mailto:${c.email}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="block truncate hover:text-accent-strong"
+                          >
+                            {c.email}
+                          </a>
+                        ) : null}
+                        {c.phone ? <span className="tnum block">{c.phone}</span> : null}
                       </div>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      {c.companyId ? (
-                        <Link
-                          href={`/companies/${c.companyId}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[13px] text-fg hover:text-accent-strong"
-                        >
-                          {c.companyName || "Company"}
-                        </Link>
-                      ) : null}
-                      {c.companyLifecycle ? <LifecycleBadge value={c.companyLifecycle} /> : null}
-                    </div>
-                    <div className="mt-1.5 space-y-0.5 text-[13px] text-fg-muted">
-                      {c.email ? (
-                        <a
-                          href={`mailto:${c.email}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="block truncate hover:text-accent-strong"
-                        >
-                          {c.email}
-                        </a>
-                      ) : null}
-                      {c.phone ? <span className="tnum block">{c.phone}</span> : null}
-                    </div>
                   </div>
-                </div>
-              </Card>
+                </Card>
               </div>
             ))}
           </div>

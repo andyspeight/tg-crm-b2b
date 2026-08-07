@@ -2,28 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Pencil, Plus, Search, SearchX, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, Pencil, Plus, SearchX, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Company } from "@/lib/crm/types";
 import { COMPANY_TYPES } from "@/lib/crm/config";
 import {
   Button,
   Card,
-  cn,
   EmptyState,
   IconButton,
   Modal,
   Monogram,
   PageHeader,
   Select,
-  SkeletonRow,
-  Spinner,
 } from "@/components/ui";
 import { HealthBadge, LifecycleBadge } from "@/components/badges";
 import { CompanyForm } from "@/components/forms";
-import { useConfirm, useToast } from "@/components/feedback";
+import { useToast } from "@/components/feedback";
 import { formatMoney } from "@/lib/format";
+import { useList } from "@/components/use-list";
+import { ListSearchField, ListSkeleton, SortSelect, TabPills } from "@/components/list-kit";
 
 const CUSTOMER_LC = new Set(["Customer", "At Risk"]);
 const LEAD_LC = new Set(["Prospect", "Engaged", "Opportunity"]);
@@ -45,21 +44,32 @@ const SORTS: { id: Sort; label: string }[] = [
 const HEALTH_RANK: Record<string, number> = { Red: 0, Amber: 1, Green: 2 };
 
 export function CompaniesView({ initial }: { initial: Company[] }) {
-  const [companies, setCompanies] = useState<Company[]>(initial);
-  const [q, setQ] = useState("");
+  const {
+    items: companies,
+    q,
+    setQ,
+    loading,
+    refresh,
+    remove,
+  } = useList<Company>({
+    resource: "companies",
+    responseKey: "companies",
+    initial,
+    noun: "company",
+    nounCap: "Company",
+    nameOf: (c) => c.name,
+    deleteMessage: "This removes the account and unlinks its people, deals and activity.",
+  });
+
   const [tab, setTab] = useState<Tab>("all");
   const [typeFilter, setTypeFilter] = useState("");
   const [healthFilter, setHealthFilter] = useState("");
   const [sort, setSort] = useState<Sort>("name");
-  const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [newLifecycle, setNewLifecycle] = useState<"" | "Customer" | "Prospect">("");
-  const first = useRef(true);
-  const pending = useRef<Set<string>>(new Set());
   const router = useRouter();
   const toast = useToast();
-  const confirm = useConfirm();
 
   // Opened from Today's "New lead" / "New customer" quick actions.
   useEffect(() => {
@@ -70,29 +80,6 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
       window.history.replaceState({}, "", "/companies");
     }
   }, []);
-
-  async function refresh(term = q) {
-    setLoading(true);
-    try {
-      const data = await api<{ companies: Company[] }>(
-        `/api/companies${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`,
-      );
-      // Keep optimistically-removed rows hidden until their deferred delete lands.
-      setCompanies(data.companies.filter((c) => !pending.current.has(c.id)));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    const t = setTimeout(() => refresh(q), 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
 
   // Type + health narrow the base; tab counts reflect that base so they never lie.
   const base = useMemo(() => {
@@ -159,55 +146,13 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
     }
   }
 
-  async function remove(c: Company) {
-    const ok = await confirm({
-      title: `Delete ${c.name || "this company"}?`,
-      message: "This removes the account and unlinks its people, deals and activity.",
-      confirmLabel: "Delete",
-    });
-    if (!ok) return;
-
-    // Optimistic: hide it now, actually delete when the undo window closes.
-    const idx = companies.findIndex((x) => x.id === c.id);
-    pending.current.add(c.id);
-    setCompanies((xs) => xs.filter((x) => x.id !== c.id));
-
-    let undone = false;
-    toast.success(`${c.name || "Company"} deleted`, {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          undone = true;
-          pending.current.delete(c.id);
-          setCompanies((xs) => {
-            if (xs.some((x) => x.id === c.id)) return xs;
-            const next = [...xs];
-            next.splice(Math.min(idx, next.length), 0, c);
-            return next;
-          });
-        },
-      },
-    });
-
-    window.setTimeout(async () => {
-      if (undone) return;
-      try {
-        await api(`/api/companies/${c.id}`, { method: "DELETE" });
-      } catch (e) {
-        toast.error(`Couldn't delete ${c.name || "company"}`, { description: (e as Error).message });
-        await refresh();
-      } finally {
-        pending.current.delete(c.id);
-      }
-    }, 6000);
-  }
-
   const TABS: { id: Tab; label: string; n: number }[] = [
     { id: "all", label: "All", n: counts.all },
     { id: "customer", label: "Customers", n: counts.customer },
     { id: "lead", label: "Leads", n: counts.lead },
   ];
 
+  const filtered = q || typeFilter || healthFilter || tab !== "all";
   const open = (c: Company) => router.push(`/companies/${c.id}`);
 
   return (
@@ -217,25 +162,13 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
         description={`${companies.length} ${companies.length === 1 ? "account" : "accounts"}`}
         actions={
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-            <div className="relative w-full sm:w-64">
-              <Search
-                size={15}
-                strokeWidth={1.75}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
-              />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search companies…"
-                aria-label="Search companies"
-                className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-9 text-[15px] text-fg transition-colors placeholder:text-fg-subtle hover:border-fg-subtle/50 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              />
-              {loading && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle">
-                  <Spinner />
-                </span>
-              )}
-            </div>
+            <ListSearchField
+              value={q}
+              onChange={setQ}
+              placeholder="Search companies…"
+              label="Search companies"
+              loading={loading}
+            />
             <Button onClick={() => setCreating(true)}>
               <Plus size={16} strokeWidth={2} /> New company
             </Button>
@@ -245,22 +178,7 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
 
       {/* Filters + sort */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
-                tab === t.id ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
-              )}
-            >
-              {t.label}
-              <span className="tnum rounded bg-card px-1.5 text-[11px] text-fg-subtle">{t.n}</span>
-            </button>
-          ))}
-        </div>
+        <TabPills tabs={TABS} active={tab} onChange={setTab} />
         <div className="w-36">
           <Select
             value={typeFilter}
@@ -289,52 +207,22 @@ export function CompaniesView({ initial }: { initial: Company[] }) {
             <option value="Red">Red</option>
           </Select>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-[12px] text-fg-subtle sm:inline">Sort</span>
-          <div className="w-44">
-            <Select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              aria-label="Sort companies"
-              className="h-9 text-[13px]"
-            >
-              {SORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
+        <SortSelect value={sort} onChange={setSort} options={SORTS} label="Sort companies" />
       </div>
 
       {loading && companies.length === 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonRow key={i} />
-          ))}
-        </div>
+        <ListSkeleton />
       ) : shown.length === 0 ? (
         <EmptyState
-          icon={
-            q || typeFilter || healthFilter || tab !== "all" ? (
-              <SearchX size={20} strokeWidth={1.75} />
-            ) : (
-              <Building2 size={20} strokeWidth={1.75} />
-            )
-          }
-          title={
-            q || typeFilter || healthFilter || tab !== "all"
-              ? "No companies match these filters"
-              : "No companies yet"
-          }
+          icon={filtered ? <SearchX size={20} strokeWidth={1.75} /> : <Building2 size={20} strokeWidth={1.75} />}
+          title={filtered ? "No companies match these filters" : "No companies yet"}
           hint={
-            q || typeFilter || healthFilter || tab !== "all"
+            filtered
               ? "Try clearing a filter or search term."
               : "Add your first account, or run the Monday import to seed the pipeline."
           }
           action={
-            q || typeFilter || healthFilter || tab !== "all" ? (
+            filtered ? (
               <Button
                 variant="ghost"
                 onClick={() => {
