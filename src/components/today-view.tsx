@@ -10,6 +10,7 @@ import { isPast } from "@/lib/deal-flags";
 import { Button, EmptyState, cn } from "@/components/ui";
 import { AskLunaBox } from "@/components/ask-luna-box";
 import { SignalsFeed } from "@/components/signals-view";
+import { SequencesFeed } from "@/components/sequences-feed";
 import { LogTouchModal } from "@/components/log-touch-modal";
 import { GettingStarted } from "@/components/getting-started";
 import { useToast } from "@/components/feedback";
@@ -93,6 +94,8 @@ export function TodayView({
       {newWorkspace ? <GettingStarted /> : null}
 
       <SignalsFeed />
+
+      <SequencesFeed />
 
       <NeedsYouToday actions={nextActions} nurture={nurture} />
 
