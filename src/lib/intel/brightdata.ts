@@ -52,12 +52,21 @@ export interface SerpResult {
   link: string;
   title?: string;
   description?: string;
+  /** Publish date as reported by Google, if any (raw — parse defensively). */
+  date?: string;
 }
 
-/** Run a Google search via the Bright Data SERP API; returns organic results. */
-async function serpOrganic(query: string): Promise<SerpResult[]> {
+/**
+ * Run a Google search via the Bright Data SERP API; returns organic results.
+ *
+ * `recent` restricts Google to the past year (`tbs=qdr:y`) — signals are only
+ * useful while they're current, so intent scans pass it. Name/LinkedIn discovery
+ * leaves it off so an established company's pages still surface.
+ */
+async function serpOrganic(query: string, opts?: { recent?: boolean }): Promise<SerpResult[]> {
   if (!SERP_ZONE) throw new Error("Bright Data SERP zone is not set (BRIGHTDATA_SERP_ZONE)");
-  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&gl=uk&hl=en&num=20`;
+  const recency = opts?.recent ? "&tbs=qdr:y" : "";
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&gl=uk&hl=en&num=20${recency}`;
   const res = await fetch(SERP_API, {
     method: "POST",
     headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
@@ -76,6 +85,7 @@ async function serpOrganic(query: string): Promise<SerpResult[]> {
       link: str(o.link) || str(o.url) || "",
       title: str(o.title),
       description: str(o.description) || str(o.snippet),
+      date: str(o.date) || str(o.date_utc) || str(o.age),
     }))
     .filter((o) => o.link);
 }
@@ -167,8 +177,8 @@ function mapCompany(rec: Record<string, unknown>, url: string): EnrichedCompanyD
 
 export class BrightDataProvider {
   /** Raw organic Google results for a query (SERP API). Fast + cheap vs a scrape. */
-  async search(query: string): Promise<SerpResult[]> {
-    return serpOrganic(query);
+  async search(query: string, opts?: { recent?: boolean }): Promise<SerpResult[]> {
+    return serpOrganic(query, opts);
   }
 
   async profileFromUrl(url: string): Promise<EnrichedContactData> {
