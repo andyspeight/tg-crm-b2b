@@ -1,9 +1,10 @@
 import "server-only";
 import type { EnrichedCompanyData, EnrichedContactData, LinkedInKind } from "./types";
-import { BrightDataProvider } from "./brightdata";
+import { BrightDataProvider, type SerpResult } from "./brightdata";
 
 /** Provider interface so Bright Data can be swapped without touching callers. */
 export interface IntelProvider {
+  search(query: string): Promise<SerpResult[]>;
   profileFromUrl(url: string): Promise<EnrichedContactData>;
   companyFromUrl(url: string): Promise<EnrichedCompanyData>;
   discoverCompany(name: string): Promise<EnrichedCompanyData | null>;

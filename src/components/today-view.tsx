@@ -20,6 +20,7 @@ import type { NextAction } from "@/lib/crm/next-actions";
 import { isPast } from "@/lib/deal-flags";
 import { Button, EmptyState } from "@/components/ui";
 import { QuickActions } from "@/components/quick-actions";
+import { SignalsFeed } from "@/components/signals-view";
 import { LogTouchModal } from "@/components/log-touch-modal";
 import { GettingStarted } from "@/components/getting-started";
 import { useToast } from "@/components/feedback";
@@ -136,6 +137,8 @@ export function TodayView({
           tone={careList.some((c) => c.overdue) ? "danger" : undefined}
         />
       </div>
+
+      <SignalsFeed />
 
       <Section title="Do next" count={nextActions.length} icon={<Zap size={14} strokeWidth={2.2} />}>
         {nextActions.length === 0 ? (
