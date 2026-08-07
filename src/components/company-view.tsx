@@ -25,6 +25,7 @@ import {
   Radar,
   RefreshCw,
   Rocket,
+  Send,
   Sparkles,
   Star,
   StickyNote,
@@ -69,6 +70,7 @@ import type { BadgeColor } from "@/components/ui";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
 import { useConfirm, useToast } from "@/components/feedback";
 import { OutreachModal } from "@/components/outreach-modal";
+import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { StartOnboardingModal } from "@/components/start-onboarding-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 
@@ -151,6 +153,7 @@ export function CompanyView({
   const [editingCompany, setEditingCompany] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [enrolContact, setEnrolContact] = useState<Contact | null>(null);
   const [addingDeal, setAddingDeal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [loggingActivity, setLoggingActivity] = useState(false);
@@ -609,6 +612,7 @@ export function CompanyView({
                     c={c}
                     index={i}
                     onDraft={() => openEmail(c.id)}
+                    onEnrol={() => setEnrolContact(c)}
                     onEdit={() => setEditingContact(c)}
                     onRemove={() => removeContact(c)}
                   />
@@ -1081,6 +1085,23 @@ export function CompanyView({
           await Promise.all([refreshCompany(), refreshActivities()]);
         }}
       />
+
+      <AddToSequenceModal
+        open={enrolContact !== null}
+        onClose={() => setEnrolContact(null)}
+        contacts={
+          enrolContact
+            ? ([
+                {
+                  id: enrolContact.id,
+                  name: enrolContact.name || "Unnamed",
+                  email: enrolContact.email,
+                  marketingOptIn: enrolContact.marketingOptIn,
+                },
+              ] as EnrolTarget[])
+            : []
+        }
+      />
     </div>
   );
 }
@@ -1120,12 +1141,14 @@ function ContactRow({
   c,
   index,
   onDraft,
+  onEnrol,
   onEdit,
   onRemove,
 }: {
   c: Contact;
   index: number;
   onDraft: () => void;
+  onEnrol: () => void;
   onEdit: () => void;
   onRemove: () => void;
 }) {
@@ -1173,6 +1196,14 @@ function ContactRow({
           className={cn(ICON_LINK, "hover:text-accent-strong")}
         >
           <Sparkles size={16} strokeWidth={1.75} />
+        </button>
+        <button
+          onClick={onEnrol}
+          title="Add to a sequence"
+          aria-label={`Add ${c.name} to a sequence`}
+          className={cn(ICON_LINK, "hover:text-accent-strong")}
+        >
+          <Send size={16} strokeWidth={1.75} />
         </button>
         <span className="ml-0.5 flex items-center gap-0.5">
           <IconButton label="Edit person" onClick={onEdit} className="h-8 w-8">
