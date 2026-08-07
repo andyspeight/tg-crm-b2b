@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createActivity } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich } from "@/lib/google/gmail";
-import { templateAttachmentsAsBase64 } from "@/lib/email/attachments";
+import { applyEmailTracking } from "@/lib/email/tracking";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -61,7 +61,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const attachments = templateId ? await templateAttachmentsAsBase64(templateId) : [];
+    // Pixel for open tracking; template attachments go out as tracked links.
+    const { html: trackedHtml, attachments } = await applyEmailTracking({
+      html,
+      subject,
+      recipient: to,
+      companyId,
+      contactId,
+      templateId: templateId || undefined,
+    });
 
     const sent = await sendGmailRich({
       accessToken: sender.accessToken,
@@ -69,7 +77,7 @@ export async function POST(req: NextRequest) {
       fromName: sender.name,
       to,
       subject,
-      html,
+      html: trackedHtml,
       attachments,
     });
 

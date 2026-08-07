@@ -25,7 +25,7 @@ import {
 import type { Sequence, SequenceEnrollment } from "@/lib/crm/types";
 import { getAccessToken, getConnection } from "@/lib/google/oauth";
 import { getMessageMeta, sendGmailRich, threadHasReplyFrom } from "@/lib/google/gmail";
-import { templateAttachmentsAsBase64 } from "@/lib/email/attachments";
+import { applyEmailTracking } from "@/lib/email/tracking";
 import { fillMergeTags, firstNameOf } from "@/lib/email/merge";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -210,11 +210,20 @@ async function processEnrollment(
 
   const vars = { firstName: firstNameOf(contact.name), company: contact.companyName };
   const filledSubject = fillMergeTags(template.subject || "", vars).trim() || "(no subject)";
-  const html = fillMergeTags(template.body || "", vars);
-  const attachments = await templateAttachmentsAsBase64(template.id);
+  const filledHtml = fillMergeTags(template.body || "", vars);
 
   const isFollowUp = !!enrollment.threadId;
   const subject = isFollowUp ? replySubject(enrollment.threadSubject || filledSubject) : filledSubject;
+
+  // Pixel for open tracking; template attachments go out as tracked links.
+  const { html, attachments } = await applyEmailTracking({
+    html: filledHtml,
+    subject,
+    recipient: contact.email,
+    companyId: enrollment.companyId,
+    contactId: enrollment.contactId,
+    templateId: template.id,
+  });
 
   const sent = await sendGmailRich({
     accessToken: sender.accessToken,

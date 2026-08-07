@@ -17,6 +17,7 @@ import {
   ENROLLMENT_STATUSES,
   SIGNAL_TYPES,
   SIGNAL_STATUSES,
+  TRACKING_KINDS,
 } from "./config";
 
 export type CompanyType = (typeof COMPANY_TYPES)[number];
@@ -255,6 +256,35 @@ export interface Signal {
   createdTime?: string;
 }
 export type SignalInput = Partial<Omit<Signal, "id" | "companyName" | "createdTime">>;
+
+// --- Email open/download tracking -------------------------------------------
+
+export type TrackingKind = (typeof TRACKING_KINDS)[number];
+
+export interface EmailTracking {
+  id: string;
+  token: string;
+  kind: TrackingKind;
+  subject?: string;
+  filename?: string;
+  templateId?: string;
+  attachIndex?: number;
+  recipient?: string;
+  opens: number;
+  firstOpened?: string;
+  lastOpened?: string;
+  sentAt?: string;
+  userAgent?: string;
+  companyId?: string;
+  contactId?: string;
+  /** Resolved from the linked contact where available (convenience for feeds). */
+  contactName?: string;
+  companyName?: string;
+  createdTime?: string;
+}
+export type EmailTrackingInput = Partial<
+  Omit<EmailTracking, "id" | "contactName" | "companyName" | "createdTime">
+>;
 
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">

@@ -1,4 +1,4 @@
-import type { Activity, SequenceEnrollment } from "./types";
+import type { Activity, EmailTracking, SequenceEnrollment } from "./types";
 
 /**
  * Email performance, computed from what Luna Desk actually records: every send is
@@ -168,4 +168,31 @@ export function computeEmailPerformance(
 /** Format a 0..1 rate as a whole-number percentage. */
 export function pct(rate: number): string {
   return `${Math.round(rate * 100)}%`;
+}
+
+export interface OpensSummary {
+  /** Emails that carried a tracking pixel. */
+  tracked: number;
+  /** Of those, how many were opened at least once. */
+  opened: number;
+  /** opened ÷ tracked, 0..1. */
+  openRate: number;
+  /** Total open events (a keen reader opens more than once). */
+  totalOpens: number;
+  /** Tracked attachments that were downloaded at least once. */
+  downloads: number;
+}
+
+/** Roll up the email-tracking rows into open/download headline numbers. */
+export function summarizeOpens(trackings: EmailTracking[]): OpensSummary {
+  const emails = trackings.filter((t) => t.kind === "Email");
+  const opened = emails.filter((t) => t.opens > 0);
+  const attachments = trackings.filter((t) => t.kind === "Attachment");
+  return {
+    tracked: emails.length,
+    opened: opened.length,
+    openRate: emails.length ? opened.length / emails.length : 0,
+    totalOpens: emails.reduce((s, t) => s + t.opens, 0),
+    downloads: attachments.filter((t) => t.opens > 0).length,
+  };
 }

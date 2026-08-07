@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createActivity } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
-import { sendGmail } from "@/lib/google/gmail";
+import { sendGmailRich } from "@/lib/google/gmail";
+import { applyEmailTracking, plainToHtml } from "@/lib/email/tracking";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -57,13 +58,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const sent = await sendGmail({
+    // Send as HTML so we can carry an open-tracking pixel (plain text can't).
+    const { html, attachments } = await applyEmailTracking({
+      html: plainToHtml(text),
+      subject,
+      recipient: to,
+      companyId,
+      contactId,
+    });
+
+    const sent = await sendGmailRich({
       accessToken: sender.accessToken,
       fromEmail: sender.email,
       fromName: sender.name,
       to,
       subject,
-      body: text,
+      html,
+      text,
+      attachments,
     });
 
     // Log to the company/contact timeline (also bumps Last Meaningful Contact).
