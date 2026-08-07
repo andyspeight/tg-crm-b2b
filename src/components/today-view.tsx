@@ -10,7 +10,6 @@ import {
   Circle,
   Clock,
   HeartHandshake,
-  Sparkles,
   Users,
   Wallet,
   Zap,
@@ -224,11 +223,6 @@ export function TodayView({
           )}
         </Section>
       </div>
-
-      <p className="flex items-center gap-1.5 px-1 text-[12px] text-fg-subtle">
-        <Sparkles size={13} strokeWidth={1.75} aria-hidden />
-        Signal monitoring — watched accounts&rsquo; news and social — arrives next in Stage 5.
-      </p>
 
       <LogTouchModal
         open={!!logging}
