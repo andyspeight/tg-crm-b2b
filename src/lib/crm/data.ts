@@ -27,6 +27,8 @@ import {
   CARE_STATUSES,
   SEQUENCE_STATUSES,
   ENROLLMENT_STATUSES,
+  SIGNAL_TYPES,
+  SIGNAL_STATUSES,
   DEFAULT_PIPELINE_STAGES,
   PIPELINE_STAGES_KEY,
   STAGE_COLORS,
@@ -48,6 +50,8 @@ import type {
   EmailTemplate,
   EmailTemplateInput,
   PipelineStage,
+  Signal,
+  SignalInput,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -179,6 +183,7 @@ function toCompany(rec: AirtableRecord): Company {
     supportUpdated: str(f[F.supportUpdated]),
     onboardingClientId: str(f[F.onboardingClientId]),
     onboardingStarted: str(f[F.onboardingStarted]),
+    signalsCheckedAt: str(f[F.signalsChecked]),
     contactIds: idList(f[F.contacts]),
     dealIds: idList(f[F.deals]),
     activityIds: idList(f[F.activities]),
@@ -291,6 +296,7 @@ function buildCompanyFields(input: CompanyInput, partial: boolean): Record<strin
   if (has("watchlist")) f[F.watchlist] = boolean(input.watchlist);
   if (has("enrichedAt")) f[F.enrichedAt] = text(input.enrichedAt);
   if (has("enrichmentSource")) f[F.enrichmentSource] = text(input.enrichmentSource);
+  if (has("signalsCheckedAt")) f[F.signalsChecked] = text(input.signalsCheckedAt);
   // AI Brief, Next Best Action and Last Meaningful Contact are written by app jobs,
   // not the CRUD forms, so they remain not settable here.
   return f;
@@ -2112,4 +2118,109 @@ export async function hasLiveEnrollment(sequenceId: string, contactId: string): 
   return rows.some(
     (e) => e.contactId === contactId && (e.status === "Active" || e.status === "Paused"),
   );
+}
+
+// --- Signals (intel monitoring) ---------------------------------------------
+
+function toSignal(rec: AirtableRecord): Signal {
+  const f = rec.fields;
+  const F = FIELDS.signals;
+  return {
+    id: rec.id,
+    headline: str(f[F.headline]) ?? "",
+    type: str(f[F.type]) as Signal["type"],
+    url: str(f[F.url]),
+    dateFound: str(f[F.dateFound]),
+    relevanceScore: numv(f[F.relevanceScore]),
+    status: (str(f[F.status]) as Signal["status"]) ?? "New",
+    companyId: firstId(f[F.company]),
+    contactId: firstId(f[F.contact]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildSignalFields(input: SignalInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.signals;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof SignalInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (!partial || has("headline")) f[F.headline] = requiredText(input.headline, "Headline");
+  if (has("type")) f[F.type] = enumOrNull(input.type, SIGNAL_TYPES, "signal type");
+  if (has("url")) f[F.url] = text(input.url);
+  if (has("dateFound")) f[F.dateFound] = text(input.dateFound);
+  if (has("relevanceScore")) f[F.relevanceScore] = numberOrNull(input.relevanceScore);
+  if (has("status")) f[F.status] = enumOrNull(input.status, SIGNAL_STATUSES, "status");
+  if (has("companyId")) {
+    const id = text(input.companyId);
+    f[F.company] = id ? [id] : [];
+  }
+  if (has("contactId")) {
+    const id = text(input.contactId);
+    f[F.contact] = id ? [id] : [];
+  }
+  return f;
+}
+
+export async function createSignal(input: SignalInput): Promise<Signal> {
+  const F = FIELDS.signals;
+  const fields = buildSignalFields(input, false);
+  if (fields[F.status] == null) fields[F.status] = "New";
+  if (fields[F.dateFound] == null) fields[F.dateFound] = new Date().toISOString();
+  return toSignal(await createRecord(AIRTABLE_BASE_ID, TABLES.signals, fields));
+}
+
+/** All signals for one company, newest first. */
+export async function listSignalsByCompany(companyId: string): Promise<Signal[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.signals, { maxRecords: 2000 });
+  return records
+    .map(toSignal)
+    .filter((s) => s.companyId === companyId)
+    .sort((a, b) => (b.dateFound || b.createdTime || "").localeCompare(a.dateFound || a.createdTime || ""));
+}
+
+/** The URLs already captured for a company — used to avoid duplicate signals. */
+export async function existingSignalUrls(companyId: string): Promise<Set<string>> {
+  const signals = await listSignalsByCompany(companyId);
+  return new Set(signals.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean));
+}
+
+/** Recent signals across the base, optionally filtered by status, newest first. */
+export async function listRecentSignals(opts?: { status?: string; limit?: number }): Promise<Signal[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.signals, { maxRecords: 5000 });
+  let rows = records.map(toSignal);
+  if (opts?.status) rows = rows.filter((s) => s.status === opts.status);
+  rows.sort((a, b) => (b.dateFound || b.createdTime || "").localeCompare(a.dateFound || a.createdTime || ""));
+  const limited = opts?.limit ? rows.slice(0, opts.limit) : rows;
+  await attachSignalCompanyNames(limited);
+  return limited;
+}
+
+async function attachSignalCompanyNames(signals: Signal[]): Promise<void> {
+  const ids = signals.map((s) => s.companyId || "").filter(Boolean);
+  if (ids.length === 0) return;
+  const names = await companyNameMap(ids);
+  for (const s of signals) if (s.companyId) s.companyName = names.get(s.companyId);
+}
+
+export async function updateSignalStatus(id: string, status: string): Promise<Signal> {
+  const fields = buildSignalFields({ status: status as Signal["status"] }, true);
+  return toSignal(await updateRecord(AIRTABLE_BASE_ID, TABLES.signals, id, fields));
+}
+
+// --- intel scan pickers (round-robin over the whole base, bounded per run) ---
+
+/** Companies with a name, least-recently signal-checked first (never-checked lead). */
+export async function companiesForSignalScan(limit: number): Promise<Company[]> {
+  const companies = await listCompanies();
+  return companies
+    .filter((c) => c.name)
+    .sort((a, b) => (a.signalsCheckedAt || "").localeCompare(b.signalsCheckedAt || ""))
+    .slice(0, Math.max(0, limit));
+}
+
+/** Companies that have a LinkedIn URL but haven't been enriched yet. */
+export async function companiesForBackfill(limit: number): Promise<Company[]> {
+  const companies = await listCompanies();
+  return companies
+    .filter((c) => c.linkedin && !c.enrichedAt)
+    .slice(0, Math.max(0, limit));
 }

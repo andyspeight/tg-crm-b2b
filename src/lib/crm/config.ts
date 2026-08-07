@@ -149,6 +149,18 @@ export const TOUCH_TYPES = [
 
 export const CARE_STATUSES = ["Scheduled", "Completed", "Skipped"] as const;
 
+// Signal monitoring (intel). Must match the Airtable single-select choices.
+export const SIGNAL_TYPES = [
+  "News",
+  "LinkedIn Post",
+  "Job Change",
+  "Funding",
+  "Award",
+  "Website Change",
+  "Other",
+] as const;
+export const SIGNAL_STATUSES = ["New", "Seen", "Actioned", "Dismissed"] as const;
+
 // Email sequences (Phase 3). A sequence is Draft while you build it, Active to
 // enrol and send, Paused to hold every enrollment at once.
 export const SEQUENCE_STATUSES = ["Draft", "Active", "Paused"] as const;
@@ -200,6 +212,7 @@ export const FIELDS = {
     // Onboarding handoff (written when a won deal is sent to tg-onboarding).
     onboardingClientId: "Onboarding Client ID",
     onboardingStarted: "Onboarding Started",
+    signalsChecked: "Signals Checked",
     contacts: "Contacts",
     deals: "Deals",
     activities: "Activities",
@@ -258,6 +271,16 @@ export const FIELDS = {
     status: "Status",
     outcomeNotes: "Outcome Notes",
     company: "Company",
+  },
+  signals: {
+    headline: "Headline",
+    type: "Signal Type",
+    url: "URL",
+    dateFound: "Date Found",
+    relevanceScore: "Relevance Score",
+    status: "Status",
+    company: "Company",
+    contact: "Contact",
   },
   appSettings: {
     key: "Key",

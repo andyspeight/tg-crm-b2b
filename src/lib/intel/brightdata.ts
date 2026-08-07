@@ -48,7 +48,7 @@ async function trigger(datasetId: string, url: string): Promise<string> {
   return data.snapshot_id;
 }
 
-interface SerpResult {
+export interface SerpResult {
   link: string;
   title?: string;
   description?: string;
@@ -166,6 +166,11 @@ function mapCompany(rec: Record<string, unknown>, url: string): EnrichedCompanyD
 }
 
 export class BrightDataProvider {
+  /** Raw organic Google results for a query (SERP API). Fast + cheap vs a scrape. */
+  async search(query: string): Promise<SerpResult[]> {
+    return serpOrganic(query);
+  }
+
   async profileFromUrl(url: string): Promise<EnrichedContactData> {
     const records = await collect(await trigger(PROFILE_DATASET, url));
     if (records.length === 0) throw new Error("No LinkedIn profile data found for that URL");

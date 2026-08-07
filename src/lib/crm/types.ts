@@ -15,6 +15,8 @@ import {
   CARE_STATUSES,
   SEQUENCE_STATUSES,
   ENROLLMENT_STATUSES,
+  SIGNAL_TYPES,
+  SIGNAL_STATUSES,
 } from "./config";
 
 export type CompanyType = (typeof COMPANY_TYPES)[number];
@@ -74,6 +76,8 @@ export interface Company {
   // Onboarding handoff — set when a won deal is handed to tg-onboarding.
   onboardingClientId?: string;
   onboardingStarted?: string;
+  // Signal monitoring — when the intel scan last checked this account.
+  signalsCheckedAt?: string;
   contactIds: string[];
   dealIds: string[];
   activityIds: string[];
@@ -231,6 +235,26 @@ export interface SequenceEnrollment {
 export type EnrollmentInput = Partial<
   Omit<SequenceEnrollment, "id" | "sequenceName" | "contactName" | "contactEmail" | "createdTime">
 >;
+
+// --- Signals (intel monitoring) ---------------------------------------------
+
+export type SignalType = (typeof SIGNAL_TYPES)[number];
+export type SignalStatus = (typeof SIGNAL_STATUSES)[number];
+
+export interface Signal {
+  id: string;
+  headline: string;
+  type?: SignalType;
+  url?: string;
+  dateFound?: string;
+  relevanceScore?: number;
+  status: SignalStatus;
+  companyId?: string;
+  companyName?: string;
+  contactId?: string;
+  createdTime?: string;
+}
+export type SignalInput = Partial<Omit<Signal, "id" | "companyName" | "createdTime">>;
 
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">

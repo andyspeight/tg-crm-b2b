@@ -71,6 +71,7 @@ import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/co
 import { useConfirm, useToast } from "@/components/feedback";
 import { OutreachModal } from "@/components/outreach-modal";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
+import { CompanySignals } from "@/components/signals-view";
 import { StartOnboardingModal } from "@/components/start-onboarding-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 
@@ -645,6 +646,11 @@ export function CompanyView({
                 </ul>
               </div>
             ) : null}
+          </Section>
+
+          {/* Signals */}
+          <Section title="Signals">
+            <CompanySignals companyId={company.id} />
           </Section>
 
           {/* Deals */}
