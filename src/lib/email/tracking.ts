@@ -70,13 +70,17 @@ export async function applyEmailTracking(opts: {
   companyId?: string;
   contactId?: string;
   templateId?: string;
+  /** Ad-hoc files uploaded in the composer — delivered directly (a file attached
+   *  in the message can't be open-tracked; template files become tracked links). */
+  extraAttachments?: RichAttachment[];
 }): Promise<TrackedSend> {
   const base = appBaseUrl();
+  const extra = opts.extraAttachments ?? [];
 
   // No public origin → can't build tracking URLs. Preserve existing behaviour.
   if (!base) {
-    const attachments = opts.templateId ? await templateAttachmentsAsBase64(opts.templateId) : [];
-    return { html: opts.html, attachments };
+    const templateFiles = opts.templateId ? await templateAttachmentsAsBase64(opts.templateId) : [];
+    return { html: opts.html, attachments: [...templateFiles, ...extra] };
   }
 
   let html = opts.html;
@@ -123,5 +127,6 @@ export async function applyEmailTracking(opts: {
     console.error("[tracking] pixel row failed:", e);
   }
 
-  return { html, attachments: [] };
+  // Ad-hoc files ride along directly; template files went out as tracked links.
+  return { html, attachments: extra };
 }
