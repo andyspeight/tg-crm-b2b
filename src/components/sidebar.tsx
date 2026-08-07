@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   Building2,
   Columns3,
   Database,
@@ -35,6 +36,7 @@ const WORKSPACE: Item[] = [
 const TOOLS: Item[] = [
   { href: "/templates", label: "Email templates", icon: Mail },
   { href: "/sequences", label: "Sequences", icon: Send },
+  { href: "/performance", label: "Email performance", icon: BarChart3 },
   { href: "/signals", label: "Signals", icon: Radar },
   { href: "/digest", label: "Weekly digest", icon: Sparkles },
   { href: "/data", label: "Data health", icon: Database },
