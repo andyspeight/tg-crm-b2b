@@ -76,8 +76,8 @@ export async function runMonitor(): Promise<MonitorSummary> {
       if (!timeLeft()) break;
       summary.companiesScanned += 1;
       try {
-        const results = await provider.search(signalQuery(company.name));
-        const candidates = detectSignals(company.name, results);
+        const results = await provider.search(signalQuery(company.name), { recent: true });
+        const candidates = detectSignals(company.name, results, { domain: company.website });
         if (candidates.length) {
           const seen = await existingSignalUrls(company.id);
           for (const c of candidates) {
@@ -87,6 +87,7 @@ export async function runMonitor(): Promise<MonitorSummary> {
               url: c.url,
               type: c.type,
               relevanceScore: c.relevanceScore,
+              dateFound: c.date,
               status: "New",
               companyId: company.id,
             });
