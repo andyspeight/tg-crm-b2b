@@ -12,6 +12,7 @@ import {
   LogOut,
   Mail,
   Moon,
+  Radar,
   Send,
   Settings,
   Sparkles,
@@ -34,6 +35,7 @@ const WORKSPACE: Item[] = [
 const TOOLS: Item[] = [
   { href: "/templates", label: "Email templates", icon: Mail },
   { href: "/sequences", label: "Sequences", icon: Send },
+  { href: "/signals", label: "Signals", icon: Radar },
   { href: "/digest", label: "Weekly digest", icon: Sparkles },
   { href: "/data", label: "Data health", icon: Database },
 ];
