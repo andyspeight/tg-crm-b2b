@@ -223,6 +223,7 @@ export const FIELDS = {
     name: "Name",
     role: "Role",
     email: "Email",
+    alternateEmails: "Alternate Emails",
     phone: "Phone",
     linkedin: "LinkedIn URL",
     marketingOptIn: "Marketing Opt-In",

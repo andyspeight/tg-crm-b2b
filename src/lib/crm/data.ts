@@ -64,6 +64,7 @@ import type {
   Task,
   TaskInput,
 } from "./types";
+import { findDuplicateGroups, type DuplicateGroup } from "./duplicates";
 import {
   AirtableRecord,
   createRecord,
@@ -97,6 +98,15 @@ function numv(v: unknown): number | undefined {
 }
 function idList(v: unknown): string[] {
   return Array.isArray(v) ? (v.filter((x) => typeof x === "string") as string[]) : [];
+}
+/** Split a multiline text cell into trimmed, non-empty lines. */
+function splitLines(v?: string): string[] | undefined {
+  if (!v) return undefined;
+  const out = v
+    .split(/[\r\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return out.length ? out : undefined;
 }
 function firstId(v: unknown): string | undefined {
   return idList(v)[0];
@@ -236,6 +246,7 @@ function toContact(rec: AirtableRecord): Contact {
     name: str(f[F.name]) ?? "",
     role: str(f[F.role]),
     email: str(f[F.email]),
+    alternateEmails: splitLines(str(f[F.alternateEmails])),
     phone: normalizePhone(str(f[F.phone])),
     linkedin: str(f[F.linkedin]),
     marketingOptIn: str(f[F.marketingOptIn]) as Contact["marketingOptIn"],
@@ -313,6 +324,10 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
   if (!partial || has("name")) f[F.name] = requiredText(input.name, "Contact name");
   if (has("role")) f[F.role] = text(input.role);
   if (has("email")) f[F.email] = text(input.email);
+  if (has("alternateEmails")) {
+    const list = (input.alternateEmails ?? []).map((s) => s.trim()).filter(Boolean);
+    f[F.alternateEmails] = list.length ? list.join("\n") : null;
+  }
   if (has("phone")) f[F.phone] = normalizePhone(text(input.phone)) ?? null;
   if (has("linkedin")) f[F.linkedin] = text(input.linkedin);
   if (has("marketingOptIn"))
@@ -1816,18 +1831,35 @@ export async function mergeContacts(
   for (const id of secondaries) secContacts.push(await getContact(id));
 
   const secSet = new Set(secondaries);
-  const actRecs = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
-    fields: [FIELDS.activities.contact],
-    maxRecords: 5000,
-  });
-  const moveIds = actRecs
-    .filter((r) => secSet.has(firstId(r.fields[FIELDS.activities.contact]) ?? ""))
-    .map((r) => ({ id: r.id, fields: { [FIELDS.activities.contact]: [primaryId] } }));
+  // Repoint every record that links to a secondary contact onto the primary, so
+  // no history is lost — timeline, sequence enrollments, email opens, signals.
+  const linked: { table: string; field: string }[] = [
+    { table: TABLES.activities, field: FIELDS.activities.contact },
+    { table: TABLES.sequenceEnrollments, field: FIELDS.sequenceEnrollments.contact },
+    { table: TABLES.emailTracking, field: FIELDS.emailTracking.contact },
+    { table: TABLES.signals, field: FIELDS.signals.contact },
+  ];
   let moved = 0;
-  if (moveIds.length) moved = (await updateRecords(AIRTABLE_BASE_ID, TABLES.activities, moveIds)).length;
+  for (const { table, field } of linked) {
+    const recs = await listRecords(AIRTABLE_BASE_ID, table, { fields: [field], maxRecords: 5000 });
+    const updates = recs
+      .filter((r) => secSet.has(firstId(r.fields[field]) ?? ""))
+      .map((r) => ({ id: r.id, fields: { [field]: [primaryId] } }));
+    if (updates.length) moved += (await updateRecords(AIRTABLE_BASE_ID, table, updates)).length;
+  }
 
+  // Fill blanks from the secondaries, then fold their email addresses into the
+  // primary's Alternate Emails so the same person's other addresses aren't lost.
   const patch = fillContactBlanks(primary, secContacts);
-  if (Object.keys(patch).length) await updateContact(primaryId, patch);
+  const emails = new Set<string>((primary.alternateEmails ?? []).map((e) => e.trim()).filter(Boolean));
+  for (const s of secContacts) {
+    if (s.email) emails.add(s.email.trim());
+    (s.alternateEmails ?? []).forEach((e) => e.trim() && emails.add(e.trim()));
+  }
+  const primaryEmail = ((patch.email as string) || primary.email || "").trim();
+  if (primaryEmail) emails.delete(primaryEmail);
+  patch.alternateEmails = [...emails];
+  await updateContact(primaryId, patch);
 
   await deleteRecords(AIRTABLE_BASE_ID, TABLES.contacts, secondaries);
   return { moved, merged: secondaries.length };
@@ -2478,4 +2510,27 @@ async function contactNameMap(ids: string[]): Promise<Map<string, string>> {
   });
   for (const rec of records) map.set(rec.id, str(rec.fields[F.name]) ?? "");
   return map;
+}
+
+// --- duplicate contacts: detect + merge -------------------------------------
+
+export type DuplicateGroupWithContacts = DuplicateGroup & { contacts: Contact[] };
+
+/** Suggested duplicate-people groups across the base, with the contacts attached. */
+export async function listDuplicateGroups(): Promise<DuplicateGroupWithContacts[]> {
+  const contacts = await listContacts({ limit: 5000 });
+  const byId = new Map(contacts.map((c) => [c.id, c]));
+  const groups = findDuplicateGroups(contacts);
+
+  const withContacts: DuplicateGroupWithContacts[] = groups.map((g) => ({
+    ...g,
+    contacts: g.contactIds.map((id) => byId.get(id)).filter((c): c is Contact => !!c),
+  }));
+
+  const companyIds = withContacts.flatMap((g) => g.contacts.map((c) => c.companyId || "")).filter(Boolean);
+  if (companyIds.length) {
+    const names = await companyNameMap(companyIds);
+    for (const g of withContacts) for (const c of g.contacts) if (c.companyId) c.companyName = names.get(c.companyId);
+  }
+  return withContacts;
 }

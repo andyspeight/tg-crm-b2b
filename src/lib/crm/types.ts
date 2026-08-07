@@ -91,6 +91,8 @@ export interface Contact {
   name: string;
   role?: string;
   email?: string;
+  /** Other addresses for the same person, accumulated when duplicates are merged. */
+  alternateEmails?: string[];
   phone?: string;
   linkedin?: string;
   marketingOptIn?: MarketingOptIn;
