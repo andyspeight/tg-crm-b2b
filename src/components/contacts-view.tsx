@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Download, Pencil, Plus, SearchX, Trash2, Users } from "lucide-react";
+import { Download, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact } from "@/lib/crm/types";
 import {
@@ -18,7 +18,12 @@ import {
 } from "@/components/ui";
 import { LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
+import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { useToast } from "@/components/feedback";
+
+function enrolTarget(c: Contact): EnrolTarget {
+  return { id: c.id, name: c.name || "Unnamed", email: c.email, marketingOptIn: c.marketingOptIn };
+}
 import { useList } from "@/components/use-list";
 import { ListSearchField, ListSkeleton, SortSelect, TabPills } from "@/components/list-kit";
 
@@ -74,7 +79,22 @@ export function ContactsView({
   const [sort, setSort] = useState<Sort>("name");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [enrolTargets, setEnrolTargets] = useState<EnrolTarget[] | null>(null);
   const toast = useToast();
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function openEnrolSelected() {
+    const targets = contacts.filter((c) => selected.has(c.id)).map(enrolTarget);
+    if (targets.length) setEnrolTargets(targets);
+  }
 
   const counts = useMemo(() => {
     let customer = 0;
@@ -188,6 +208,22 @@ export function ContactsView({
         <SortSelect value={sort} onChange={setSort} options={SORTS} label="Sort people" />
       </div>
 
+      {selected.size > 0 ? (
+        <div className="luna-fade flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent-soft bg-accent-soft/30 px-3 py-2">
+          <span className="text-[13px] font-medium text-fg">
+            {selected.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={openEnrolSelected}>
+              <Send size={15} strokeWidth={1.9} /> Add to sequence
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <X size={14} strokeWidth={1.9} /> Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {jumpEnabled && shown.length > 12 ? (
         <div className="sticky top-[52px] z-10 -mx-1 flex flex-wrap items-center justify-center gap-0.5 rounded-xl border border-border bg-card/90 px-2 py-1.5 shadow-card backdrop-blur">
           {ALPHABET.map((L) => {
@@ -246,9 +282,31 @@ export function ContactsView({
         <>
           {/* Desktop table */}
           <div className="luna-fade hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-card sm:block">
-            <table className="w-full min-w-[720px] text-[14px]">
+            <table className="w-full min-w-[760px] text-[14px]">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-left">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all shown"
+                      className="h-4 w-4 cursor-pointer accent-[var(--color-accent-strong)]"
+                      checked={shown.length > 0 && shown.every((c) => selected.has(c.id))}
+                      ref={(el) => {
+                        if (el) {
+                          const any = shown.some((c) => selected.has(c.id));
+                          el.indeterminate = any && !shown.every((c) => selected.has(c.id));
+                        }
+                      }}
+                      onChange={(e) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) shown.forEach((c) => next.add(c.id));
+                          else shown.forEach((c) => next.delete(c.id));
+                          return next;
+                        });
+                      }}
+                    />
+                  </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Name</th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Company</th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Status</th>
@@ -271,8 +329,20 @@ export function ContactsView({
                         setEditing(c);
                       }
                     }}
-                    className="group scroll-mt-[104px] cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
+                    className={cn(
+                      "group scroll-mt-[104px] cursor-pointer border-b border-border-soft transition-colors last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none",
+                      selected.has(c.id) && "bg-accent-soft/25",
+                    )}
                   >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${c.name || "person"}`}
+                        className="h-4 w-4 cursor-pointer accent-[var(--color-accent-strong)]"
+                        checked={selected.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                      />
+                    </td>
                     <td className="relative px-4 py-3">
                       <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
                       <div className="flex items-center gap-3">
@@ -318,6 +388,13 @@ export function ContactsView({
                     </td>
                     <td className="sticky right-0 z-10 bg-card px-2 py-2 group-hover:bg-muted">
                       <div onClick={(e) => e.stopPropagation()} className="flex justify-end gap-0.5">
+                        <IconButton
+                          label="Add to sequence"
+                          onClick={() => setEnrolTargets([enrolTarget(c)])}
+                          className="hover:text-accent-strong"
+                        >
+                          <Send size={16} strokeWidth={1.75} />
+                        </IconButton>
                         <IconButton label="Edit person" onClick={() => setEditing(c)}>
                           <Pencil size={16} strokeWidth={1.75} />
                         </IconButton>
@@ -347,6 +424,13 @@ export function ContactsView({
                       <div className="flex items-start justify-between gap-2">
                         <span className="truncate font-medium text-fg">{c.name || "Unnamed"}</span>
                         <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-0.5">
+                          <IconButton
+                            label="Add to sequence"
+                            onClick={() => setEnrolTargets([enrolTarget(c)])}
+                            className="hover:text-accent-strong"
+                          >
+                            <Send size={16} strokeWidth={1.75} />
+                          </IconButton>
                           <IconButton label="Edit person" onClick={() => setEditing(c)}>
                             <Pencil size={16} strokeWidth={1.75} />
                           </IconButton>
@@ -407,6 +491,13 @@ export function ContactsView({
           />
         )}
       </Modal>
+
+      <AddToSequenceModal
+        open={enrolTargets !== null}
+        onClose={() => setEnrolTargets(null)}
+        contacts={enrolTargets ?? []}
+        onDone={() => setSelected(new Set())}
+      />
     </div>
   );
 }
