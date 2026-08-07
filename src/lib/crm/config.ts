@@ -20,6 +20,7 @@ export const TABLES = {
   emailTemplates: "tblKthkgFtNyfWszf",
   sequences: "tblo7qpGAZRHou9py",
   sequenceEnrollments: "tblIbCHUgRu0lo5bh",
+  emailTracking: "tblEBKiYrAkHW4Eyj",
 } as const;
 
 // --- Select option sets (must match the Airtable single-select choices exactly) ---
@@ -315,4 +316,23 @@ export const FIELDS = {
     enrolledAt: "Enrolled At",
     completedAt: "Completed At",
   },
+  emailTracking: {
+    token: "Token",
+    kind: "Kind",
+    subject: "Subject",
+    filename: "Filename",
+    templateId: "Template Id",
+    attachIndex: "Attach Index",
+    recipient: "Recipient",
+    opens: "Opens",
+    firstOpened: "First Opened",
+    lastOpened: "Last Opened",
+    sentAt: "Sent At",
+    userAgent: "User Agent",
+    company: "Company",
+    contact: "Contact",
+  },
 } as const;
+
+/** Email Tracking row kinds. */
+export const TRACKING_KINDS = ["Email", "Attachment"] as const;

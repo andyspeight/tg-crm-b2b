@@ -1,0 +1,127 @@
+import "server-only";
+import { appBaseUrl } from "@/lib/base-url";
+import { createTracking, getEmailTemplate } from "@/lib/crm/data";
+import { templateAttachmentsAsBase64 } from "@/lib/email/attachments";
+import type { RichAttachment } from "@/lib/google/gmail";
+
+/**
+ * Open/click tracking for outbound Gmail. Every send gets a 1×1 pixel whose URL
+ * carries an opaque token; when the recipient's client loads it, the public
+ * /api/track/open endpoint records the open. Attachments go out as tracked
+ * download links (a pixel can't live inside a PDF), so a click is a real
+ * "opened the attachment" signal.
+ *
+ * All of this is best-effort: if we can't resolve a public base URL, or a row
+ * fails to write, the email still sends — tracking must never block outreach.
+ */
+
+export function newToken(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Turn a plain-text body into minimal, safe HTML (escape + paragraph/line breaks). */
+export function plainToHtml(text: string): string {
+  const blocks = text.trim().split(/\n{2,}/);
+  return blocks
+    .map((b) => `<p style="margin:0 0 1em">${esc(b).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function pixelTag(base: string, token: string): string {
+  return `<img src="${base}/api/track/open/${token}" width="1" height="1" alt="" style="display:none;max-height:0;overflow:hidden" />`;
+}
+
+function attachmentsBlock(links: { name: string; href: string }[]): string {
+  if (links.length === 0) return "";
+  const rows = links
+    .map(
+      (l) =>
+        `<div style="margin:4px 0"><a href="${l.href}" style="color:#0096B7;text-decoration:underline">📎 ${esc(l.name)}</a></div>`,
+    )
+    .join("");
+  return `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #E2E8F0"><div style="font-size:13px;color:#475569;margin-bottom:6px">Attachments</div>${rows}</div>`;
+}
+
+export interface TrackedSend {
+  html: string;
+  attachments: RichAttachment[];
+}
+
+/**
+ * Augment an outbound email with tracking. Returns the HTML to send (with pixel +
+ * any tracked attachment links) and the attachments to attach directly.
+ *
+ * When tracking is possible, attachments become links (attachments array is
+ * empty). When it isn't (no base URL), we fall back to the previous behaviour:
+ * no pixel, and any template files are attached normally so nothing is lost.
+ */
+export async function applyEmailTracking(opts: {
+  html: string;
+  subject: string;
+  recipient: string;
+  companyId?: string;
+  contactId?: string;
+  templateId?: string;
+}): Promise<TrackedSend> {
+  const base = appBaseUrl();
+
+  // No public origin → can't build tracking URLs. Preserve existing behaviour.
+  if (!base) {
+    const attachments = opts.templateId ? await templateAttachmentsAsBase64(opts.templateId) : [];
+    return { html: opts.html, attachments };
+  }
+
+  let html = opts.html;
+
+  // Tracked attachment links (in place of direct attachments).
+  const links: { name: string; href: string }[] = [];
+  if (opts.templateId) {
+    try {
+      const template = await getEmailTemplate(opts.templateId);
+      for (let i = 0; i < template.attachments.length; i++) {
+        const a = template.attachments[i];
+        if (!a.url) continue;
+        const row = await createTracking({
+          token: newToken(),
+          kind: "Attachment",
+          subject: opts.subject,
+          filename: a.filename,
+          templateId: opts.templateId,
+          attachIndex: i,
+          recipient: opts.recipient,
+          companyId: opts.companyId,
+          contactId: opts.contactId,
+        });
+        links.push({ name: a.filename, href: `${base}/api/track/file/${row.token}` });
+      }
+    } catch (e) {
+      console.error("[tracking] attachment links failed:", e);
+    }
+  }
+  if (links.length) html += attachmentsBlock(links);
+
+  // The open pixel (last, so it sits at the very end of the body).
+  try {
+    const row = await createTracking({
+      token: newToken(),
+      kind: "Email",
+      subject: opts.subject,
+      recipient: opts.recipient,
+      companyId: opts.companyId,
+      contactId: opts.contactId,
+    });
+    html += pixelTag(base, row.token);
+  } catch (e) {
+    console.error("[tracking] pixel row failed:", e);
+  }
+
+  return { html, attachments: [] };
+}

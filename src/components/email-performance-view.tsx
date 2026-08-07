@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Mail, MessageSquareReply, Send, Sparkles } from "lucide-react";
-import type { EmailPerformance } from "@/lib/crm/email-performance";
+import { AlertTriangle, Mail, MailOpen, MessageSquareReply, Send } from "lucide-react";
+import type { EmailPerformance, OpensSummary } from "@/lib/crm/email-performance";
 import { pct } from "@/lib/crm/email-performance";
 import { Badge, type BadgeColor, EmptyState, InlineAlert, PageHeader, StatTile } from "@/components/ui";
 
@@ -44,7 +44,7 @@ function VolumeChart({ weekly }: { weekly: EmailPerformance["weekly"] }) {
   );
 }
 
-export function EmailPerformanceView({ data }: { data: EmailPerformance }) {
+export function EmailPerformanceView({ data, opens }: { data: EmailPerformance; opens: OpensSummary }) {
   const { sent, reply, outcomes, sequences, failures, weekly } = data;
   const hasAny = sent.total > 0 || reply.enrolled > 0;
 
@@ -76,17 +76,22 @@ export function EmailPerformanceView({ data }: { data: EmailPerformance }) {
               sub={`${sent.total} all time · ${sent.last7} this week`}
             />
             <StatTile
+              icon={<MailOpen size={16} strokeWidth={1.9} />}
+              label="Open rate"
+              value={opens.tracked ? pct(opens.openRate) : "—"}
+              sub={
+                opens.tracked
+                  ? `${opens.opened} of ${opens.tracked} opened${opens.downloads ? ` · ${opens.downloads} downloaded` : ""}`
+                  : "no tracked sends yet"
+              }
+              tone={opens.tracked && opens.openRate >= 0.3 ? "success" : undefined}
+            />
+            <StatTile
               icon={<MessageSquareReply size={16} strokeWidth={1.9} />}
               label="Reply rate"
               value={reply.enrolled ? pct(reply.rate) : "—"}
-              sub={reply.enrolled ? `${reply.replied} of ${reply.enrolled} enrolled replied` : "no sequence sends yet"}
+              sub={reply.enrolled ? `${reply.replied} of ${reply.enrolled} replied · ${outcomes.active} in flight` : "no sequence sends yet"}
               tone={reply.enrolled && reply.rate >= 0.15 ? "success" : undefined}
-            />
-            <StatTile
-              icon={<Sparkles size={16} strokeWidth={1.9} />}
-              label="In flight"
-              value={String(outcomes.active)}
-              sub="active in a sequence"
             />
             <StatTile
               icon={<AlertTriangle size={16} strokeWidth={1.9} />}
@@ -174,8 +179,9 @@ export function EmailPerformanceView({ data }: { data: EmailPerformance }) {
           ) : null}
 
           <InlineAlert variant="info">
-            Opens and clicks aren&apos;t tracked — Luna Desk sends real one-to-one Gmail, not bulk mail, so performance is
-            measured by the reply. A sequence auto-stops the moment someone replies.
+            Opens are tracked with a pixel and attachments with tracked links, so a first open or download lands on the
+            account timeline. Note that image-privacy features (e.g. Apple Mail) can pre-load the pixel and show an open
+            the recipient didn&apos;t make — the reply is still the surest signal, and a sequence auto-stops on reply.
           </InlineAlert>
         </>
       )}

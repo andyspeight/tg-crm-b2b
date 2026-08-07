@@ -34,6 +34,7 @@ import {
   STAGE_COLORS,
   STAGE_KINDS,
   PACKAGES,
+  TRACKING_KINDS,
 } from "./config";
 import type {
   Activity,
@@ -52,6 +53,8 @@ import type {
   PipelineStage,
   Signal,
   SignalInput,
+  EmailTracking,
+  EmailTrackingInput,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -2327,4 +2330,152 @@ export async function companiesForBackfill(limit: number): Promise<Company[]> {
   return companies
     .filter((c) => c.linkedin && !c.enrichedAt)
     .slice(0, Math.max(0, limit));
+}
+
+// --- email open/download tracking -------------------------------------------
+
+function toTracking(rec: AirtableRecord): EmailTracking {
+  const f = rec.fields;
+  const F = FIELDS.emailTracking;
+  return {
+    id: rec.id,
+    token: str(f[F.token]) ?? "",
+    kind: (str(f[F.kind]) as EmailTracking["kind"]) ?? "Email",
+    subject: str(f[F.subject]),
+    filename: str(f[F.filename]),
+    templateId: str(f[F.templateId]),
+    attachIndex: numv(f[F.attachIndex]),
+    recipient: str(f[F.recipient]),
+    opens: numv(f[F.opens]) ?? 0,
+    firstOpened: str(f[F.firstOpened]),
+    lastOpened: str(f[F.lastOpened]),
+    sentAt: str(f[F.sentAt]),
+    userAgent: str(f[F.userAgent]),
+    companyId: firstId(f[F.company]),
+    contactId: firstId(f[F.contact]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildTrackingFields(input: EmailTrackingInput): Record<string, unknown> {
+  const F = FIELDS.emailTracking;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof EmailTrackingInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (has("token")) f[F.token] = text(input.token);
+  if (has("kind")) f[F.kind] = enumOrNull(input.kind, TRACKING_KINDS, "tracking kind");
+  if (has("subject")) f[F.subject] = text(input.subject);
+  if (has("filename")) f[F.filename] = text(input.filename);
+  if (has("templateId")) f[F.templateId] = text(input.templateId);
+  if (has("attachIndex")) f[F.attachIndex] = numberOrNull(input.attachIndex);
+  if (has("recipient")) f[F.recipient] = text(input.recipient);
+  if (has("opens")) f[F.opens] = numberOrNull(input.opens);
+  if (has("firstOpened")) f[F.firstOpened] = text(input.firstOpened);
+  if (has("lastOpened")) f[F.lastOpened] = text(input.lastOpened);
+  if (has("sentAt")) f[F.sentAt] = text(input.sentAt);
+  if (has("userAgent")) f[F.userAgent] = text(input.userAgent);
+  if (has("companyId")) {
+    const id = text(input.companyId);
+    f[F.company] = id ? [id] : [];
+  }
+  if (has("contactId")) {
+    const id = text(input.contactId);
+    f[F.contact] = id ? [id] : [];
+  }
+  return f;
+}
+
+/** Create a tracking row for one artifact (an email pixel, or a tracked file link). */
+export async function createTracking(input: EmailTrackingInput): Promise<EmailTracking> {
+  const F = FIELDS.emailTracking;
+  const fields = buildTrackingFields({ opens: 0, sentAt: new Date().toISOString(), ...input });
+  if (fields[F.opens] == null) fields[F.opens] = 0;
+  return toTracking(await createRecord(AIRTABLE_BASE_ID, TABLES.emailTracking, fields));
+}
+
+async function findTrackingByToken(token: string): Promise<EmailTracking | null> {
+  const F = FIELDS.emailTracking;
+  const safe = token.replace(/'/g, "");
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.emailTracking, {
+    filterByFormula: `{${F.token}}='${safe}'`,
+    maxRecords: 1,
+  });
+  return records.length ? toTracking(records[0]) : null;
+}
+
+/**
+ * Record an open/download hit against a token. Increments the counter and stamps
+ * first/last. Returns the row and whether this was the very first hit (so the
+ * caller can raise a one-time "they're warm" alert on the timeline).
+ */
+export async function recordTrackingHit(
+  token: string,
+  userAgent?: string,
+): Promise<{ row: EmailTracking; firstHit: boolean } | null> {
+  const existing = await findTrackingByToken(token);
+  if (!existing) return null;
+  const now = new Date().toISOString();
+  const firstHit = existing.opens === 0;
+  const updated = await updateRecord(
+    AIRTABLE_BASE_ID,
+    TABLES.emailTracking,
+    existing.id,
+    buildTrackingFields({
+      opens: existing.opens + 1,
+      lastOpened: now,
+      ...(firstHit ? { firstOpened: now } : {}),
+      ...(userAgent ? { userAgent: userAgent.slice(0, 250) } : {}),
+    }),
+  );
+  return { row: toTracking(updated), firstHit };
+}
+
+/** Tracked artifacts that have been opened at least once, most-recent first. */
+export async function listRecentOpens(opts?: { sinceDays?: number; limit?: number }): Promise<EmailTracking[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.emailTracking, { maxRecords: 5000 });
+  let rows = records.map(toTracking).filter((r) => r.opens > 0);
+  if (opts?.sinceDays) {
+    const cutoff = Date.now() - opts.sinceDays * 864e5;
+    rows = rows.filter((r) => {
+      const t = Date.parse(r.lastOpened || r.firstOpened || "");
+      return Number.isNaN(t) ? true : t >= cutoff;
+    });
+  }
+  rows.sort((a, b) => (b.lastOpened || "").localeCompare(a.lastOpened || ""));
+  const limited = opts?.limit ? rows.slice(0, opts.limit) : rows;
+  await attachTrackingNames(limited);
+  return limited;
+}
+
+/** All tracking rows (for the performance summary). */
+export async function listTrackings(): Promise<EmailTracking[]> {
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.emailTracking, { maxRecords: 5000 });
+  return records.map(toTracking);
+}
+
+async function attachTrackingNames(rows: EmailTracking[]): Promise<void> {
+  const companyIds = rows.map((r) => r.companyId || "").filter(Boolean);
+  const contactIds = rows.map((r) => r.contactId || "").filter(Boolean);
+  const [companies, contacts] = await Promise.all([
+    companyIds.length ? companyNameMap(companyIds) : Promise.resolve(new Map<string, string>()),
+    contactIds.length ? contactNameMap(contactIds) : Promise.resolve(new Map<string, string>()),
+  ]);
+  for (const r of rows) {
+    if (r.companyId) r.companyName = companies.get(r.companyId);
+    if (r.contactId) r.contactName = contacts.get(r.contactId);
+  }
+}
+
+async function contactNameMap(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  const map = new Map<string, string>();
+  if (unique.length === 0) return map;
+  const F = FIELDS.contacts;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
+    ...(unique.length <= ID_FILTER_MAX
+      ? { filterByFormula: idFormula(unique), maxRecords: unique.length }
+      : { maxRecords: LIST_CAP }),
+    fields: [F.name],
+  });
+  for (const rec of records) map.set(rec.id, str(rec.fields[F.name]) ?? "");
+  return map;
 }

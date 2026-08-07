@@ -16,13 +16,18 @@ const PUBLIC_APIS = [
   "/api/cron/sequences",
   "/api/cron/intel",
 ];
+// Email tracking pixels/links are fetched by the recipient's mail client with no
+// session — public by design. The routes carry an opaque token and only ever
+// increment a counter or redirect to a file.
+const PUBLIC_API_PREFIXES = ["/api/track/"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
     PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
-    PUBLIC_APIS.includes(pathname)
+    PUBLIC_APIS.includes(pathname) ||
+    PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
