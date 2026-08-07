@@ -120,9 +120,18 @@ export function SendComposer({
     [],
   );
 
-  // Global contact search — matches anyone in the CRM, not just this account
-  // (typing a name must always be able to find the person).
+  // Emailing from within an account is scoped to that account's people; the
+  // person/general flow searches the whole CRM.
+  const scoped = !!company;
+  const accountPeople = useMemo(() => (contacts ?? []).filter((c) => c.email), [contacts]);
+
+  // Global contact search — only in the unscoped (person/general) flow.
   useEffect(() => {
+    if (scoped) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
     const term = query.trim();
     if (contact || term.length < 2) {
       setResults([]);
@@ -141,13 +150,17 @@ export function SendComposer({
       }
     }, 250);
     return () => clearTimeout(id);
-  }, [query, contact]);
+  }, [query, contact, scoped]);
 
-  // The account's own people, offered as quick picks before you start typing.
-  const accountSuggestions = useMemo(
-    () => (contacts ?? []).filter((c) => c.email).slice(0, 8),
-    [contacts],
-  );
+  // Scoped flow: filter the account's people locally by the query.
+  const scopedResults = useMemo(() => {
+    if (!scoped) return [];
+    const term = query.trim().toLowerCase();
+    if (!term) return accountPeople.slice(0, 12);
+    return accountPeople
+      .filter((c) => [c.name, c.email, c.role].some((v) => v?.toLowerCase().includes(term)))
+      .slice(0, 12);
+  }, [scoped, accountPeople, query]);
 
   function pick(c: Contact) {
     setContact(c);
@@ -291,8 +304,8 @@ export function SendComposer({
 
   const title = template ? `Send · ${template.name || "template"}` : `Email${company ? ` · ${company.name}` : ""}`;
   const querying = query.trim().length >= 2;
-  const searchResults = querying ? results : accountSuggestions;
-  const showResults = !contact && (querying || accountSuggestions.length > 0);
+  const searchResults = scoped ? scopedResults : querying ? results : [];
+  const showResults = !contact && (scoped || querying);
 
   return createPortal(
     <div
@@ -354,22 +367,30 @@ export function SendComposer({
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       autoFocus
-                      placeholder="Search a contact by name, company or email…"
+                      placeholder={
+                        scoped ? `Search ${company!.name}'s people…` : "Search a contact by name, company or email…"
+                      }
                       className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[14px] text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     />
                     {showResults ? (
                       <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-float">
-                        {querying && searching ? (
+                        {!scoped && querying && searching ? (
                           <div className="flex items-center gap-2 px-3 py-3 text-[13px] text-fg-subtle">
                             <Spinner /> Searching…
                           </div>
-                        ) : querying && searchResults.length === 0 ? (
-                          <div className="px-3 py-3 text-[13px] text-fg-subtle">No contacts match.</div>
+                        ) : searchResults.length === 0 ? (
+                          <div className="px-3 py-3 text-[13px] text-fg-subtle">
+                            {scoped
+                              ? accountPeople.length === 0
+                                ? "No people on this account yet — add one from the account page."
+                                : "No one here matches."
+                              : "No contacts match."}
+                          </div>
                         ) : (
                           <ul className="py-1">
-                            {!querying && company ? (
+                            {scoped ? (
                               <li className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                                People at {company.name}
+                                People at {company!.name}
                               </li>
                             ) : null}
                             {searchResults.map((c) => (
