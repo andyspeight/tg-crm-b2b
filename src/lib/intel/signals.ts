@@ -46,8 +46,10 @@ const RULES: Rule[] = [
   { re: /\b(record (year|results|profits?)|profit up|revenue up|turnover up|reaches? a milestone)\b/i, type: "News", weight: 1, strong: false },
 ];
 
-// Results from these hosts are noise for intent monitoring.
-const SKIP_HOST = /(facebook\.|instagram\.|twitter\.|x\.com|youtube\.|tiktok\.|pinterest\.|reddit\.|wikipedia\.|glassdoor\.|indeed\.|google\.|accounts\.|login\.)/i;
+// Results from these hosts are noise for intent monitoring: social, encyclopaedias,
+// job boards, data-broker/company-directory aggregators, and essay/homework mills.
+// They match a company name without ever describing a real event.
+const SKIP_HOST = /(facebook\.|instagram\.|twitter\.|x\.com|youtube\.|tiktok\.|pinterest\.|reddit\.|wikipedia\.|glassdoor\.|indeed\.|google\.|accounts\.|login\.|rocketreach\.|tracxn\.|zoominfo\.|apollo\.io|leadiq\.|myjobmag\.|totaljobs\.|reed\.co|freelancer\.|upwork\.|coursesidekick\.|coursehero\.|studocu\.|twstalker\.|picuki\.|companieshouse\.|opencorporates\.|dnb\.com|bizapedia\.)/i;
 
 // Signals older than this are dropped even if the query's recency filter let them
 // through — Google's `qdr:y` is a hint, not a guarantee. Env-tunable.
