@@ -884,6 +884,22 @@ export function cadenceMonths(cadence?: string): number | null {
   return null;
 }
 
+// Top packages get proactive monthly care; everyone else quarterly. This is the
+// fallback when a customer has no explicit cadence set, so the care programme
+// covers every customer out of the box (brief: ≥1 touch per quarter) without
+// anyone having to set a cadence on each record by hand.
+const TOP_TIER_PACKAGES = new Set(["Ignite", "Bespoke"]);
+export function effectiveCadenceMonths(
+  company: { careCadence?: string | null; planTier?: string | null },
+): number | null {
+  const explicit = company.careCadence;
+  if (explicit === "Monthly") return 1;
+  if (explicit === "Quarterly") return 3;
+  if (explicit === "None") return null; // deliberately opted out — respect it
+  // Unset: sensible default from the package tier.
+  return TOP_TIER_PACKAGES.has((company.planTier || "").trim()) ? 1 : 3;
+}
+
 function addMonths(dateStr: string, months: number): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
@@ -961,7 +977,7 @@ export async function generateDueTouches(): Promise<number> {
   const F = FIELDS.careTouches;
   const toCreate: Record<string, unknown>[] = [];
   for (const { company, nextTouch } of board) {
-    const months = cadenceMonths(company.careCadence);
+    const months = effectiveCadenceMonths(company);
     if (!months || nextTouch) continue;
     const due = addMonths(company.lastMeaningfulContact || today, months);
     toCreate.push({
@@ -995,7 +1011,7 @@ export async function logCareTouch(
   );
   if (updated.companyId) {
     const company = await getCompany(updated.companyId);
-    const months = cadenceMonths(company.careCadence);
+    const months = effectiveCadenceMonths(company);
     if (months) {
       await createCareTouch({
         companyId: company.id,
@@ -1033,7 +1049,7 @@ export async function logCareTouchForCompany(
     dueDate: today,
     name: `${touchType} · ${company.name}`,
   });
-  const months = cadenceMonths(company.careCadence);
+  const months = effectiveCadenceMonths(company);
   if (months) {
     await createCareTouch({
       companyId,

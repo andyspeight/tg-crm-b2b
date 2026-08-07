@@ -10,7 +10,6 @@ import {
   Circle,
   Clock,
   HeartHandshake,
-  Sparkles,
   Users,
   Wallet,
   Zap,
@@ -22,6 +21,7 @@ import { isPast } from "@/lib/deal-flags";
 import { Button, EmptyState } from "@/components/ui";
 import { QuickActions } from "@/components/quick-actions";
 import { LogTouchModal } from "@/components/log-touch-modal";
+import { GettingStarted } from "@/components/getting-started";
 import { useToast } from "@/components/feedback";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -51,12 +51,14 @@ export function TodayView({
   careDue,
   vitals,
   nurture,
+  newWorkspace,
 }: {
   tasks: Task[];
   nextActions: NextAction[];
   careDue: CareDueItem[];
   vitals: Vitals;
   nurture: NurtureItem[];
+  newWorkspace?: boolean;
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [careList, setCareList] = useState(careDue);
@@ -95,6 +97,8 @@ export function TodayView({
           {dateStr} · {pulse}
         </p>
       </div>
+
+      {newWorkspace ? <GettingStarted /> : null}
 
       <QuickActions />
 
@@ -224,11 +228,6 @@ export function TodayView({
           )}
         </Section>
       </div>
-
-      <p className="flex items-center gap-1.5 px-1 text-[12px] text-fg-subtle">
-        <Sparkles size={13} strokeWidth={1.75} aria-hidden />
-        Signal monitoring — watched accounts&rsquo; news and social — arrives next in Stage 5.
-      </p>
 
       <LogTouchModal
         open={!!logging}

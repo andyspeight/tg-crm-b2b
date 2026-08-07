@@ -64,7 +64,18 @@ export default async function TodayPage() {
     .slice(0, 3)
     .map((n) => ({ id: n.id, name: n.name, last: n.last || undefined }));
 
+  // A brand-new workspace still finding its feet gets the getting-started
+  // checklist on Today; an established one (like the live instance) never sees it.
+  const newWorkspace = companies.length < 5;
+
   return (
-    <TodayView tasks={tasks} nextActions={nextActions} careDue={careDue} vitals={vitals} nurture={nurture} />
+    <TodayView
+      tasks={tasks}
+      nextActions={nextActions}
+      careDue={careDue}
+      vitals={vitals}
+      nurture={nurture}
+      newWorkspace={newWorkspace}
+    />
   );
 }

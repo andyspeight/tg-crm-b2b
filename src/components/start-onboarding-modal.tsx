@@ -100,7 +100,7 @@ export function StartOnboardingModal({
             Add a contact with an email address first — that&apos;s who the onboarding portal is for.
           </InlineAlert>
         ) : (
-          <Field label="Contact to onboard">
+          <Field label="Person to onboard">
             <Select value={contactId} onChange={(e) => setContactId(e.target.value)}>
               {withEmail.map((c) => (
                 <option key={c.id} value={c.id}>
