@@ -82,7 +82,7 @@ function fireQuickAdd(mode: "task" | "note" | "linkedin") {
   window.dispatchEvent(new CustomEvent("luna:quickadd", { detail: { mode } }));
 }
 
-export function CommandBar() {
+export function CommandBar({ variant = "bar" }: { variant?: "bar" | "sidebar" } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -246,24 +246,40 @@ export function CommandBar() {
 
   return (
     <>
-      {/* Trigger: a search field on desktop, an icon on mobile. */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Search or ask Luna"
-        aria-keyshortcuts="Meta+K Control+K"
-        className="hidden h-9 w-64 items-center gap-2 rounded-lg border border-transparent bg-muted px-3 text-left text-[13.5px] text-fg-subtle transition-colors hover:bg-muted/70 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:inline-flex"
-      >
-        <Search size={15} strokeWidth={1.9} className="shrink-0" aria-hidden />
-        <span className="flex-1 truncate">Search or ask Luna…</span>
-        <kbd className="rounded border border-border bg-card px-1 text-[10px] font-medium text-fg-muted">⌘K</kbd>
-      </button>
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Search or ask Luna"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:hidden"
-      >
-        <Search size={18} strokeWidth={1.9} />
-      </button>
+      {/* Trigger. In the sidebar it's a full-width "Quick find" field; in a bar
+          it's a search field on desktop and an icon on mobile. */}
+      {variant === "sidebar" ? (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Search or ask Luna"
+          aria-keyshortcuts="Meta+K Control+K"
+          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-muted px-2.5 text-left text-[13px] text-fg-subtle transition-colors hover:border-fg-subtle/40 hover:text-fg-muted focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Search size={15} strokeWidth={1.9} className="shrink-0" aria-hidden />
+          <span className="flex-1 truncate">Quick find…</span>
+          <kbd className="rounded border border-border bg-card px-1 text-[10px] font-medium text-fg-muted">⌘K</kbd>
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Search or ask Luna"
+            aria-keyshortcuts="Meta+K Control+K"
+            className="hidden h-9 w-64 items-center gap-2 rounded-lg border border-transparent bg-muted px-3 text-left text-[13.5px] text-fg-subtle transition-colors hover:bg-muted/70 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:inline-flex"
+          >
+            <Search size={15} strokeWidth={1.9} className="shrink-0" aria-hidden />
+            <span className="flex-1 truncate">Search or ask Luna…</span>
+            <kbd className="rounded border border-border bg-card px-1 text-[10px] font-medium text-fg-muted">⌘K</kbd>
+          </button>
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Search or ask Luna"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:hidden"
+          >
+            <Search size={18} strokeWidth={1.9} />
+          </button>
+        </>
+      )}
 
       {open && typeof document !== "undefined" &&
         createPortal(
