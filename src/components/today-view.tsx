@@ -2,24 +2,13 @@
 
 import Link from "next/link";
 import { ReactNode, useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  ChevronRight,
-  Circle,
-  Clock,
-  HeartHandshake,
-  Users,
-  Wallet,
-  Zap,
-} from "lucide-react";
+import { Building2, CheckCircle2, ChevronRight, Circle, HeartHandshake, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Task } from "@/lib/crm/types";
 import type { NextAction } from "@/lib/crm/next-actions";
 import { isPast } from "@/lib/deal-flags";
-import { Button, EmptyState } from "@/components/ui";
-import { QuickActions } from "@/components/quick-actions";
+import { Button, EmptyState, cn } from "@/components/ui";
+import { AskLunaBox } from "@/components/ask-luna-box";
 import { SignalsFeed } from "@/components/signals-view";
 import { LogTouchModal } from "@/components/log-touch-modal";
 import { GettingStarted } from "@/components/getting-started";
@@ -47,6 +36,7 @@ export type Vitals = {
 export type NurtureItem = { id: string; name: string; last?: string };
 
 export function TodayView({
+  orgName,
   tasks: initialTasks,
   nextActions,
   careDue,
@@ -54,6 +44,7 @@ export function TodayView({
   nurture,
   newWorkspace,
 }: {
+  orgName?: string;
   tasks: Task[];
   nextActions: NextAction[];
   careDue: CareDueItem[];
@@ -82,75 +73,28 @@ export function TodayView({
   const dateStr = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const openTasks = tasks.filter((t) => t.status !== "Done").length;
 
-  const pulse = [
-    `${vitals.customers} ${vitals.customers === 1 ? "customer" : "customers"}`,
-    vitals.openMrr > 0 ? `${formatMoney(vitals.openMrr)}/mo in play` : null,
-    nextActions.length > 0 ? `${nextActions.length} need${nextActions.length === 1 ? "s" : ""} you` : "all caught up",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const needCount = nextActions.length;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto max-w-4xl space-y-5">
       <div>
-        <h1 className="text-[26px] font-semibold tracking-tight text-fg">{greeting}</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight text-fg">
+          {greeting}
+          {orgName ? `, ${orgName}` : ""}
+        </h1>
         <p className="mt-1 text-[13px] text-fg-subtle">
-          {dateStr} · {pulse}
+          {dateStr}
+          {needCount > 0 ? ` · ${needCount} ${needCount === 1 ? "thing needs" : "things need"} you today` : " · all caught up"}
         </p>
       </div>
 
+      <AskLunaBox />
+
       {newWorkspace ? <GettingStarted /> : null}
-
-      <QuickActions />
-
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <VitalTile
-          href="/companies"
-          label="Customers"
-          value={String(vitals.customers)}
-          sub={`${vitals.leads} ${vitals.leads === 1 ? "lead" : "leads"}`}
-          icon={<Users size={16} strokeWidth={2} />}
-          live
-        />
-        <VitalTile
-          href="/pipeline"
-          label="Pipeline"
-          value={formatMoney(vitals.openMrr)}
-          sub={`${vitals.openDeals} open ${vitals.openDeals === 1 ? "deal" : "deals"}`}
-          icon={<Wallet size={16} strokeWidth={2} />}
-          tone="navy"
-        />
-        <VitalTile
-          href="/care"
-          label="Needs attention"
-          value={String(vitals.needsAttention)}
-          sub="Amber / Red"
-          icon={<AlertTriangle size={16} strokeWidth={2} />}
-          tone={vitals.needsAttention > 0 ? "warn" : undefined}
-        />
-        <VitalTile
-          href="/care"
-          label="Care due"
-          value={String(careList.length)}
-          sub="next 14 days"
-          icon={<HeartHandshake size={16} strokeWidth={2} />}
-          tone={careList.some((c) => c.overdue) ? "danger" : undefined}
-        />
-      </div>
 
       <SignalsFeed />
 
-      <Section title="Do next" count={nextActions.length} icon={<Zap size={14} strokeWidth={2.2} />}>
-        {nextActions.length === 0 ? (
-          <CaughtUp nurture={nurture} />
-        ) : (
-          <ul className="divide-y divide-border-soft">
-            {nextActions.map((a) => (
-              <NextActionRow key={`${a.companyId}:${a.kind}`} a={a} />
-            ))}
-          </ul>
-        )}
-      </Section>
+      <NeedsYouToday actions={nextActions} nurture={nurture} />
 
       <div className="grid gap-5 md:grid-cols-2">
         <Section title="Tasks" count={openTasks} icon={<CheckCircle2 size={14} strokeWidth={2} />}>
@@ -232,6 +176,18 @@ export function TodayView({
         </Section>
       </div>
 
+      {/* Slim vitals strip — the dashboard's closing summary line. */}
+      <p className="px-1 text-[13px] text-fg-subtle">
+        {[
+          `${vitals.customers} ${vitals.customers === 1 ? "customer" : "customers"}`,
+          `${formatMoney(vitals.openMrr)} live pipeline`,
+          `${vitals.openDeals} open ${vitals.openDeals === 1 ? "deal" : "deals"}`,
+          `${vitals.needsAttention} need attention`,
+          `${openTasks} open ${openTasks === 1 ? "task" : "tasks"}`,
+          `${careList.length} care due`,
+        ].join(" · ")}
+      </p>
+
       <LogTouchModal
         open={!!logging}
         onClose={() => setLogging(null)}
@@ -249,51 +205,6 @@ export function TodayView({
   );
 }
 
-function VitalTile({
-  href,
-  label,
-  value,
-  sub,
-  icon,
-  tone,
-  live,
-}: {
-  href: string;
-  label: string;
-  value: string;
-  sub?: string;
-  icon?: ReactNode;
-  tone?: "warn" | "danger" | "navy";
-  live?: boolean;
-}) {
-  const chip =
-    tone === "warn"
-      ? "bg-warning/15 text-warning"
-      : tone === "danger"
-        ? "bg-danger/15 text-danger"
-        : tone === "navy"
-          ? "bg-navy/10 text-navy"
-          : "bg-accent-soft text-accent-strong";
-  const valueColor = tone === "danger" ? "text-danger" : tone === "warn" ? "text-warning" : "text-fg";
-  return (
-    <Link
-      href={href}
-      className="group flex flex-col rounded-2xl border border-border bg-card p-3.5 shadow-card transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-raise focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      <div className="flex items-center justify-between">
-        <span className={`grid h-8 w-8 place-items-center rounded-xl transition-transform group-hover:scale-105 ${chip}`}>
-          {icon}
-        </span>
-        {live ? (
-          <span className="h-1.5 w-1.5 rounded-full bg-success motion-safe:animate-pulse" aria-hidden />
-        ) : null}
-      </div>
-      <p className={`tnum mt-2.5 text-[24px] font-semibold leading-none ${valueColor}`}>{value}</p>
-      <p className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">{label}</p>
-      {sub ? <p className="mt-0.5 truncate text-[11px] text-fg-subtle">{sub}</p> : null}
-    </Link>
-  );
-}
 
 function CaughtUp({ nurture }: { nurture: NurtureItem[] }) {
   return (
@@ -341,31 +252,168 @@ function CaughtUp({ nurture }: { nurture: NurtureItem[] }) {
   );
 }
 
-function NextActionRow({ a }: { a: NextAction }) {
-  const color =
-    a.severity === "danger" ? "text-danger" : a.severity === "warn" ? "text-warning" : "text-accent-strong";
-  const Icon = a.severity === "info" ? Clock : AlertTriangle;
+// --- Needs you today --------------------------------------------------------
+
+type NeedFilter = "all" | "urgent" | "care" | "deals";
+
+const FILTERS: { id: NeedFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "urgent", label: "Urgent" },
+  { id: "care", label: "Care" },
+  { id: "deals", label: "Deals" },
+];
+
+const TOP_N = 8;
+
+function categoryOf(kind: string): "care" | "deals" | "account" {
+  if (kind.includes("care")) return "care";
+  if (kind.includes("deal") || kind.includes("stage") || kind.includes("stall")) return "deals";
+  return "account";
+}
+
+function ctaFor(kind: string): string {
+  if (kind.includes("care")) return "Log";
+  if (kind.includes("health")) return "Reach out";
+  return "Open";
+}
+
+function NeedsYouToday({ actions, nurture }: { actions: NextAction[]; nurture: NurtureItem[] }) {
+  const [filter, setFilter] = useState<NeedFilter>("all");
+  const [showAll, setShowAll] = useState(false);
+  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+  const toast = useToast();
+
+  const live = actions
+    .filter((a) => !snoozed.has(`${a.companyId}:${a.kind}`))
+    .slice()
+    .sort((a, b) => b.score - a.score);
+
+  const pastDue = live.filter((a) => a.severity === "danger").length;
+
+  const filtered = live.filter((a) => {
+    if (filter === "all") return true;
+    if (filter === "urgent") return a.severity === "danger";
+    return categoryOf(a.kind) === filter;
+  });
+  const shown = showAll ? filtered : filtered.slice(0, TOP_N);
+
+  async function snooze(a: NextAction) {
+    const key = `${a.companyId}:${a.kind}`;
+    setSnoozed((s) => new Set(s).add(key));
+    try {
+      await api("/api/today/snooze", { method: "POST", body: JSON.stringify({ key }) });
+    } catch {
+      setSnoozed((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+      toast.error("Couldn't snooze that one");
+    }
+  }
+
   return (
-    <li>
-      <Link
-        href={a.href}
-        className="group -mx-2 flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        <Icon size={16} strokeWidth={2} className={`mt-0.5 shrink-0 ${color}`} aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] text-fg">{a.label}</p>
-          <p className="mt-0.5 truncate text-[12px] text-fg-subtle">
-            {a.companyName}
-            {a.detail ? ` · ${a.detail}` : ""}
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-fg">Needs you today</h2>
+          <p className="mt-0.5 text-[12px] text-fg-subtle">
+            {live.length === 0
+              ? "Nothing pressing"
+              : `${pastDue} past their due time, ${live.length} to look at.`}
           </p>
         </div>
-        <ChevronRight
-          size={16}
-          strokeWidth={1.9}
-          className="mt-0.5 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100"
-          aria-hidden
-        />
-      </Link>
+        {live.length > 0 ? (
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Filter">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setFilter(f.id);
+                  setShowAll(false);
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                  filter === f.id
+                    ? "bg-accent-soft text-accent-strong"
+                    : "text-fg-subtle hover:bg-muted hover:text-fg",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="p-4">
+        {live.length === 0 ? (
+          <CaughtUp nurture={nurture} />
+        ) : filtered.length === 0 ? (
+          <p className="py-2 text-[13px] text-fg-subtle">Nothing in this filter right now.</p>
+        ) : (
+          <>
+            <ul className="divide-y divide-border-soft">
+              {shown.map((a) => (
+                <NeedRow key={`${a.companyId}:${a.kind}`} a={a} onSnooze={() => snooze(a)} />
+              ))}
+            </ul>
+            <div className="mt-2 flex items-center justify-between border-t border-border-soft pt-2.5 text-[12px] text-fg-subtle">
+              <span>
+                {filtered.length > TOP_N && !showAll
+                  ? `Showing the ${shown.length} most pressing of ${filtered.length}. Snoozed items come back in 7 days.`
+                  : "Snoozed items come back in 7 days."}
+              </span>
+              {filtered.length > TOP_N ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAll((v) => !v)}
+                  className="shrink-0 font-medium text-accent-strong hover:underline"
+                >
+                  {showAll ? "Show less" : "Show all"}
+                </button>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function NeedRow({ a, onSnooze }: { a: NextAction; onSnooze: () => void }) {
+  const dot =
+    a.severity === "danger" ? "bg-danger" : a.severity === "warn" ? "bg-warning" : "bg-accent";
+  return (
+    <li className="group flex items-start gap-3 py-2.5">
+      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", dot)} aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] text-fg">
+          <Link href={a.href} className="font-semibold hover:text-accent-strong">
+            {a.companyName}
+          </Link>
+          <span className="text-fg-muted"> {a.label}</span>
+        </p>
+        {a.detail ? <p className="mt-0.5 truncate text-[12px] text-fg-subtle">{a.detail}</p> : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onSnooze}
+          aria-label={`Snooze ${a.companyName} for 7 days`}
+          className="rounded-md p-1 text-fg-subtle opacity-0 transition-opacity hover:bg-muted hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <X size={15} strokeWidth={1.9} />
+        </button>
+        <Link
+          href={a.href}
+          className="inline-flex items-center gap-0.5 whitespace-nowrap text-[13px] font-medium text-accent-strong hover:underline"
+        >
+          {ctaFor(a.kind)}
+          <ChevronRight size={14} strokeWidth={2} aria-hidden />
+        </Link>
+      </div>
     </li>
   );
 }
