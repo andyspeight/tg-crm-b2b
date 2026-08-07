@@ -3,11 +3,11 @@ import "server-only";
 /**
  * Google OAuth for Gmail sending. Single-sender internal tool: one connected
  * Google account (Andy's) whose refresh token is stored encrypted in App Settings.
- * Scopes: identity + gmail.send + gmail.metadata. The metadata (read) scope is
- * header-only — it lets sequences see who a thread's messages are *from* (to
- * detect a reply and auto-stop) without ever reading message bodies. Because the
- * app is internal to the agendas.group Workspace, the OAuth consent screen is set
- * to "Internal", so these scopes need no Google verification.
+ * Scopes: identity + gmail.send + gmail.readonly. The read scope lets sequences
+ * detect a reply and lets the inbox sync log a contact's correspondence onto
+ * their CRM timeline. Because the app is internal to the agendas.group Workspace,
+ * the OAuth consent screen is set to "Internal", so even the sensitive read scope
+ * needs no Google verification — an existing connection just re-consents once.
  */
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
@@ -17,8 +17,8 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 
-/** Header-only read scope: enough to detect a reply in a thread, never bodies. */
-export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+/** Read scope: reply detection + reading a contact's messages for the inbox sync. */
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export const GOOGLE_SCOPES = [
   "openid",
@@ -136,10 +136,16 @@ export interface GoogleConnection {
   connectedAt?: string;
   /** True when the stored grant includes a Gmail read scope (reply detection). */
   canRead: boolean;
+  /** True when the grant can read message bodies — required for the inbox sync. */
+  canSyncInbox: boolean;
 }
 
 function scopeGrantsRead(scopes: string): boolean {
   return /gmail\.(metadata|readonly|modify)|mail\.google\.com/.test(scopes);
+}
+/** Reading a contact's correspondence needs readonly (or broader) — not metadata. */
+export function scopeSyncsInbox(scopes: string): boolean {
+  return /gmail\.(readonly|modify)|mail\.google\.com/.test(scopes);
 }
 
 /** The connected account (presence of a stored email = connected), or null. */
@@ -156,7 +162,13 @@ export async function getConnection(): Promise<GoogleConnection | null> {
     name: name || undefined,
     connectedAt: connectedAt || undefined,
     canRead: scopeGrantsRead(scopes || ""),
+    canSyncInbox: scopeSyncsInbox(scopes || ""),
   };
+}
+
+/** True when the stored Google grant can run the inbox sync. */
+export async function canSyncInbox(): Promise<boolean> {
+  return scopeSyncsInbox((await getSetting(KEY_SCOPES)) || "");
 }
 
 /** A fresh access token plus the sender identity. Throws if not connected. */

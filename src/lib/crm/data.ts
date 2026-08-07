@@ -218,6 +218,7 @@ function toActivity(rec: AirtableRecord): Activity {
     companyId: firstId(f[F.company]),
     contactId: firstId(f[F.contact]),
     dealId: firstId(f[F.deal]),
+    gmailMessageId: str(f[F.gmailMessageId]),
     createdTime: rec.createdTime,
   };
 }
@@ -256,6 +257,7 @@ function toContact(rec: AirtableRecord): Contact {
     enrichedAt: str(f[F.enrichedAt]),
     source: str(f[F.source]),
     companyId: firstId(f[F.company]),
+    inboxSyncedAt: str(f[F.inboxSynced]),
     createdTime: rec.createdTime,
   };
 }
@@ -337,6 +339,7 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
   if (has("location")) f[F.location] = text(input.location);
   if (has("source")) f[F.source] = text(input.source);
   if (has("enrichedAt")) f[F.enrichedAt] = text(input.enrichedAt);
+  if (has("inboxSyncedAt")) f[F.inboxSynced] = text(input.inboxSyncedAt);
   if (has("companyId")) {
     const id = text(input.companyId);
     f[F.company] = id ? [id] : [];
@@ -730,6 +733,7 @@ function buildActivityFields(input: ActivityInput, partial: boolean): Record<str
     const id = text(input.dealId);
     f[F.deal] = id ? [id] : [];
   }
+  if (has("gmailMessageId")) f[F.gmailMessageId] = text(input.gmailMessageId);
   return f;
 }
 
@@ -2533,4 +2537,34 @@ export async function listDuplicateGroups(): Promise<DuplicateGroupWithContacts[
     for (const g of withContacts) for (const c of g.contacts) if (c.companyId) c.companyName = names.get(c.companyId);
   }
   return withContacts;
+}
+
+// --- Gmail inbox sync helpers -----------------------------------------------
+
+/** Gmail message ids already logged as activities — used to de-dupe the sync. */
+export async function loggedGmailMessageIds(): Promise<Set<string>> {
+  const F = FIELDS.activities;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    filterByFormula: `NOT({${F.gmailMessageId}}='')`,
+    fields: [F.gmailMessageId],
+    maxRecords: 5000,
+  });
+  const out = new Set<string>();
+  for (const r of records) {
+    const id = str(r.fields[F.gmailMessageId]);
+    if (id) out.add(id);
+  }
+  return out;
+}
+
+/**
+ * Contacts to sync this run — those with an email, least-recently synced first
+ * (never-synced come first), so a bounded run round-robins the whole base.
+ */
+export async function contactsForInboxSync(limit: number): Promise<Contact[]> {
+  const contacts = await listContacts({ limit: 5000 });
+  return contacts
+    .filter((c) => c.email)
+    .sort((a, b) => (a.inboxSyncedAt || "").localeCompare(b.inboxSyncedAt || ""))
+    .slice(0, Math.max(0, limit));
 }

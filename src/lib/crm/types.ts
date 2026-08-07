@@ -102,6 +102,8 @@ export interface Contact {
   enrichedAt?: string;
   source?: string;
   companyId?: string;
+  /** When the Gmail inbox sync last checked this person's correspondence. */
+  inboxSyncedAt?: string;
   /** Resolved from the linked company where available (convenience for list views). */
   companyName?: string;
   companyLifecycle?: LifecycleStage;
@@ -140,6 +142,8 @@ export interface Activity {
   companyId?: string;
   contactId?: string;
   dealId?: string;
+  /** The Gmail message id this came from (synced correspondence / logged send). */
+  gmailMessageId?: string;
   createdTime?: string;
 }
 

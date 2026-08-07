@@ -15,6 +15,7 @@ export async function GET() {
       name: conn?.name,
       connectedAt: conn?.connectedAt,
       canRead: conn?.canRead ?? false,
+      canSyncInbox: conn?.canSyncInbox ?? false,
     });
   } catch (e) {
     return errorResponse(e);
