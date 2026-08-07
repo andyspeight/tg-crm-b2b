@@ -116,6 +116,8 @@ export function CommandBar({ variant = "bar" }: { variant?: "bar" | "sidebar" } 
   }, [open]);
 
   // ⌘K / Ctrl-K toggles the palette; Esc closes (or leaves ask mode first).
+  // `luna:command-open` lets other chrome (e.g. the mobile top-strip button,
+  // where the sidebar trigger is out of reach) open it too.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -123,8 +125,13 @@ export function CommandBar({ variant = "bar" }: { variant?: "bar" | "sidebar" } 
         setOpen((o) => !o);
       }
     };
+    const onOpen = () => setOpen(true);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("luna:command-open", onOpen);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("luna:command-open", onOpen);
+    };
   }, []);
 
   useEffect(() => {

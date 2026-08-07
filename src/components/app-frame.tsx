@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { QuickAdd } from "@/components/quick-add";
 
@@ -49,6 +49,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </button>
           <span className="truncate text-[15px] font-semibold tracking-tight text-fg">{title}</span>
           <div className="flex-1" />
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("luna:command-open"))}
+            aria-label="Search or ask Luna"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+          >
+            <Search size={18} strokeWidth={1.9} />
+          </button>
           <QuickAdd />
         </header>
 
