@@ -7,6 +7,7 @@ import "server-only";
  */
 
 const SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+const API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 /** Remove anything that could break out of a header line. */
 function headerSafe(v: string): string {
@@ -102,6 +103,10 @@ export interface RichSendInput {
   html: string;
   text?: string; // plain-text alternative; derived from html if omitted
   attachments?: RichAttachment[];
+  // Threading (sequence follow-ups land in the same Gmail conversation).
+  threadId?: string;
+  inReplyTo?: string; // RFC822 Message-ID of the message we're replying to
+  references?: string; // space-separated Message-ID chain
 }
 
 /** Very small HTML → plain-text fallback for the text/plain alternative part. */
@@ -145,6 +150,8 @@ export async function sendGmailRich(input: RichSendInput): Promise<{ id: string;
     `Subject: ${encodeSubject(input.subject)}`,
     "MIME-Version: 1.0",
   ];
+  if (input.inReplyTo) baseHeaders.push(`In-Reply-To: ${headerSafe(input.inReplyTo)}`);
+  if (input.references) baseHeaders.push(`References: ${headerSafe(input.references)}`);
 
   let raw: string;
   if (attachments.length === 0) {
@@ -173,13 +180,16 @@ export async function sendGmailRich(input: RichSendInput): Promise<{ id: string;
     raw = `${headers.join("\r\n")}\r\n\r\n${parts.join("\r\n")}`;
   }
 
+  const payload: { raw: string; threadId?: string } = { raw: base64Url(raw) };
+  if (input.threadId) payload.threadId = input.threadId;
+
   const res = await fetch(SEND_ENDPOINT, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${input.accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ raw: base64Url(raw) }),
+    body: JSON.stringify(payload),
     cache: "no-store",
   });
   if (!res.ok) {
@@ -188,4 +198,74 @@ export async function sendGmailRich(input: RichSendInput): Promise<{ id: string;
   }
   const data = (await res.json()) as { id?: string; threadId?: string };
   return { id: data.id || "", threadId: data.threadId || "" };
+}
+
+// --- read (metadata-only) helpers -------------------------------------------
+
+interface GmailHeader {
+  name: string;
+  value: string;
+}
+interface GmailMessageMeta {
+  id: string;
+  threadId: string;
+  labelIds?: string[];
+  payload?: { headers?: GmailHeader[] };
+}
+
+function headerValue(headers: GmailHeader[] | undefined, name: string): string {
+  const h = (headers || []).find((x) => x.name.toLowerCase() === name.toLowerCase());
+  return h?.value || "";
+}
+
+/**
+ * Read a sent message's own headers (metadata scope). We use it to capture the
+ * RFC822 Message-ID and Subject of a step we just sent, so the next step can
+ * thread as a proper reply.
+ */
+export async function getMessageMeta(
+  accessToken: string,
+  messageId: string,
+): Promise<{ messageIdHeader: string; subject: string }> {
+  const url = `${API_BASE}/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=Subject`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Gmail read failed (${res.status})`);
+  const data = (await res.json()) as GmailMessageMeta;
+  return {
+    messageIdHeader: headerValue(data.payload?.headers, "Message-ID"),
+    subject: headerValue(data.payload?.headers, "Subject"),
+  };
+}
+
+/** Extract the bare email address from a "Name <a@b.com>" From header. */
+function addressOf(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  return (m ? m[1] : from).trim().toLowerCase();
+}
+
+/**
+ * Has the contact replied in this thread? Reads thread message headers only
+ * (metadata scope — never bodies) and returns true if any message's From is the
+ * contact (an inbound message we didn't send).
+ */
+export async function threadHasReplyFrom(
+  accessToken: string,
+  threadId: string,
+  contactEmail: string,
+): Promise<boolean> {
+  const needle = contactEmail.trim().toLowerCase();
+  if (!needle) return false;
+  const url = `${API_BASE}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Gmail thread read failed (${res.status})`);
+  const data = (await res.json()) as { messages?: GmailMessageMeta[] };
+  return (data.messages || []).some(
+    (m) => addressOf(headerValue(m.payload?.headers, "From")) === needle,
+  );
 }

@@ -13,6 +13,8 @@ import {
   TASK_CREATED_BY,
   TOUCH_TYPES,
   CARE_STATUSES,
+  SEQUENCE_STATUSES,
+  ENROLLMENT_STATUSES,
 } from "./config";
 
 export type CompanyType = (typeof COMPANY_TYPES)[number];
@@ -184,6 +186,50 @@ export interface EmailTemplate {
 // Attachments are managed via their own upload endpoint, not the record patch.
 export type EmailTemplateInput = Partial<
   Omit<EmailTemplate, "id" | "createdTime" | "attachments">
+>;
+
+// --- Email sequences (Phase 3) ----------------------------------------------
+
+export type SequenceStatus = (typeof SEQUENCE_STATUSES)[number];
+export type EnrollmentStatus = (typeof ENROLLMENT_STATUSES)[number];
+
+/** One step: which template to send, and how long to wait after the previous step. */
+export interface SequenceStep {
+  templateId: string;
+  delayDays: number;
+}
+
+export interface Sequence {
+  id: string;
+  name: string;
+  description?: string;
+  status: SequenceStatus;
+  steps: SequenceStep[];
+  createdTime?: string;
+}
+export type SequenceInput = Partial<Omit<Sequence, "id" | "createdTime">>;
+
+export interface SequenceEnrollment {
+  id: string;
+  sequenceId?: string;
+  sequenceName?: string;
+  contactId?: string;
+  contactName?: string;
+  contactEmail?: string;
+  status: EnrollmentStatus;
+  stepIndex: number;
+  nextSendAt?: string;
+  threadId?: string;
+  threadSubject?: string;
+  lastMessageId?: string;
+  companyId?: string;
+  lastError?: string;
+  enrolledAt?: string;
+  completedAt?: string;
+  createdTime?: string;
+}
+export type EnrollmentInput = Partial<
+  Omit<SequenceEnrollment, "id" | "sequenceName" | "contactName" | "contactEmail" | "createdTime">
 >;
 
 export type CompanyInput = Partial<

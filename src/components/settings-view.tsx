@@ -14,6 +14,7 @@ type Status = {
   email?: string;
   name?: string;
   connectedAt?: string;
+  canRead?: boolean;
 };
 
 export function SettingsView() {
@@ -108,6 +109,18 @@ export function SettingsView() {
               <Button variant="secondary" size="sm" onClick={disconnect} disabled={working}>
                 {working ? <Spinner /> : null} Disconnect
               </Button>
+              {!status.canRead ? (
+                <div className="w-full">
+                  <InlineAlert variant="info">
+                    Email <strong>sequences</strong> can auto-stop when a contact replies — but that needs read
+                    access to your Gmail, which this connection doesn&apos;t have yet. Reconnect to grant it
+                    (header-only: Luna sees who a thread is from, never message contents).{" "}
+                    <a href="/api/google/connect" className="font-medium underline">
+                      Reconnect Gmail
+                    </a>
+                  </InlineAlert>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">

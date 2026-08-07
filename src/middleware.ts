@@ -8,7 +8,9 @@ import { SESSION_COOKIE, authConfigured, sessionToken, safeEqual } from "@/lib/a
  */
 
 const PUBLIC_PAGES = ["/login"];
-const PUBLIC_APIS = ["/api/auth/login", "/api/auth/logout"];
+// The cron tick carries no session cookie — it is allowlisted here and instead
+// verifies its own CRON_SECRET bearer token inside the route.
+const PUBLIC_APIS = ["/api/auth/login", "/api/auth/logout", "/api/cron/sequences"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
