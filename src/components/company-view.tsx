@@ -1094,7 +1094,7 @@ export function CompanyView({
         <SendComposer
           onClose={() => setOutreachOpen(false)}
           company={{ id: company.id, name: company.name }}
-          contacts={contacts}
+          contacts={[...contacts, ...suggested.filter((s) => !contacts.some((c) => c.id === s.id))]}
           templates={emailTemplates}
           defaultContactId={outreachContactId}
           defaultAngle={outreachAngle}
