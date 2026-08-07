@@ -3,13 +3,26 @@ import { nameKey } from "@/lib/domain";
 
 /**
  * Find likely-duplicate people — the same person recorded more than once (often
- * with different email addresses). Pure and deterministic. Two signals:
- *   1. a shared email address (exact) → definite;
- *   2. the same name → likely, and near-certain when they're at the same company.
- * Merging is always a human decision, so this only *suggests* groups.
+ * with different email addresses). Pure and deterministic. Precision matters far
+ * more than recall here (a wrong merge is destructive), so only two tight signals
+ * qualify:
+ *   1. a shared email address (exact) — the same person, whatever the company;
+ *   2. the same FULL name AT THE SAME company.
+ * A shared first name across different companies (five different "David"s at five
+ * agencies) is NOT a duplicate and is never grouped. Merging is always the user's
+ * call — this only suggests.
  */
 
 export type DupConfidence = "high" | "medium";
+
+/** A name strong enough to match on: at least two real name tokens (a surname). */
+function isFullName(name?: string): boolean {
+  const tokens = (name || "")
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.replace(/[^a-z0-9]/gi, "").length >= 2);
+  return tokens.length >= 2;
+}
 
 export interface DuplicateGroup {
   key: string;
@@ -60,33 +73,29 @@ export function findDuplicateGroups(contacts: Contact[]): DuplicateGroup[] {
     uniq.forEach((c) => grouped.add(c.id));
   }
 
-  // 2) Same name — likely the same person; near-certain at the same company.
-  const byName = new Map<string, Contact[]>();
+  // 2) Same FULL name AT THE SAME company — near-certain. Keyed on name+company,
+  // so a shared first name across different agencies never groups.
+  const byNameCompany = new Map<string, Contact[]>();
   for (const c of contacts) {
-    const k = nameKey(c.name);
-    if (k.length < 4) continue; // skip blank/very short names
-    const arr = byName.get(k) ?? [];
+    if (grouped.has(c.id)) continue;
+    if (!c.companyId) continue; // no company to corroborate → skip
+    if (!isFullName(c.name)) continue; // a bare first name is too generic
+    const k = `${nameKey(c.name)}@@${c.companyId}`;
+    const arr = byNameCompany.get(k) ?? [];
     arr.push(c);
-    byName.set(k, arr);
+    byNameCompany.set(k, arr);
   }
-  for (const [k, list] of byName) {
+  for (const [k, list] of byNameCompany) {
     const uniq = dedupeById(list).filter((c) => !grouped.has(c.id));
     if (uniq.length < 2) continue;
-    const companyIds = uniq.map((c) => c.companyId).filter(Boolean);
-    const sameCompany = companyIds.length === uniq.length && new Set(companyIds).size === 1;
     groups.push({
       key: `name:${k}`,
-      reason: sameCompany
-        ? `Same name at the same company · ${uniq[0].name}`
-        : `Same name · ${uniq[0].name}`,
-      confidence: sameCompany ? "high" : "medium",
+      reason: `Same name at the same company · ${uniq[0].name}`,
+      confidence: "high",
       contactIds: uniq.map((c) => c.id),
     });
     uniq.forEach((c) => grouped.add(c.id));
   }
 
-  // High-confidence groups first.
-  return groups.sort((a, b) =>
-    a.confidence === b.confidence ? 0 : a.confidence === "high" ? -1 : 1,
-  );
+  return groups;
 }
