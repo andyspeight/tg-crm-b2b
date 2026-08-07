@@ -20,6 +20,7 @@ import { LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { SendComposer } from "@/components/send-composer";
+import { DuplicatesReview } from "@/components/duplicates-review";
 import { useToast } from "@/components/feedback";
 
 function enrolTarget(c: Contact): EnrolTarget {
@@ -205,6 +206,8 @@ export function ContactsView({
           </div>
         }
       />
+
+      <DuplicatesReview onMerged={refresh} />
 
       {/* Customer / lead filter + sort */}
       <div className="flex flex-wrap items-center gap-2.5">
