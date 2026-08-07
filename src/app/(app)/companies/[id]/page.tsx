@@ -6,6 +6,7 @@ import {
   listCareTouchesByCompany,
   listContactsByIds,
   listDealsByIds,
+  listEmailTemplates,
   listSuggestedContactsForCompany,
   listTasksByIds,
 } from "@/lib/crm/data";
@@ -31,14 +32,16 @@ export default async function CompanyPage({
     throw e;
   }
 
-  const [contacts, deals, activities, tasks, careTouches, suggestedContacts] = await Promise.all([
-    listContactsByIds(company.contactIds),
-    listDealsByIds(company.dealIds),
-    listActivitiesByIds(company.activityIds),
-    listTasksByIds(company.taskIds),
-    listCareTouchesByCompany(company.id),
-    listSuggestedContactsForCompany(company, company.contactIds),
-  ]);
+  const [contacts, deals, activities, tasks, careTouches, suggestedContacts, emailTemplates] =
+    await Promise.all([
+      listContactsByIds(company.contactIds),
+      listDealsByIds(company.dealIds),
+      listActivitiesByIds(company.activityIds),
+      listTasksByIds(company.taskIds),
+      listCareTouchesByCompany(company.id),
+      listSuggestedContactsForCompany(company, company.contactIds),
+      listEmailTemplates(),
+    ]);
 
   return (
     <CompanyView
@@ -49,6 +52,7 @@ export default async function CompanyPage({
       initialActivities={activities}
       initialTasks={tasks}
       initialCareTouches={careTouches}
+      emailTemplates={emailTemplates}
       draftAngle={angle}
     />
   );

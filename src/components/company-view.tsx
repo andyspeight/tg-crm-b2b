@@ -42,6 +42,7 @@ import type {
   Company,
   Contact,
   Deal,
+  EmailTemplate,
   Task,
 } from "@/lib/crm/types";
 import { TOUCH_TYPES } from "@/lib/crm/config";
@@ -69,7 +70,7 @@ import {
 import type { BadgeColor } from "@/components/ui";
 import { ActivityForm, CompanyForm, ContactForm, DealForm, TaskForm } from "@/components/forms";
 import { useConfirm, useToast } from "@/components/feedback";
-import { OutreachModal } from "@/components/outreach-modal";
+import { SendComposer } from "@/components/send-composer";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { CompanySignals } from "@/components/signals-view";
 import { StartOnboardingModal } from "@/components/start-onboarding-modal";
@@ -131,6 +132,7 @@ export function CompanyView({
   initialActivities,
   initialTasks,
   initialCareTouches,
+  emailTemplates,
   draftAngle,
 }: {
   company: Company;
@@ -140,6 +142,8 @@ export function CompanyView({
   initialActivities: Activity[];
   initialTasks: Task[];
   initialCareTouches: CareTouch[];
+  /** Templates offered in the email composer's picker. */
+  emailTemplates: EmailTemplate[];
   /** When set (via ?angle= deep link from a signal), open the composer pre-seeded. */
   draftAngle?: string;
 }) {
@@ -1086,18 +1090,20 @@ export function CompanyView({
 
       <CareLogModal open={loggingCare} onClose={() => setLoggingCare(false)} onSave={logCare} />
 
-      <OutreachModal
-        open={outreachOpen}
-        onClose={() => setOutreachOpen(false)}
-        company={{ id: company.id, name: company.name }}
-        contacts={contacts.map((c) => ({ id: c.id, name: c.name, email: c.email, role: c.role }))}
-        defaultContactId={outreachContactId}
-        defaultAngle={outreachAngle}
-        autoDraft={outreachAutoDraft}
-        onSent={async () => {
-          await Promise.all([refreshActivities(), refreshCompany()]);
-        }}
-      />
+      {outreachOpen ? (
+        <SendComposer
+          onClose={() => setOutreachOpen(false)}
+          company={{ id: company.id, name: company.name }}
+          contacts={contacts}
+          templates={emailTemplates}
+          defaultContactId={outreachContactId}
+          defaultAngle={outreachAngle}
+          autoDraft={outreachAutoDraft}
+          onSent={async () => {
+            await Promise.all([refreshActivities(), refreshCompany()]);
+          }}
+        />
+      ) : null}
 
       <StartOnboardingModal
         open={onboardingOpen}
