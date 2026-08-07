@@ -21,6 +21,7 @@ const TITLES: [string, string][] = [
   ["/care", "Care"],
   ["/templates", "Email templates"],
   ["/sequences", "Sequences"],
+  ["/performance", "Email performance"],
   ["/signals", "Signals"],
   ["/digest", "Weekly digest"],
   ["/data", "Data health"],

@@ -727,6 +727,17 @@ export async function listActivitiesByCompany(companyId: string): Promise<Activi
   return listActivitiesByIds(idList(company.fields[FIELDS.companies.activities]));
 }
 
+/** Every logged email send across the base (Activity type "Email"). For analytics. */
+export async function listEmailActivities(): Promise<Activity[]> {
+  const F = FIELDS.activities;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    filterByFormula: `{${F.type}}='Email'`,
+    fields: [F.date, F.type, F.company, F.contact, F.summary],
+    maxRecords: 5000,
+  });
+  return records.map(toActivity);
+}
+
 export async function createActivity(input: ActivityInput): Promise<Activity> {
   const F = FIELDS.activities;
   const fields = buildActivityFields(input, false);
