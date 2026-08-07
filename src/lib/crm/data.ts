@@ -2120,6 +2120,45 @@ export async function hasLiveEnrollment(sequenceId: string, contactId: string): 
   );
 }
 
+// --- Today "Needs you" snooze -----------------------------------------------
+
+const SNOOZE_KEY = "today_snoozed";
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function readSnoozeMap(): Promise<Record<string, string>> {
+  const raw = await getSetting(SNOOZE_KEY);
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === "object" ? (obj as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Action keys currently snoozed (expired ones dropped). */
+export async function getSnoozedActionKeys(): Promise<string[]> {
+  const map = await readSnoozeMap();
+  const now = new Date().toISOString();
+  return Object.entries(map)
+    .filter(([, until]) => until > now)
+    .map(([key]) => key);
+}
+
+/** Snooze one "Needs you today" item for 7 days; prunes expired entries. */
+export async function snoozeAction(key: string): Promise<void> {
+  const clean = key.trim();
+  if (!clean) return;
+  const map = await readSnoozeMap();
+  const now = Date.now();
+  const next: Record<string, string> = {};
+  for (const [k, until] of Object.entries(map)) {
+    if (Date.parse(until) > now) next[k] = until; // keep still-active snoozes
+  }
+  next[clean] = new Date(now + SNOOZE_MS).toISOString();
+  await setSetting(SNOOZE_KEY, JSON.stringify(next));
+}
+
 // --- Signals (intel monitoring) ---------------------------------------------
 
 function toSignal(rec: AirtableRecord): Signal {

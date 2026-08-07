@@ -125,12 +125,9 @@ export function CommandBar({ variant = "bar" }: { variant?: "bar" | "sidebar" } 
         setOpen((o) => !o);
       }
     };
-    const onOpen = () => setOpen(true);
     document.addEventListener("keydown", onKey);
-    window.addEventListener("luna:command-open", onOpen);
     return () => {
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("luna:command-open", onOpen);
     };
   }, []);
 
@@ -183,6 +180,21 @@ export function CommandBar({ variant = "bar" }: { variant?: "bar" | "sidebar" } 
       setAsking(false);
     }
   }, []);
+
+  // `luna:command-open` opens the palette; an optional { query } opens it straight
+  // into Ask mode and runs the question (used by the dashboard Ask Luna box).
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      setOpen(true);
+      const query = (e as CustomEvent<{ query?: string }>).detail?.query;
+      if (typeof query === "string" && query.trim()) {
+        setQ(query);
+        runAsk(query);
+      }
+    };
+    window.addEventListener("luna:command-open", onOpen as EventListener);
+    return () => window.removeEventListener("luna:command-open", onOpen as EventListener);
+  }, [runAsk]);
 
   function leaveAsk() {
     setAsking(false);

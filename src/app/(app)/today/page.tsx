@@ -1,20 +1,30 @@
-import { activityRecency, listCareBoard, listCompanies, listDeals, listOpenTasks } from "@/lib/crm/data";
+import {
+  activityRecency,
+  getSnoozedActionKeys,
+  listCareBoard,
+  listCompanies,
+  listDeals,
+  listOpenTasks,
+} from "@/lib/crm/data";
 import { computeNextActions } from "@/lib/crm/next-actions";
 import type { CareTouch } from "@/lib/crm/types";
 import { TodayView, type CareDueItem, type NurtureItem, type Vitals } from "@/components/today-view";
 
 export const dynamic = "force-dynamic";
 
+const ORG_NAME = "Travelgenix";
 const isOpen = (stage?: string) => stage !== "Won" && stage !== "Lost";
 
 export default async function TodayPage() {
-  const [tasks, companies, deals, recency, careBoard] = await Promise.all([
+  const [tasks, companies, deals, recency, careBoard, snoozed] = await Promise.all([
     listOpenTasks(),
     listCompanies(),
     listDeals(),
     activityRecency(),
     listCareBoard(),
+    getSnoozedActionKeys(),
   ]);
+  const snoozedSet = new Set(snoozed);
 
   const nextTouchByCompany = new Map<string, CareTouch>();
   for (const { company, nextTouch } of careBoard) {
@@ -27,7 +37,7 @@ export default async function TodayPage() {
     nextTouchByCompany,
     lastByCompany: recency.byCompany,
     lastByDeal: recency.byDeal,
-  });
+  }).filter((a) => !snoozedSet.has(`${a.companyId}:${a.kind}`));
 
   // Care touches overdue or falling due within the next 14 days.
   const cutoff = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
@@ -70,6 +80,7 @@ export default async function TodayPage() {
 
   return (
     <TodayView
+      orgName={ORG_NAME}
       tasks={tasks}
       nextActions={nextActions}
       careDue={careDue}
