@@ -194,6 +194,52 @@ body {
   box-shadow: inset 3px 0 0 var(--accent-strong);
 }
 
+/* Rich-text editor + rendered email body. Tailwind's preflight strips list and
+   heading styles, so the contenteditable surface restores them here. */
+.rt-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--fg-subtle);
+  pointer-events: none;
+}
+.rt-body {
+  line-height: 1.65;
+}
+.rt-body p {
+  margin: 0 0 0.7em;
+}
+.rt-body ul,
+.rt-body ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.4em;
+}
+.rt-body ul {
+  list-style: disc;
+}
+.rt-body ol {
+  list-style: decimal;
+}
+.rt-body li {
+  margin: 0.15em 0;
+}
+.rt-body a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+.rt-body h2 {
+  font-size: 1.15em;
+  font-weight: 600;
+  margin: 0.2em 0 0.5em;
+}
+.rt-body blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.85em;
+  margin: 0 0 0.7em;
+  color: var(--fg-muted);
+}
+.rt-body strong {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

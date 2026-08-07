@@ -60,6 +60,7 @@ import {
   listRecords,
   updateRecord,
   updateRecords,
+  uploadAttachment,
 } from "@/lib/airtable";
 import { getSetting, setSetting } from "@/lib/settings";
 import { emailBrand, hostBrand, nameKey } from "@/lib/domain";
@@ -1879,4 +1880,25 @@ export async function updateEmailTemplate(id: string, input: EmailTemplateInput)
 
 export async function deleteEmailTemplate(id: string): Promise<void> {
   await deleteRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, id);
+}
+
+export async function addTemplateAttachment(
+  id: string,
+  file: { filename: string; contentType: string; base64: string },
+): Promise<EmailTemplate> {
+  await uploadAttachment(AIRTABLE_BASE_ID, id, FIELDS.emailTemplates.attachments, file);
+  return getEmailTemplate(id);
+}
+
+export async function removeTemplateAttachment(id: string, attachmentId: string): Promise<EmailTemplate> {
+  const current = await getEmailTemplate(id);
+  // Re-patch the field with only the attachments we're keeping (by id); the one
+  // we drop simply isn't in the list any more.
+  const keep = current.attachments
+    .filter((a) => a.id && a.id !== attachmentId)
+    .map((a) => ({ id: a.id as string }));
+  await updateRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, id, {
+    [FIELDS.emailTemplates.attachments]: keep,
+  });
+  return getEmailTemplate(id);
 }
