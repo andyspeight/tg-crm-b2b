@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CommandBar } from "@/components/command-bar";
 
 type Item = { href: string; label: string; icon: typeof Home };
 
@@ -34,8 +35,12 @@ const TOOLS: Item[] = [
 ];
 
 // The navy→teal brand gradient — the app's one signature surface, used only on
-// the logo and identity marks so it stays special.
+// the logo mark so it stays special.
 const BRAND_GRADIENT = "linear-gradient(135deg, var(--navy), var(--accent))";
+// Coral identity mark for the account footer (matches the client CRM).
+const CORAL_GRADIENT = "linear-gradient(135deg, #ffb8b8, #ff8e8e)";
+// The subtle cyan→navy wash on the active nav row (matches the client CRM).
+const NAV_ACTIVE = "linear-gradient(135deg, rgba(0,180,216,0.10) 0%, rgba(27,43,91,0.05) 100%)";
 
 /**
  * Left sidebar app shell. Primary navigation lives here (grouped, always
@@ -98,6 +103,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </span>
         </Link>
 
+        {/* Quick find */}
+        <div className="shrink-0 border-b border-border p-2.5">
+          <CommandBar variant="sidebar" />
+        </div>
+
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2.5 py-3">
           <NavGroup label="Workspace" items={WORKSPACE} pathname={pathname} onNavigate={onClose} />
@@ -112,7 +122,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           <div className="mt-1.5 flex items-center gap-2 rounded-lg px-2 py-1.5">
             <span
               className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white"
-              style={{ background: BRAND_GRADIENT }}
+              style={{ background: CORAL_GRADIENT }}
               aria-hidden
             >
               TG
@@ -176,16 +186,12 @@ function NavRow({
       href={item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
+      style={active ? { background: NAV_ACTIVE } : undefined}
       className={cn(
-        "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-        active
-          ? "bg-accent-soft font-semibold text-accent-strong"
-          : "font-medium text-fg-muted hover:bg-muted hover:text-fg",
+        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        active ? "font-semibold text-fg" : "font-medium text-fg-muted hover:bg-muted hover:text-fg",
       )}
     >
-      {active ? (
-        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-accent-strong" aria-hidden />
-      ) : null}
       <Icon size={17} strokeWidth={active ? 2 : 1.75} className="shrink-0" />
       <span className="truncate">{item.label}</span>
     </Link>
