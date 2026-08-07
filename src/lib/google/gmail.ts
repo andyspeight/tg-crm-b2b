@@ -84,3 +84,108 @@ export async function sendGmail(input: SendInput): Promise<{ id: string; threadI
   const data = (await res.json()) as { id?: string; threadId?: string };
   return { id: data.id || "", threadId: data.threadId || "" };
 }
+
+// --- rich send (HTML + attachments) -----------------------------------------
+
+export interface RichAttachment {
+  filename: string;
+  contentType: string;
+  base64: string; // raw base64 (no data: prefix)
+}
+
+export interface RichSendInput {
+  accessToken: string;
+  fromEmail: string;
+  fromName?: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string; // plain-text alternative; derived from html if omitted
+  attachments?: RichAttachment[];
+}
+
+/** Very small HTML → plain-text fallback for the text/plain alternative part. */
+function htmlToPlain(html: string): string {
+  return html
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Send an HTML email (with an auto plain-text part) and optional attachments. */
+export async function sendGmailRich(input: RichSendInput): Promise<{ id: string; threadId: string }> {
+  const alt = `alt_${crypto.randomUUID()}`;
+  const mixed = `mix_${crypto.randomUUID()}`;
+  const text = input.text ?? htmlToPlain(input.html);
+  const attachments = input.attachments ?? [];
+
+  const altPart = [
+    `--${alt}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrap76(utf8Base64(text)),
+    `--${alt}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrap76(utf8Base64(input.html)),
+    `--${alt}--`,
+  ].join("\r\n");
+
+  const baseHeaders = [
+    `From: ${fromHeader(input.fromEmail, input.fromName)}`,
+    `To: ${headerSafe(input.to)}`,
+    `Subject: ${encodeSubject(input.subject)}`,
+    "MIME-Version: 1.0",
+  ];
+
+  let raw: string;
+  if (attachments.length === 0) {
+    const headers = [...baseHeaders, `Content-Type: multipart/alternative; boundary="${alt}"`];
+    raw = `${headers.join("\r\n")}\r\n\r\n${altPart}`;
+  } else {
+    const parts: string[] = [
+      `--${mixed}`,
+      `Content-Type: multipart/alternative; boundary="${alt}"`,
+      "",
+      altPart,
+    ];
+    for (const a of attachments) {
+      const name = headerSafe(a.filename).replace(/["\\]/g, "");
+      parts.push(
+        `--${mixed}`,
+        `Content-Type: ${headerSafe(a.contentType) || "application/octet-stream"}; name="${name}"`,
+        `Content-Disposition: attachment; filename="${name}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        wrap76(a.base64),
+      );
+    }
+    parts.push(`--${mixed}--`);
+    const headers = [...baseHeaders, `Content-Type: multipart/mixed; boundary="${mixed}"`];
+    raw = `${headers.join("\r\n")}\r\n\r\n${parts.join("\r\n")}`;
+  }
+
+  const res = await fetch(SEND_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ raw: base64Url(raw) }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(`Gmail send failed (${res.status}): ${body.error?.message || "unknown"}`);
+  }
+  const data = (await res.json()) as { id?: string; threadId?: string };
+  return { id: data.id || "", threadId: data.threadId || "" };
+}
