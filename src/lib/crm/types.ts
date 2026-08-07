@@ -162,6 +162,30 @@ export interface CareTouch {
 }
 export type CareTouchInput = Partial<Omit<CareTouch, "id" | "createdTime">>;
 
+// --- Email templates --------------------------------------------------------
+
+export interface EmailAttachment {
+  id?: string;
+  url?: string;
+  filename: string;
+  size?: number;
+  type?: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject?: string;
+  body?: string;
+  description?: string;
+  attachments: EmailAttachment[];
+  createdTime?: string;
+}
+// Attachments are managed via their own upload endpoint, not the record patch.
+export type EmailTemplateInput = Partial<
+  Omit<EmailTemplate, "id" | "createdTime" | "attachments">
+>;
+
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">
 >;

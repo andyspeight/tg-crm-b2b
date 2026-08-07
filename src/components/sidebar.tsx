@@ -10,6 +10,7 @@ import {
   HeartHandshake,
   Home,
   LogOut,
+  Mail,
   Moon,
   Settings,
   Sparkles,
@@ -30,6 +31,7 @@ const WORKSPACE: Item[] = [
 ];
 
 const TOOLS: Item[] = [
+  { href: "/templates", label: "Email templates", icon: Mail },
   { href: "/digest", label: "Weekly digest", icon: Sparkles },
   { href: "/data", label: "Data health", icon: Database },
 ];
