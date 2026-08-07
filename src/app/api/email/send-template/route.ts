@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createActivity } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
-import { sendGmailRich } from "@/lib/google/gmail";
+import { sendGmailRich, type RichAttachment } from "@/lib/google/gmail";
 import { applyEmailTracking } from "@/lib/email/tracking";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
@@ -11,6 +11,30 @@ export const maxDuration = 60;
 const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 const MAX_SUBJECT = 500;
 const MAX_HTML = 100_000;
+// Gmail's message ceiling is ~25 MB; keep well under it after base64 overhead.
+const MAX_ATTACH_BYTES = 18 * 1024 * 1024;
+
+/** Validate ad-hoc composer attachments: [{ filename, contentType, base64 }]. */
+function parseAttachments(raw: unknown): RichAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RichAttachment[] = [];
+  let total = 0;
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    const filename = typeof a.filename === "string" ? a.filename.slice(0, 200) : "";
+    const base64 = typeof a.base64 === "string" ? a.base64 : "";
+    if (!filename || !base64) continue;
+    total += Math.floor((base64.length * 3) / 4);
+    if (total > MAX_ATTACH_BYTES) throw new Error("Those attachments are too large to send together.");
+    out.push({
+      filename,
+      contentType: typeof a.contentType === "string" && a.contentType ? a.contentType : "application/octet-stream",
+      base64,
+    });
+  }
+  return out;
+}
 
 /**
  * Send a rich (HTML + attachments) 1:1 email as the connected Gmail account and
@@ -34,6 +58,7 @@ export async function POST(req: NextRequest) {
     const companyId = typeof body.companyId === "string" ? body.companyId : undefined;
     const contactId = typeof body.contactId === "string" ? body.contactId : undefined;
     const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
+    const extraAttachments = parseAttachments(body.attachments);
 
     if (!to || /[\r\n]/.test(to) || !EMAIL_RE.test(to)) {
       return NextResponse.json({ error: "Enter a valid recipient email address." }, { status: 400 });
@@ -61,7 +86,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Pixel for open tracking; template attachments go out as tracked links.
+    // Pixel for open tracking; template attachments go out as tracked links;
+    // ad-hoc files uploaded in the composer ride along directly.
     const { html: trackedHtml, attachments } = await applyEmailTracking({
       html,
       subject,
@@ -69,6 +95,7 @@ export async function POST(req: NextRequest) {
       companyId,
       contactId,
       templateId: templateId || undefined,
+      extraAttachments,
     });
 
     const sent = await sendGmailRich({

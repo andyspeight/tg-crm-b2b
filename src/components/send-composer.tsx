@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CheckCircle2, Paperclip, Plug, Search, Send, Sparkles, X } from "lucide-react";
+import { CheckCircle2, Paperclip, Plug, Search, Send, Sparkles, Upload, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact, EmailTemplate } from "@/lib/crm/types";
 import { Button, Field, IconButton, InlineAlert, Input, Select, Spinner } from "@/components/ui";
@@ -19,6 +19,22 @@ function formatBytes(n?: number): string {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result);
+      resolve(s.slice(s.indexOf(",") + 1)); // strip the data: URL prefix
+    };
+    r.onerror = () => reject(new Error("Couldn't read that file."));
+    r.readAsDataURL(file);
+  });
+}
+
+type AdHocFile = { filename: string; contentType: string; base64: string; size: number };
+
+const MAX_TOTAL_ATTACH = 18 * 1024 * 1024;
 
 /**
  * The one full-screen email composer, used everywhere we send: from a template,
@@ -52,6 +68,7 @@ export function SendComposer({
   autoDraft?: boolean;
 }) {
   const pickable = template ? [] : templates ?? [];
+  const showPicker = !template && !!templates; // company/contact flow always offers the picker
   const localMode = !!contacts;
 
   const [conn, setConn] = useState<Conn | null>(null);
@@ -67,9 +84,11 @@ export function SendComposer({
   const [angle, setAngle] = useState(defaultAngle ?? "");
   const [drafting, setDrafting] = useState(false);
   const [personalising, setPersonalising] = useState(false);
+  const [files, setFiles] = useState<AdHocFile[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [sentTo, setSentTo] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
   const activeTemplate = useMemo(
@@ -210,6 +229,38 @@ export function SendComposer({
     }
   }
 
+  async function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setError("");
+    const added: AdHocFile[] = [];
+    for (const file of Array.from(list)) {
+      try {
+        added.push({
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+          base64: await fileToBase64(file),
+          size: file.size,
+        });
+      } catch {
+        setError(`Couldn't read "${file.name}".`);
+      }
+    }
+    setFiles((prev) => {
+      const next = [...prev, ...added];
+      const total = next.reduce((s, f) => s + f.size, 0);
+      if (total > MAX_TOTAL_ATTACH) {
+        setError("Attachments come to more than 18 MB together — remove one or send a link instead.");
+        return prev;
+      }
+      return next;
+    });
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
+  function removeFile(i: number) {
+    setFiles((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   const connected = !!conn?.connected;
   const optedOut = contact?.marketingOptIn === "Opted Out";
   const canSend = connected && !!contact?.email && !!subject.trim() && !!htmlToText(body).trim() && !sending;
@@ -228,6 +279,7 @@ export function SendComposer({
           contactId: contact.id,
           companyId: contact.companyId ?? company?.id,
           templateId: templateId || undefined,
+          attachments: files.map((f) => ({ filename: f.filename, contentType: f.contentType, base64: f.base64 })),
         }),
       });
       setSentTo(contact.email);
@@ -349,8 +401,11 @@ export function SendComposer({
               </div>
 
               {/* Template picker (company/contact flow) */}
-              {pickable.length > 0 ? (
-                <Field label="Start from a template">
+              {showPicker ? (
+                <Field
+                  label="Start from a template"
+                  hint={pickable.length === 0 ? "No templates yet — write a blank email, or create one under Email templates." : undefined}
+                >
                   <Select value={templateId} onChange={(e) => chooseTemplate(e.target.value)}>
                     <option value="">Blank email</option>
                     {pickable.map((t) => (
@@ -411,12 +466,30 @@ export function SendComposer({
                 <RichTextEditor value={body} onChange={setBody} minHeight={300} />
               </div>
 
-              {/* Attachments (sent as tracked links) */}
-              {attachments.length > 0 ? (
-                <div>
-                  <span className="mb-1.5 block text-[13px] font-medium text-fg-muted">
-                    Attachments <span className="font-normal text-fg-subtle">· sent as tracked links</span>
-                  </span>
+              {/* Attachments — from the template (tracked links) + ad-hoc uploads */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[13px] font-medium text-fg-muted">Attachments</span>
+                  <button
+                    type="button"
+                    onClick={() => fileInput.current?.click()}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong hover:underline"
+                  >
+                    <Upload size={13} strokeWidth={2} /> Add files
+                  </button>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => addFiles(e.target.files)}
+                  />
+                </div>
+                {attachments.length === 0 && files.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border bg-surface/50 px-3 py-2.5 text-[12.5px] text-fg-subtle">
+                    No attachments. Pick a template to include its files, or add your own.
+                  </p>
+                ) : (
                   <ul className="space-y-1.5">
                     {attachments.map((a) => (
                       <li
@@ -425,12 +498,26 @@ export function SendComposer({
                       >
                         <Paperclip size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{a.filename}</span>
+                        <span className="shrink-0 text-[11px] text-accent-strong">tracked link</span>
                         {a.size ? <span className="tnum shrink-0 text-[12px] text-fg-subtle">{formatBytes(a.size)}</span> : null}
                       </li>
                     ))}
+                    {files.map((f, i) => (
+                      <li
+                        key={`adhoc-${i}`}
+                        className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"
+                      >
+                        <Paperclip size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{f.filename}</span>
+                        {f.size ? <span className="tnum shrink-0 text-[12px] text-fg-subtle">{formatBytes(f.size)}</span> : null}
+                        <IconButton label={`Remove ${f.filename}`} onClick={() => removeFile(i)}>
+                          <X size={14} strokeWidth={2} />
+                        </IconButton>
+                      </li>
+                    ))}
                   </ul>
-                </div>
-              ) : null}
+                )}
+              </div>
 
               {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}
 
