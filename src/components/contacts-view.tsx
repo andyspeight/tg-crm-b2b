@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Download, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
 import { api } from "@/lib/client";
-import type { Contact } from "@/lib/crm/types";
+import type { Contact, EmailTemplate } from "@/lib/crm/types";
 import {
   Button,
   ButtonLink,
@@ -19,6 +19,7 @@ import {
 import { LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
+import { SendComposer } from "@/components/send-composer";
 import { useToast } from "@/components/feedback";
 
 function enrolTarget(c: Contact): EnrolTarget {
@@ -54,9 +55,11 @@ function firstLetter(name?: string): string {
 export function ContactsView({
   initial,
   companies,
+  templates,
 }: {
   initial: Contact[];
   companies: CompanyOption[];
+  templates: EmailTemplate[];
 }) {
   const {
     items: contacts,
@@ -81,6 +84,7 @@ export function ContactsView({
   const [editing, setEditing] = useState<Contact | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enrolTargets, setEnrolTargets] = useState<EnrolTarget[] | null>(null);
+  const [emailContact, setEmailContact] = useState<Contact | null>(null);
   const toast = useToast();
 
   function toggleSelect(id: string) {
@@ -372,13 +376,17 @@ export function ContactsView({
                     </td>
                     <td className="px-4 py-3 text-fg-muted">
                       {c.email ? (
-                        <a
-                          href={`mailto:${c.email}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="block max-w-[220px] truncate hover:text-accent-strong"
+                        <button
+                          type="button"
+                          title={`Email ${c.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEmailContact(c);
+                          }}
+                          className="block max-w-[220px] truncate text-left hover:text-accent-strong"
                         >
                           {c.email}
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-fg-subtle">—</span>
                       )}
@@ -453,13 +461,17 @@ export function ContactsView({
                       </div>
                       <div className="mt-1.5 space-y-0.5 text-[13px] text-fg-muted">
                         {c.email ? (
-                          <a
-                            href={`mailto:${c.email}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="block truncate hover:text-accent-strong"
+                          <button
+                            type="button"
+                            title={`Email ${c.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEmailContact(c);
+                            }}
+                            className="block truncate text-left hover:text-accent-strong"
                           >
                             {c.email}
-                          </a>
+                          </button>
                         ) : null}
                         {c.phone ? <span className="tnum block">{c.phone}</span> : null}
                       </div>
@@ -498,6 +510,18 @@ export function ContactsView({
         contacts={enrolTargets ?? []}
         onDone={() => setSelected(new Set())}
       />
+
+      {emailContact ? (
+        <SendComposer
+          onClose={() => setEmailContact(null)}
+          contacts={[emailContact]}
+          templates={templates}
+          defaultContactId={emailContact.id}
+          onSent={async () => {
+            await refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
