@@ -69,7 +69,6 @@ export function SendComposer({
 }) {
   const pickable = template ? [] : templates ?? [];
   const showPicker = !template && !!templates; // company/contact flow always offers the picker
-  const localMode = !!contacts;
 
   const [conn, setConn] = useState<Conn | null>(null);
   const [query, setQuery] = useState("");
@@ -121,9 +120,9 @@ export function SendComposer({
     [],
   );
 
-  // Global contact search (only when we weren't handed a contact list).
+  // Global contact search — matches anyone in the CRM, not just this account
+  // (typing a name must always be able to find the person).
   useEffect(() => {
-    if (localMode) return;
     const term = query.trim();
     if (contact || term.length < 2) {
       setResults([]);
@@ -142,19 +141,13 @@ export function SendComposer({
       }
     }, 250);
     return () => clearTimeout(id);
-  }, [query, contact, localMode]);
+  }, [query, contact]);
 
-  const localResults = useMemo(() => {
-    if (!localMode) return [];
-    const term = query.trim().toLowerCase();
-    const list = contacts ?? [];
-    if (!term) return list.slice(0, 8);
-    return list
-      .filter((c) =>
-        [c.name, c.email, c.role, c.companyName].some((v) => v?.toLowerCase().includes(term)),
-      )
-      .slice(0, 8);
-  }, [localMode, contacts, query]);
+  // The account's own people, offered as quick picks before you start typing.
+  const accountSuggestions = useMemo(
+    () => (contacts ?? []).filter((c) => c.email).slice(0, 8),
+    [contacts],
+  );
 
   function pick(c: Contact) {
     setContact(c);
@@ -297,8 +290,9 @@ export function SendComposer({
   if (typeof document === "undefined") return null;
 
   const title = template ? `Send · ${template.name || "template"}` : `Email${company ? ` · ${company.name}` : ""}`;
-  const searchResults = localMode ? localResults : results;
-  const showResults = localMode ? !contact : query.trim().length >= 2;
+  const querying = query.trim().length >= 2;
+  const searchResults = querying ? results : accountSuggestions;
+  const showResults = !contact && (querying || accountSuggestions.length > 0);
 
   return createPortal(
     <div
@@ -360,19 +354,24 @@ export function SendComposer({
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       autoFocus
-                      placeholder={localMode ? "Search this account's people…" : "Search a contact by name, company or email…"}
+                      placeholder="Search a contact by name, company or email…"
                       className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[14px] text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     />
                     {showResults ? (
                       <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-float">
-                        {searching ? (
+                        {querying && searching ? (
                           <div className="flex items-center gap-2 px-3 py-3 text-[13px] text-fg-subtle">
                             <Spinner /> Searching…
                           </div>
-                        ) : searchResults.length === 0 ? (
+                        ) : querying && searchResults.length === 0 ? (
                           <div className="px-3 py-3 text-[13px] text-fg-subtle">No contacts match.</div>
                         ) : (
                           <ul className="py-1">
+                            {!querying && company ? (
+                              <li className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                                People at {company.name}
+                              </li>
+                            ) : null}
                             {searchResults.map((c) => (
                               <li key={c.id}>
                                 <button
