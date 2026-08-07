@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Download, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
+import { Download, Merge, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact, EmailTemplate } from "@/lib/crm/types";
 import {
@@ -21,6 +21,7 @@ import { ContactForm, type CompanyOption } from "@/components/forms";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { SendComposer } from "@/components/send-composer";
 import { DuplicatesReview } from "@/components/duplicates-review";
+import { MergePeopleModal } from "@/components/merge-people-modal";
 import { useToast } from "@/components/feedback";
 
 function enrolTarget(c: Contact): EnrolTarget {
@@ -86,6 +87,7 @@ export function ContactsView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enrolTargets, setEnrolTargets] = useState<EnrolTarget[] | null>(null);
   const [emailContact, setEmailContact] = useState<Contact | null>(null);
+  const [merging, setMerging] = useState(false);
   const toast = useToast();
 
   function toggleSelect(id: string) {
@@ -224,6 +226,11 @@ export function ContactsView({
             <Button size="sm" onClick={openEnrolSelected}>
               <Send size={15} strokeWidth={1.9} /> Add to sequence
             </Button>
+            {selected.size >= 2 ? (
+              <Button variant="secondary" size="sm" onClick={() => setMerging(true)}>
+                <Merge size={15} strokeWidth={1.9} /> Merge
+              </Button>
+            ) : null}
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               <X size={14} strokeWidth={1.9} /> Clear
             </Button>
@@ -525,6 +532,16 @@ export function ContactsView({
           }}
         />
       ) : null}
+
+      <MergePeopleModal
+        open={merging}
+        contacts={contacts.filter((c) => selected.has(c.id))}
+        onClose={() => setMerging(false)}
+        onDone={async () => {
+          setSelected(new Set());
+          await refresh();
+        }}
+      />
     </div>
   );
 }
