@@ -17,6 +17,7 @@ export const TABLES = {
   signals: "tbleJMlld1U0IjMG4",
   campaignEngagement: "tbljhb1tn3302SPgP",
   appSettings: "tbllri9bVn8QfPsA7",
+  emailTemplates: "tblKthkgFtNyfWszf",
 } as const;
 
 // --- Select option sets (must match the Airtable single-select choices exactly) ---
@@ -245,5 +246,12 @@ export const FIELDS = {
     key: "Key",
     value: "Value",
     updated: "Updated",
+  },
+  emailTemplates: {
+    name: "Name",
+    subject: "Subject",
+    body: "Body",
+    description: "Description",
+    attachments: "Attachments",
   },
 } as const;

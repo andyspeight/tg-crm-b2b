@@ -42,6 +42,9 @@ import type {
   ContactInput,
   Deal,
   DealInput,
+  EmailAttachment,
+  EmailTemplate,
+  EmailTemplateInput,
   PipelineStage,
   StageKind,
   Task,
@@ -1809,4 +1812,71 @@ export async function deleteCompanies(ids: string[]): Promise<number> {
 /** Bulk-delete junk contacts. */
 export async function deleteContacts(ids: string[]): Promise<number> {
   return deleteRecords(AIRTABLE_BASE_ID, TABLES.contacts, ids);
+}
+
+// --- email templates --------------------------------------------------------
+
+function toEmailAttachments(v: unknown): EmailAttachment[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((a): EmailAttachment => {
+    const o = a as Record<string, unknown>;
+    return {
+      id: str(o.id),
+      url: str(o.url),
+      filename: str(o.filename) ?? "attachment",
+      size: numv(o.size),
+      type: str(o.type),
+    };
+  });
+}
+
+function toEmailTemplate(rec: AirtableRecord): EmailTemplate {
+  const f = rec.fields;
+  const F = FIELDS.emailTemplates;
+  return {
+    id: rec.id,
+    name: str(f[F.name]) ?? "",
+    subject: str(f[F.subject]),
+    body: str(f[F.body]),
+    description: str(f[F.description]),
+    attachments: toEmailAttachments(f[F.attachments]),
+    createdTime: rec.createdTime,
+  };
+}
+
+function buildEmailTemplateFields(input: EmailTemplateInput, partial: boolean): Record<string, unknown> {
+  const F = FIELDS.emailTemplates;
+  const f: Record<string, unknown> = {};
+  const has = (k: keyof EmailTemplateInput) => Object.prototype.hasOwnProperty.call(input, k);
+  if (!partial || has("name")) f[F.name] = requiredText(input.name, "Name");
+  if (has("subject")) f[F.subject] = text(input.subject);
+  if (has("body")) f[F.body] = text(input.body);
+  if (has("description")) f[F.description] = text(input.description);
+  return f;
+}
+
+export async function listEmailTemplates(): Promise<EmailTemplate[]> {
+  const F = FIELDS.emailTemplates;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.emailTemplates, {
+    sort: [{ field: F.name, direction: "asc" }],
+  });
+  return records.map(toEmailTemplate);
+}
+
+export async function getEmailTemplate(id: string): Promise<EmailTemplate> {
+  return toEmailTemplate(await getRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, id));
+}
+
+export async function createEmailTemplate(input: EmailTemplateInput): Promise<EmailTemplate> {
+  const fields = buildEmailTemplateFields(input, false);
+  return toEmailTemplate(await createRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, fields));
+}
+
+export async function updateEmailTemplate(id: string, input: EmailTemplateInput): Promise<EmailTemplate> {
+  const fields = buildEmailTemplateFields(input, true);
+  return toEmailTemplate(await updateRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, id, fields));
+}
+
+export async function deleteEmailTemplate(id: string): Promise<void> {
+  await deleteRecord(AIRTABLE_BASE_ID, TABLES.emailTemplates, id);
 }
