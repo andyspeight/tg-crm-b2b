@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Mail, Plug } from "lucide-react";
+import { CheckCircle2, Inbox, Mail, Plug, RefreshCw } from "lucide-react";
 import { api } from "@/lib/client";
 import { Button, InlineAlert, PageHeader, Spinner } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
@@ -15,6 +15,7 @@ type Status = {
   name?: string;
   connectedAt?: string;
   canRead?: boolean;
+  canSyncInbox?: boolean;
 };
 
 export function SettingsView() {
@@ -24,6 +25,7 @@ export function SettingsView() {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const flag = params.get("google"); // connected | error | denied (from the OAuth callback)
 
@@ -38,6 +40,28 @@ export function SettingsView() {
   useEffect(() => {
     load();
   }, []);
+
+  async function syncNow() {
+    setSyncing(true);
+    setError("");
+    try {
+      const r = await api<{ ran: boolean; reason?: string; contactsScanned: number; messagesLogged: number }>(
+        "/api/inbox/sync/run",
+        { method: "POST" },
+      );
+      if (!r.ran) {
+        toast.error("Couldn't sync", { description: r.reason });
+      } else {
+        toast.success(`Synced · ${r.messagesLogged} email${r.messagesLogged === 1 ? "" : "s"} logged`, {
+          description: `${r.contactsScanned} ${r.contactsScanned === 1 ? "contact" : "contacts"} checked`,
+        });
+      }
+    } catch (e) {
+      toast.error("Sync failed", { description: (e as Error).message });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function disconnect() {
     const ok = await confirm({
@@ -109,18 +133,38 @@ export function SettingsView() {
               <Button variant="secondary" size="sm" onClick={disconnect} disabled={working}>
                 {working ? <Spinner /> : null} Disconnect
               </Button>
-              {!status.canRead ? (
-                <div className="w-full">
-                  <InlineAlert variant="info">
-                    Email <strong>sequences</strong> can auto-stop when a contact replies — but that needs read
-                    access to your Gmail, which this connection doesn&apos;t have yet. Reconnect to grant it
-                    (header-only: Luna sees who a thread is from, never message contents).{" "}
-                    <a href="/api/google/connect" className="font-medium underline">
-                      Reconnect Gmail
-                    </a>
-                  </InlineAlert>
+
+              {/* Inbox sync */}
+              <div className="w-full border-t border-border-soft pt-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <Inbox size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-accent-strong" />
+                    <div>
+                      <p className="text-[13.5px] font-medium text-fg">Inbox sync</p>
+                      <p className="max-w-md text-[12.5px] text-fg-subtle">
+                        Logs emails to and from people already in your CRM onto their timeline — sent or received,
+                        from your own mailbox — every hour. It only reads correspondence with your contacts.
+                      </p>
+                    </div>
+                  </div>
+                  {status.canSyncInbox ? (
+                    <Button variant="secondary" size="sm" onClick={syncNow} disabled={syncing}>
+                      {syncing ? <Spinner /> : <RefreshCw size={15} strokeWidth={1.9} />} Sync now
+                    </Button>
+                  ) : null}
                 </div>
-              ) : null}
+                {!status.canSyncInbox ? (
+                  <div className="mt-3">
+                    <InlineAlert variant="info">
+                      To turn inbox sync on (and let sequences auto-stop on a reply), reconnect Gmail to grant read
+                      access. Luna only reads messages to and from people already in your CRM.{" "}
+                      <a href="/api/google/connect" className="font-medium underline">
+                        Reconnect Gmail
+                      </a>
+                    </InlineAlert>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">

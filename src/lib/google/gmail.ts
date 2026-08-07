@@ -246,6 +246,101 @@ function addressOf(from: string): string {
   return (m ? m[1] : from).trim().toLowerCase();
 }
 
+// --- inbox sync (readonly): a contact's correspondence -----------------------
+
+function b64urlDecode(data: string): string {
+  const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "="));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+interface GmailPart {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailPart[];
+}
+
+/** Depth-first search for the first part of a given mime type with a body. */
+function findPart(payload: GmailPart | undefined, mime: string): string {
+  if (!payload) return "";
+  if (payload.mimeType === mime && payload.body?.data) return b64urlDecode(payload.body.data);
+  for (const p of payload.parts ?? []) {
+    const found = findPart(p, mime);
+    if (found) return found;
+  }
+  return "";
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function messageBody(payload: GmailPart | undefined): string {
+  const plain = findPart(payload, "text/plain");
+  if (plain) return plain.trim();
+  const html = findPart(payload, "text/html");
+  return html ? stripHtml(html) : "";
+}
+
+export interface SyncMessage {
+  id: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string; // ISO
+  snippet: string;
+  body: string;
+  direction: "inbound" | "outbound";
+}
+
+/** Message ids matching a Gmail search query (newest first), capped. */
+export async function listMessageIds(accessToken: string, query: string, max = 25): Promise<string[]> {
+  const url = `${API_BASE}/messages?maxResults=${Math.max(1, Math.min(100, max))}&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+  if (!res.ok) throw new Error(`Gmail search failed (${res.status})`);
+  const data = (await res.json()) as { messages?: { id: string }[] };
+  return (data.messages || []).map((m) => m.id).filter(Boolean);
+}
+
+/** Fetch one message in full and shape it for the timeline (readonly scope). */
+export async function getMessageForSync(accessToken: string, id: string): Promise<SyncMessage> {
+  const url = `${API_BASE}/messages/${encodeURIComponent(id)}?format=full`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+  if (!res.ok) throw new Error(`Gmail message read failed (${res.status})`);
+  const data = (await res.json()) as {
+    id: string;
+    threadId: string;
+    labelIds?: string[];
+    snippet?: string;
+    internalDate?: string;
+    payload?: { headers?: GmailHeader[] } & GmailPart;
+  };
+  const headers = data.payload?.headers;
+  const ms = Number(data.internalDate);
+  return {
+    id: data.id,
+    threadId: data.threadId,
+    subject: headerValue(headers, "Subject"),
+    from: headerValue(headers, "From"),
+    to: headerValue(headers, "To"),
+    date: Number.isFinite(ms) ? new Date(ms).toISOString() : "",
+    snippet: (data.snippet || "").trim(),
+    body: messageBody(data.payload),
+    direction: (data.labelIds || []).includes("SENT") ? "outbound" : "inbound",
+  };
+}
+
 /**
  * Has the contact replied in this thread? Reads thread message headers only
  * (metadata scope — never bodies) and returns true if any message's From is the

@@ -233,6 +233,7 @@ export const FIELDS = {
     enrichedAt: "Enriched At",
     source: "Source",
     company: "Company",
+    inboxSynced: "Inbox Synced",
   },
   deals: {
     name: "Deal Name",
@@ -256,6 +257,7 @@ export const FIELDS = {
     company: "Company",
     contact: "Contact",
     deal: "Deal",
+    gmailMessageId: "Gmail Message Id",
   },
   tasks: {
     title: "Title",

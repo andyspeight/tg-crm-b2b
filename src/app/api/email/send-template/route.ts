@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
       date: new Date().toISOString(),
       companyId,
       contactId,
+      gmailMessageId: sent.id,
     }).catch((e) => console.error("[email/send-template] activity log failed:", e));
 
     return NextResponse.json({ ok: true, id: sent.id, from: sender.email });
