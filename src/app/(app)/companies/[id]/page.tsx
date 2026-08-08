@@ -9,6 +9,7 @@ import {
   listEmailTemplates,
   listSuggestedContactsForCompany,
   listTasksByIds,
+  trackingByMessageIds,
 } from "@/lib/crm/data";
 import { CompanyView } from "@/components/company-view";
 
@@ -19,10 +20,10 @@ export default async function CompanyPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ angle?: string }>;
+  searchParams: Promise<{ angle?: string; email?: string }>;
 }) {
   const { id } = await params;
-  const { angle } = await searchParams;
+  const { angle, email } = await searchParams;
 
   let company;
   try {
@@ -43,6 +44,10 @@ export default async function CompanyPage({
       listEmailTemplates(),
     ]);
 
+  // Open/download status for the sent emails on this timeline.
+  const messageIds = activities.map((a) => a.gmailMessageId).filter((v): v is string => !!v);
+  const openStatus = messageIds.length ? await trackingByMessageIds(messageIds) : {};
+
   return (
     <CompanyView
       company={company}
@@ -54,6 +59,8 @@ export default async function CompanyPage({
       initialCareTouches={careTouches}
       emailTemplates={emailTemplates}
       draftAngle={angle}
+      openStatus={openStatus}
+      highlightMessageId={email}
     />
   );
 }

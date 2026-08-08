@@ -58,6 +58,9 @@ function attachmentsBlock(links: { name: string; href: string }[]): string {
 export interface TrackedSend {
   html: string;
   attachments: RichAttachment[];
+  /** Ids of the tracking rows created for this send — stamp them with the Gmail
+   *  message id after sending, so opens/downloads join back to the timeline email. */
+  trackingIds: string[];
 }
 
 /**
@@ -82,10 +85,12 @@ export async function applyEmailTracking(opts: {
   const base = appBaseUrl();
   const extra = opts.extraAttachments ?? [];
 
+  const trackingIds: string[] = [];
+
   // No public origin → can't build tracking URLs. Preserve existing behaviour.
   if (!base) {
     const templateFiles = opts.templateId ? await templateAttachmentsAsBase64(opts.templateId) : [];
-    return { html: opts.html, attachments: [...templateFiles, ...extra] };
+    return { html: opts.html, attachments: [...templateFiles, ...extra], trackingIds };
   }
 
   let html = opts.html;
@@ -109,6 +114,7 @@ export async function applyEmailTracking(opts: {
           companyId: opts.companyId,
           contactId: opts.contactId,
         });
+        trackingIds.push(row.id);
         links.push({ name: a.filename, href: `${base}/api/track/file/${row.token}` });
       }
     } catch (e) {
@@ -135,6 +141,7 @@ export async function applyEmailTracking(opts: {
         contactId: opts.contactId,
       });
       await uploadTrackingFile(row.id, a);
+      trackingIds.push(row.id);
       links.push({ name: a.filename, href: `${base}/api/track/file/${row.token}` });
     } catch (e) {
       console.error("[tracking] ad-hoc host failed:", e);
@@ -154,11 +161,12 @@ export async function applyEmailTracking(opts: {
       companyId: opts.companyId,
       contactId: opts.contactId,
     });
+    trackingIds.push(row.id);
     html += pixelTag(base, row.token);
   } catch (e) {
     console.error("[tracking] pixel row failed:", e);
   }
 
   // Only files we couldn't host go out as normal attachments.
-  return { html, attachments: directAttach };
+  return { html, attachments: directAttach, trackingIds };
 }
