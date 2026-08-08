@@ -287,13 +287,15 @@ export interface EmailTracking {
   userAgent?: string;
   companyId?: string;
   contactId?: string;
+  /** Hosted ad-hoc attachment URL (current signed URL from Airtable), if any. */
+  fileUrl?: string;
   /** Resolved from the linked contact where available (convenience for feeds). */
   contactName?: string;
   companyName?: string;
   createdTime?: string;
 }
 export type EmailTrackingInput = Partial<
-  Omit<EmailTracking, "id" | "contactName" | "companyName" | "createdTime">
+  Omit<EmailTracking, "id" | "fileUrl" | "contactName" | "companyName" | "createdTime">
 >;
 
 export type CompanyInput = Partial<

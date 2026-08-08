@@ -2314,6 +2314,15 @@ export async function getSignal(id: string): Promise<Signal> {
   return toSignal(await getRecord(AIRTABLE_BASE_ID, TABLES.signals, id));
 }
 
+/** Host an ad-hoc email attachment on a tracking row so its downloads can be tracked. */
+export async function uploadTrackingFile(
+  id: string,
+  file: { filename: string; contentType: string; base64: string },
+): Promise<EmailTracking> {
+  const rec = await uploadAttachment(AIRTABLE_BASE_ID, id, FIELDS.emailTracking.file, file);
+  return toTracking(rec);
+}
+
 /** All signals for one company, newest first. */
 export async function listSignalsByCompany(companyId: string): Promise<Signal[]> {
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.signals, { maxRecords: 2000 });
@@ -2392,8 +2401,16 @@ function toTracking(rec: AirtableRecord): EmailTracking {
     userAgent: str(f[F.userAgent]),
     companyId: firstId(f[F.company]),
     contactId: firstId(f[F.contact]),
+    fileUrl: firstAttachmentUrl(f[F.file]),
     createdTime: rec.createdTime,
   };
+}
+
+/** The current (signed) URL of the first attachment in an Airtable attachment cell. */
+function firstAttachmentUrl(v: unknown): string | undefined {
+  if (!Array.isArray(v) || v.length === 0) return undefined;
+  const first = v[0] as Record<string, unknown>;
+  return str(first?.url);
 }
 
 function buildTrackingFields(input: EmailTrackingInput): Record<string, unknown> {
@@ -2465,7 +2482,11 @@ export async function recordTrackingHit(
       ...(userAgent ? { userAgent: userAgent.slice(0, 250) } : {}),
     }),
   );
-  return { row: toTracking(updated), firstHit };
+  // Carry the hosted-file URL from the pre-update read, in case the PATCH
+  // response omits the attachment field, so the download redirect still resolves.
+  const row = toTracking(updated);
+  if (!row.fileUrl && existing.fileUrl) row.fileUrl = existing.fileUrl;
+  return { row, firstHit };
 }
 
 /** Tracked artifacts that have been opened at least once, most-recent first. */

@@ -338,6 +338,7 @@ export const FIELDS = {
     userAgent: "User Agent",
     company: "Company",
     contact: "Contact",
+    file: "File",
   },
 } as const;
 

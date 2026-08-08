@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     }
 
     const hit = await recordTrackingHit(token, req.headers.get("user-agent") || undefined);
-    if (!hit || hit.row.kind !== "Attachment" || !hit.row.templateId) {
+    if (!hit || hit.row.kind !== "Attachment") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -35,12 +35,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       }).catch((e) => console.error("[track/file] activity log failed:", e));
     }
 
-    const template = await getEmailTemplate(hit.row.templateId);
-    const idx = hit.row.attachIndex ?? -1;
-    const file = template.attachments[idx];
-    if (!file?.url) return NextResponse.json({ error: "File no longer available" }, { status: 404 });
-
-    return NextResponse.redirect(file.url, 302);
+    // Ad-hoc uploads are hosted on the tracking row itself; template attachments
+    // resolve from the template so the (time-limited) URL is always fresh.
+    if (hit.row.fileUrl) {
+      return NextResponse.redirect(hit.row.fileUrl, 302);
+    }
+    if (hit.row.templateId) {
+      const template = await getEmailTemplate(hit.row.templateId);
+      const file = template.attachments[hit.row.attachIndex ?? -1];
+      if (file?.url) return NextResponse.redirect(file.url, 302);
+    }
+    return NextResponse.json({ error: "File no longer available" }, { status: 404 });
   } catch (e) {
     console.error("[track/file]", e);
     return NextResponse.json({ error: "Not found" }, { status: 404 });
