@@ -96,6 +96,7 @@ export async function runInboxSync(): Promise<InboxSyncSummary> {
           companyId: contact.companyId,
           contactId: contact.id,
           gmailMessageId: id,
+          direction: m.direction === "inbound" ? "Inbound" : "Outbound",
         });
         seen.add(id);
         summary.messagesLogged += 1;

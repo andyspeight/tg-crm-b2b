@@ -133,6 +133,9 @@ export const ACTIVITY_SOURCES = [
   "AI",
 ] as const;
 
+/** For email activities: received vs sent. */
+export const ACTIVITY_DIRECTIONS = ["Inbound", "Outbound"] as const;
+
 // Activity types that count as a meaningful human touch (drive Last Meaningful Contact).
 export const MEANINGFUL_ACTIVITY_TYPES = ["Note", "Email", "Call", "Meeting", "Demo", "Care Touch"] as const;
 
@@ -258,6 +261,7 @@ export const FIELDS = {
     contact: "Contact",
     deal: "Deal",
     gmailMessageId: "Gmail Message Id",
+    direction: "Direction",
   },
   tasks: {
     title: "Title",
