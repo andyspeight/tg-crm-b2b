@@ -20,6 +20,7 @@ import {
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
   ACTIVITY_SOURCES,
+  ACTIVITY_DIRECTIONS,
   MEANINGFUL_ACTIVITY_TYPES,
   TASK_STATUSES,
   TASK_CREATED_BY,
@@ -219,6 +220,7 @@ function toActivity(rec: AirtableRecord): Activity {
     contactId: firstId(f[F.contact]),
     dealId: firstId(f[F.deal]),
     gmailMessageId: str(f[F.gmailMessageId]),
+    direction: str(f[F.direction]) as Activity["direction"],
     createdTime: rec.createdTime,
   };
 }
@@ -734,6 +736,7 @@ function buildActivityFields(input: ActivityInput, partial: boolean): Record<str
     f[F.deal] = id ? [id] : [];
   }
   if (has("gmailMessageId")) f[F.gmailMessageId] = text(input.gmailMessageId);
+  if (has("direction")) f[F.direction] = enumOrNull(input.direction, ACTIVITY_DIRECTIONS, "direction");
   return f;
 }
 

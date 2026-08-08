@@ -270,6 +270,7 @@ async function processEnrollment(
     companyId: enrollment.companyId,
     contactId: enrollment.contactId,
     gmailMessageId: sent.id,
+    direction: "Outbound",
   }).catch((e) => console.error("[sequence-engine] activity log failed:", e));
 
   return done ? "completed" : "sent";

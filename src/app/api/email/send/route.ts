@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       companyId,
       contactId,
       gmailMessageId: sent.id,
+      direction: "Outbound",
     }).catch((e) => console.error("[email/send] activity log failed:", e));
 
     return NextResponse.json({ ok: true, id: sent.id, from: sender.email });

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ComponentType, ReactNode, useState } from "react";
 import {
   ArrowLeft,
+  ArrowDownLeft,
+  ArrowUpRight,
   Briefcase,
   CalendarClock,
   CheckCircle2,
@@ -109,6 +111,23 @@ function activityIcon(type?: ActivityType) {
   return ACTIVITY_ICON[type ?? "Note"] ?? StickyNote;
 }
 
+/** A received/sent chip for email activities. */
+function DirectionBadge({ direction }: { direction?: Activity["direction"] }) {
+  if (!direction) return null;
+  const inbound = direction === "Inbound";
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold",
+        inbound ? "bg-success/12 text-success" : "bg-accent-soft text-accent-strong",
+      )}
+    >
+      {inbound ? <ArrowDownLeft size={11} strokeWidth={2.2} /> : <ArrowUpRight size={11} strokeWidth={2.2} />}
+      {inbound ? "Received" : "Sent"}
+    </span>
+  );
+}
+
 /** CSS-var token per badge colour, so a row rail matches its stage badge. */
 const RAIL_TOKEN: Record<BadgeColor, string> = {
   neutral: "--color-fg-subtle",
@@ -165,6 +184,7 @@ export function CompanyView({
   const [addingDeal, setAddingDeal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [loggingActivity, setLoggingActivity] = useState(false);
+  const [activityDir, setActivityDir] = useState<"all" | "Inbound" | "Outbound">("all");
   const [addingTask, setAddingTask] = useState(false);
   const [loggingCare, setLoggingCare] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -731,28 +751,64 @@ export function CompanyView({
               </Button>
             }
           >
-            {activities.length === 0 ? (
-              <EmptyState
-                title="No activity yet"
-                hint="Log a note, call, meeting or demo to start the timeline."
-                icon={<StickyNote size={20} strokeWidth={1.75} />}
-              />
-            ) : (
-              <ul className="luna-fade divide-y divide-border-soft">
-                {activities.map((a) => {
-                  const Icon = activityIcon(a.type);
-                  return (
-                    <li key={a.id} className="group flex gap-3 py-2.5">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-fg-subtle">
-                        <Icon size={14} strokeWidth={1.75} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-[14px] font-medium text-fg">{a.summary}</p>
-                          <span className="tnum ml-auto shrink-0 text-[12px] text-fg-subtle">
-                            {formatDateTime(a.date)}
-                          </span>
-                        </div>
+            {(() => {
+              const hasDirectional = activities.some((a) => a.direction);
+              const shownActivities =
+                activityDir === "all" ? activities : activities.filter((a) => a.direction === activityDir);
+              return (
+                <>
+                  {hasDirectional ? (
+                    <div className="mb-2.5 flex items-center gap-1">
+                      {(
+                        [
+                          ["all", "All"],
+                          ["Inbound", "Received"],
+                          ["Outbound", "Sent"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setActivityDir(id)}
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                            activityDir === id
+                              ? "bg-accent-soft text-accent-strong"
+                              : "text-fg-muted hover:bg-muted hover:text-fg",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {activities.length === 0 ? (
+                    <EmptyState
+                      title="No activity yet"
+                      hint="Log a note, call, meeting or demo to start the timeline."
+                      icon={<StickyNote size={20} strokeWidth={1.75} />}
+                    />
+                  ) : shownActivities.length === 0 ? (
+                    <p className="py-3 text-[13px] text-fg-subtle">
+                      No {activityDir === "Inbound" ? "received" : "sent"} emails on this account.
+                    </p>
+                  ) : (
+                    <ul className="luna-fade divide-y divide-border-soft">
+                      {shownActivities.map((a) => {
+                        const Icon = activityIcon(a.type);
+                        return (
+                          <li key={a.id} className="group flex gap-3 py-2.5">
+                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-fg-subtle">
+                              <Icon size={14} strokeWidth={1.75} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline gap-2">
+                                <p className="text-[14px] font-medium text-fg">{a.summary}</p>
+                                <DirectionBadge direction={a.direction} />
+                                <span className="tnum ml-auto shrink-0 text-[12px] text-fg-subtle">
+                                  {formatDateTime(a.date)}
+                                </span>
+                              </div>
                         {a.rawContent ? (
                           <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-fg-muted">
                             {a.rawContent}
@@ -773,8 +829,11 @@ export function CompanyView({
                     </li>
                   );
                 })}
-              </ul>
-            )}
+                    </ul>
+                  )}
+                </>
+              );
+            })()}
           </Section>
         </div>
 

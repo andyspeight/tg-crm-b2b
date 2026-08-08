@@ -9,6 +9,7 @@ import {
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
   ACTIVITY_SOURCES,
+  ACTIVITY_DIRECTIONS,
   TASK_STATUSES,
   TASK_CREATED_BY,
   TOUCH_TYPES,
@@ -129,6 +130,7 @@ export interface Deal {
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 export type ActivitySource = (typeof ACTIVITY_SOURCES)[number];
+export type ActivityDirection = (typeof ACTIVITY_DIRECTIONS)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskCreatedBy = (typeof TASK_CREATED_BY)[number];
 
@@ -144,6 +146,8 @@ export interface Activity {
   dealId?: string;
   /** The Gmail message id this came from (synced correspondence / logged send). */
   gmailMessageId?: string;
+  /** For emails: received (Inbound) or sent (Outbound). */
+  direction?: ActivityDirection;
   createdTime?: string;
 }
 
