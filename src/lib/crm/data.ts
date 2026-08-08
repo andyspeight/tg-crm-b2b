@@ -56,6 +56,7 @@ import type {
   SignalInput,
   EmailTracking,
   EmailTrackingInput,
+  EmailOpenStatus,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -2401,6 +2402,7 @@ function toTracking(rec: AirtableRecord): EmailTracking {
     userAgent: str(f[F.userAgent]),
     companyId: firstId(f[F.company]),
     contactId: firstId(f[F.contact]),
+    gmailMessageId: str(f[F.gmailMessageId]),
     fileUrl: firstAttachmentUrl(f[F.file]),
     createdTime: rec.createdTime,
   };
@@ -2437,7 +2439,43 @@ function buildTrackingFields(input: EmailTrackingInput): Record<string, unknown>
     const id = text(input.contactId);
     f[F.contact] = id ? [id] : [];
   }
+  if (has("gmailMessageId")) f[F.gmailMessageId] = text(input.gmailMessageId);
   return f;
+}
+
+/** Stamp the sent Gmail message id onto a send's tracking rows (joins them to the timeline). */
+export async function setTrackingMessageId(ids: string[], messageId: string): Promise<void> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0 || !messageId) return;
+  const F = FIELDS.emailTracking;
+  await updateRecords(
+    AIRTABLE_BASE_ID,
+    TABLES.emailTracking,
+    unique.map((id) => ({ id, fields: { [F.gmailMessageId]: messageId } })),
+  );
+}
+
+/** Open/download status per Gmail message id, for badging sent emails on the timeline. */
+export async function trackingByMessageIds(messageIds: string[]): Promise<Record<string, EmailOpenStatus>> {
+  const wanted = new Set(messageIds.filter(Boolean));
+  if (wanted.size === 0) return {};
+  const rows = await listTrackings();
+  const out: Record<string, EmailOpenStatus> = {};
+  for (const r of rows) {
+    const mid = r.gmailMessageId || "";
+    if (!wanted.has(mid)) continue;
+    const s = (out[mid] ??= { opened: false, opens: 0, downloaded: false, downloads: 0 });
+    if (r.kind === "Email") {
+      s.opens += r.opens;
+      if (r.opens > 0) s.opened = true;
+    } else if (r.kind === "Attachment" && r.opens > 0) {
+      s.downloaded = true;
+      s.downloads += 1;
+    }
+    const last = r.lastOpened || "";
+    if (last && (!s.lastOpenedAt || last > s.lastOpenedAt)) s.lastOpenedAt = last;
+  }
+  return out;
 }
 
 /** Create a tracking row for one artifact (an email pixel, or a tracked file link). */

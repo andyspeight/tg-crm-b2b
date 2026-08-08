@@ -339,6 +339,7 @@ export const FIELDS = {
     company: "Company",
     contact: "Contact",
     file: "File",
+    gmailMessageId: "Gmail Message Id",
   },
 } as const;
 

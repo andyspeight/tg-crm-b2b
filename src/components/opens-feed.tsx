@@ -63,10 +63,14 @@ export function OpensFeed() {
               </div>
               {o.companyId ? (
                 <Link
-                  href={`/companies/${o.companyId}`}
+                  href={
+                    o.gmailMessageId
+                      ? `/companies/${o.companyId}?email=${encodeURIComponent(o.gmailMessageId)}`
+                      : `/companies/${o.companyId}`
+                  }
                   className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-accent-strong hover:underline"
                 >
-                  Open <ChevronRight size={14} strokeWidth={2} aria-hidden />
+                  Open email <ChevronRight size={14} strokeWidth={2} aria-hidden />
                 </Link>
               ) : null}
             </li>

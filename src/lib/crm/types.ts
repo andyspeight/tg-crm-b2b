@@ -287,6 +287,8 @@ export interface EmailTracking {
   userAgent?: string;
   companyId?: string;
   contactId?: string;
+  /** The Gmail message id of the send this row belongs to (joins to the timeline email). */
+  gmailMessageId?: string;
   /** Hosted ad-hoc attachment URL (current signed URL from Airtable), if any. */
   fileUrl?: string;
   /** Resolved from the linked contact where available (convenience for feeds). */
@@ -297,6 +299,15 @@ export interface EmailTracking {
 export type EmailTrackingInput = Partial<
   Omit<EmailTracking, "id" | "fileUrl" | "contactName" | "companyName" | "createdTime">
 >;
+
+/** Aggregated open/download status for one sent email (keyed by Gmail message id). */
+export interface EmailOpenStatus {
+  opened: boolean;
+  opens: number;
+  downloaded: boolean;
+  downloads: number;
+  lastOpenedAt?: string;
+}
 
 export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">

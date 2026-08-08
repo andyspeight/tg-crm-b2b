@@ -19,6 +19,7 @@ import {
   hasLiveEnrollment,
   listDueEnrollments,
   listSequences,
+  setTrackingMessageId,
   updateEnrollment,
   ValidationError,
 } from "@/lib/crm/data";
@@ -216,7 +217,7 @@ async function processEnrollment(
   const subject = isFollowUp ? replySubject(enrollment.threadSubject || filledSubject) : filledSubject;
 
   // Pixel for open tracking; template attachments go out as tracked links.
-  const { html, attachments } = await applyEmailTracking({
+  const { html, attachments, trackingIds } = await applyEmailTracking({
     html: filledHtml,
     subject,
     recipient: contact.email,
@@ -237,6 +238,8 @@ async function processEnrollment(
     inReplyTo: enrollment.lastMessageId,
     references: enrollment.lastMessageId,
   });
+
+  await setTrackingMessageId(trackingIds, sent.id).catch(() => {});
 
   // Capture our sent message's RFC822 Message-ID so the next step threads cleanly.
   let messageIdHeader = enrollment.lastMessageId;

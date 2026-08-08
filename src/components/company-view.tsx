@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ComponentType, ReactNode, useState } from "react";
+import { ComponentType, ReactNode, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowDownLeft,
@@ -11,6 +11,8 @@ import {
   CalendarClock,
   CheckCircle2,
   Circle,
+  Download,
+  MailOpen,
   ExternalLink,
   Globe,
   HeartHandshake,
@@ -44,6 +46,7 @@ import type {
   Company,
   Contact,
   Deal,
+  EmailOpenStatus,
   EmailTemplate,
   Task,
 } from "@/lib/crm/types";
@@ -128,6 +131,25 @@ function DirectionBadge({ direction }: { direction?: Activity["direction"] }) {
   );
 }
 
+/** Opened / downloaded chips for a sent email, from its tracking status. */
+function OpenBadge({ status }: { status?: EmailOpenStatus }) {
+  if (!status || (!status.opened && !status.downloaded)) return null;
+  return (
+    <>
+      {status.opened ? (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/12 px-1.5 py-0.5 text-[10.5px] font-semibold text-success">
+          <MailOpen size={11} strokeWidth={2.2} /> Opened{status.opens > 1 ? ` · ${status.opens}×` : ""}
+        </span>
+      ) : null}
+      {status.downloaded ? (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-accent-strong">
+          <Download size={11} strokeWidth={2.2} /> Downloaded
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /** CSS-var token per badge colour, so a row rail matches its stage badge. */
 const RAIL_TOKEN: Record<BadgeColor, string> = {
   neutral: "--color-fg-subtle",
@@ -153,6 +175,8 @@ export function CompanyView({
   initialCareTouches,
   emailTemplates,
   draftAngle,
+  openStatus,
+  highlightMessageId,
 }: {
   company: Company;
   initialContacts: Contact[];
@@ -165,10 +189,26 @@ export function CompanyView({
   emailTemplates: EmailTemplate[];
   /** When set (via ?angle= deep link from a signal), open the composer pre-seeded. */
   draftAngle?: string;
+  /** Open/download status per sent email (keyed by Gmail message id). */
+  openStatus?: Record<string, EmailOpenStatus>;
+  /** Scroll to + highlight the email with this Gmail message id (from ?email=). */
+  highlightMessageId?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  // Deep-linked from the "opened your email" panel: scroll to + flash that email.
+  useEffect(() => {
+    if (!highlightMessageId) return;
+    const el = document.getElementById(`email-${highlightMessageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-accent", "rounded-lg");
+    const t = setTimeout(() => el.classList.remove("ring-2", "ring-accent", "rounded-lg"), 2600);
+    return () => clearTimeout(t);
+  }, [highlightMessageId]);
+
   const [company, setCompany] = useState(initialCompany);
   const [contacts, setContacts] = useState(initialContacts);
   const [suggested, setSuggested] = useState(initialSuggestedContacts);
@@ -797,14 +837,19 @@ export function CompanyView({
                       {shownActivities.map((a) => {
                         const Icon = activityIcon(a.type);
                         return (
-                          <li key={a.id} className="group flex gap-3 py-2.5">
+                          <li
+                            key={a.id}
+                            id={a.gmailMessageId ? `email-${a.gmailMessageId}` : undefined}
+                            className="group flex scroll-mt-20 gap-3 py-2.5 transition-shadow"
+                          >
                             <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-fg-subtle">
                               <Icon size={14} strokeWidth={1.75} />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline gap-2">
+                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                                 <p className="text-[14px] font-medium text-fg">{a.summary}</p>
                                 <DirectionBadge direction={a.direction} />
+                                <OpenBadge status={a.gmailMessageId ? openStatus?.[a.gmailMessageId] : undefined} />
                                 <span className="tnum ml-auto shrink-0 text-[12px] text-fg-subtle">
                                   {formatDateTime(a.date)}
                                 </span>

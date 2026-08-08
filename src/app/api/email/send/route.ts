@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity } from "@/lib/crm/data";
+import { createActivity, setTrackingMessageId } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich } from "@/lib/google/gmail";
 import { applyEmailTracking, plainToHtml } from "@/lib/email/tracking";
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Send as HTML so we can carry an open-tracking pixel (plain text can't).
-    const { html, attachments } = await applyEmailTracking({
+    const { html, attachments, trackingIds } = await applyEmailTracking({
       html: plainToHtml(text),
       subject,
       recipient: to,
@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
       text,
       attachments,
     });
+
+    // Join the tracking rows to this send so opens/downloads badge the timeline email.
+    await setTrackingMessageId(trackingIds, sent.id).catch(() => {});
 
     // Log to the company/contact timeline (also bumps Last Meaningful Contact).
     await createActivity({

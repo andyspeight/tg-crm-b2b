@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity } from "@/lib/crm/data";
+import { createActivity, setTrackingMessageId } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich, type RichAttachment } from "@/lib/google/gmail";
 import { applyEmailTracking } from "@/lib/email/tracking";
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     // Pixel for open tracking; template attachments go out as tracked links;
     // ad-hoc files uploaded in the composer ride along directly.
-    const { html: trackedHtml, attachments } = await applyEmailTracking({
+    const { html: trackedHtml, attachments, trackingIds } = await applyEmailTracking({
       html,
       subject,
       recipient: to,
@@ -107,6 +107,8 @@ export async function POST(req: NextRequest) {
       html: trackedHtml,
       attachments,
     });
+
+    await setTrackingMessageId(trackingIds, sent.id).catch(() => {});
 
     await createActivity({
       type: "Email",
