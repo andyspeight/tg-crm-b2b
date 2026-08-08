@@ -529,6 +529,9 @@ export function SendComposer({
                       >
                         <Paperclip size={15} strokeWidth={1.75} className="shrink-0 text-fg-subtle" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{f.filename}</span>
+                        <span className="shrink-0 text-[11px] text-accent-strong">
+                          {f.size > 4.5 * 1024 * 1024 ? "attached" : "tracked link"}
+                        </span>
                         {f.size ? <span className="tnum shrink-0 text-[12px] text-fg-subtle">{formatBytes(f.size)}</span> : null}
                         <IconButton label={`Remove ${f.filename}`} onClick={() => removeFile(i)}>
                           <X size={14} strokeWidth={2} />

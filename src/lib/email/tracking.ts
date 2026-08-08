@@ -1,8 +1,13 @@
 import "server-only";
 import { appBaseUrl } from "@/lib/base-url";
-import { createTracking, getEmailTemplate } from "@/lib/crm/data";
+import { createTracking, getEmailTemplate, uploadTrackingFile } from "@/lib/crm/data";
 import { templateAttachmentsAsBase64 } from "@/lib/email/attachments";
 import type { RichAttachment } from "@/lib/google/gmail";
+
+// Airtable's attachment upload caps around 5 MB; larger files can't be hosted for
+// tracking, so they ride along as normal attachments instead.
+const MAX_HOSTED_BYTES = 4.5 * 1024 * 1024;
+const approxBytes = (base64: string) => Math.floor((base64.length * 3) / 4);
 
 /**
  * Open/click tracking for outbound Gmail. Every send gets a 1×1 pixel whose URL
@@ -110,6 +115,33 @@ export async function applyEmailTracking(opts: {
       console.error("[tracking] attachment links failed:", e);
     }
   }
+  // Ad-hoc uploads: host each on its own tracking row and link it, so downloads
+  // are tracked too. Files too big to host (or that fail to upload) ride along
+  // as normal attachments instead.
+  const directAttach: RichAttachment[] = [];
+  for (const a of extra) {
+    if (approxBytes(a.base64) > MAX_HOSTED_BYTES) {
+      directAttach.push(a);
+      continue;
+    }
+    try {
+      const row = await createTracking({
+        token: newToken(),
+        kind: "Attachment",
+        subject: opts.subject,
+        filename: a.filename,
+        recipient: opts.recipient,
+        companyId: opts.companyId,
+        contactId: opts.contactId,
+      });
+      await uploadTrackingFile(row.id, a);
+      links.push({ name: a.filename, href: `${base}/api/track/file/${row.token}` });
+    } catch (e) {
+      console.error("[tracking] ad-hoc host failed:", e);
+      directAttach.push(a);
+    }
+  }
+
   if (links.length) html += attachmentsBlock(links);
 
   // The open pixel (last, so it sits at the very end of the body).
@@ -127,6 +159,6 @@ export async function applyEmailTracking(opts: {
     console.error("[tracking] pixel row failed:", e);
   }
 
-  // Ad-hoc files ride along directly; template files went out as tracked links.
-  return { html, attachments: extra };
+  // Only files we couldn't host go out as normal attachments.
+  return { html, attachments: directAttach };
 }
