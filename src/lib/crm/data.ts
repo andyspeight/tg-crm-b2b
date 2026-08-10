@@ -57,6 +57,7 @@ import type {
   EmailTracking,
   EmailTrackingInput,
   EmailOpenStatus,
+  InboxSyncStatus,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -2629,4 +2630,39 @@ export async function contactsForInboxSync(limit: number): Promise<Contact[]> {
     .filter((c) => c.email)
     .sort((a, b) => (a.inboxSyncedAt || "").localeCompare(b.inboxSyncedAt || ""))
     .slice(0, Math.max(0, limit));
+}
+
+/**
+ * Progress of the Gmail inbox sync: how many contacts have been checked, how many
+ * are left, how far each run reaches back, and how far the logged correspondence
+ * actually stretches. Powers the readout beside the "Sync now" button in Settings.
+ */
+export async function inboxSyncStatus(): Promise<InboxSyncStatus> {
+  const windowRaw = Number(process.env.INBOX_SYNC_WINDOW_DAYS);
+  const windowDays =
+    Number.isFinite(windowRaw) && windowRaw > 0 ? Math.min(3650, Math.floor(windowRaw)) : 120;
+
+  const [contacts, emails] = await Promise.all([listContacts({ limit: 5000 }), listEmailActivities()]);
+
+  const withEmail = contacts.filter((c) => c.email);
+  const synced = withEmail.filter((c) => c.inboxSyncedAt);
+  const lastSyncedAt = synced.reduce<string | undefined>((max, c) => {
+    const t = c.inboxSyncedAt;
+    return t && (!max || t > max) ? t : max;
+  }, undefined);
+
+  const oldestEmail = emails.reduce<string | undefined>((min, e) => {
+    const d = e.date;
+    return d && (!min || d < min) ? d : min;
+  }, undefined);
+
+  return {
+    contactsTotal: withEmail.length,
+    contactsSynced: synced.length,
+    contactsRemaining: withEmail.length - synced.length,
+    lastSyncedAt,
+    windowDays,
+    emailsLogged: emails.length,
+    oldestEmail,
+  };
 }

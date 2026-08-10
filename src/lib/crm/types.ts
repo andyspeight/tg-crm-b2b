@@ -300,6 +300,24 @@ export type EmailTrackingInput = Partial<
   Omit<EmailTracking, "id" | "fileUrl" | "contactName" | "companyName" | "createdTime">
 >;
 
+/** Progress of the Gmail inbox sync across the contact base. */
+export interface InboxSyncStatus {
+  /** Contacts that have an email address (the universe to sync). */
+  contactsTotal: number;
+  /** Of those, how many have been checked at least once. */
+  contactsSynced: number;
+  /** Contacts with an email that haven't been checked yet. */
+  contactsRemaining: number;
+  /** When the sync last checked anyone (most recent Inbox Synced stamp). */
+  lastSyncedAt?: string;
+  /** How far back each run looks, in days (INBOX_SYNC_WINDOW_DAYS). */
+  windowDays: number;
+  /** Email activities on file across the base. */
+  emailsLogged: number;
+  /** Date of the oldest email on file (how far back correspondence reaches). */
+  oldestEmail?: string;
+}
+
 /** Aggregated open/download status for one sent email (keyed by Gmail message id). */
 export interface EmailOpenStatus {
   opened: boolean;
