@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   HeartPulse,
+  Mail,
   RefreshCw,
   Sparkles,
   Target,
@@ -20,6 +21,7 @@ import {
   Spinner,
   StatTile,
 } from "@/components/ui";
+import { useToast } from "@/components/feedback";
 import { HealthBadge } from "@/components/badges";
 import type { AccountHealth } from "@/lib/crm/types";
 import { formatMoney } from "@/lib/format";
@@ -42,8 +44,10 @@ type Digest = {
 };
 
 export function DigestView() {
+  const toast = useToast();
   const [digest, setDigest] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emailing, setEmailing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -58,6 +62,21 @@ export function DigestView() {
     }
   }, []);
 
+  const emailMe = useCallback(async () => {
+    setEmailing(true);
+    try {
+      const r = await api<{ sent: boolean; reason?: string; to?: string }>("/api/digest/email", {
+        method: "POST",
+      });
+      if (r.sent) toast.success("Digest emailed", { description: r.to ? `Sent to ${r.to}` : undefined });
+      else toast.error("Couldn't email the digest", { description: r.reason });
+    } catch (e) {
+      toast.error("Couldn't email the digest", { description: (e as Error).message });
+    } finally {
+      setEmailing(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -68,9 +87,14 @@ export function DigestView() {
         title="Weekly digest"
         description={digest ? `Generated ${digest.generatedFor}` : "Your Monday-morning briefing"}
         actions={
-          <Button variant="primary" onClick={load} disabled={loading}>
-            {loading ? <Spinner /> : <RefreshCw size={15} strokeWidth={1.9} />} Regenerate
-          </Button>
+          <>
+            <Button variant="secondary" onClick={emailMe} disabled={emailing || loading}>
+              {emailing ? <Spinner /> : <Mail size={15} strokeWidth={1.9} />} Email me
+            </Button>
+            <Button variant="primary" onClick={load} disabled={loading}>
+              {loading ? <Spinner /> : <RefreshCw size={15} strokeWidth={1.9} />} Regenerate
+            </Button>
+          </>
         }
       />
 
