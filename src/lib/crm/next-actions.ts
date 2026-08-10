@@ -82,20 +82,11 @@ function actionForCompany(
     };
   }
 
-  // 3. Open deal with no next step.
-  const noNext = openDeals.find((d) => !d.nextStep || !d.nextStepDate);
-  if (noNext) {
-    return {
-      ...base,
-      kind: "deal-no-next-step",
-      severity: "warn",
-      score: 700,
-      label: `Set a next step on ${noNext.name}`,
-      detail: noNext.stage,
-    };
-  }
-
-  // 4. Stale open deal (no activity 14+ days = warn, 30+ = danger).
+  // 3. A deal/onboarding that's genuinely stalled — no activity for 14+ days
+  //    (30+ = danger). A blank "next step" field on an otherwise-moving deal is
+  //    not a today-priority (it was flooding the feed on the onboarding pipeline,
+  //    where deals advance by stage, not by next-step dates) — only real silence
+  //    surfaces here. The "no next step" nudge lives on the Pipeline board instead.
   let stalest: { deal: Deal; age: number } | null = null;
   for (const d of openDeals) {
     const age = daysSince(lastByDeal[d.id] || lastContact || d.createdTime);
@@ -103,13 +94,14 @@ function actionForCompany(
   }
   if (stalest) {
     const danger = stalest.age >= 30;
+    const stage = stalest.deal.stage;
     return {
       ...base,
       kind: "deal-stale",
       severity: danger ? "danger" : "warn",
       score: (danger ? 650 : 500) + Math.min(stalest.age, 90),
-      label: `Chase ${stalest.deal.name}`,
-      detail: `No activity in ${stalest.age} days`,
+      label: `${stalest.deal.name} — no movement in ${stalest.age} days`,
+      detail: stage ? `Stuck in ${stage}` : undefined,
     };
   }
 
