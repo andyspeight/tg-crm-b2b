@@ -7,13 +7,17 @@ import { hostBrand } from "@/lib/domain";
  * Pure and dependency-free. No AI call here — cheap and deterministic.
  *
  * The bar is precision, not recall: a noisy feed is worse than a quiet one, so a
- * result only becomes a signal when it clears three gates —
+ * result only becomes a signal when it clears four gates —
  *   1. it names the company (full name, not a stray keyword);
- *   2. it describes a real event (funding, M&A, a senior hire, a genuine award,
+ *   2. it's about *this* company, not a same-named business in another industry —
+ *      a generically-named client ("Horizon", "Premier") only counts when the
+ *      article also reads as travel (so a private fund buying a fence installer
+ *      called Horizon never lands on a travel agent's timeline);
+ *   3. it describes a real event (funding, M&A, a senior hire, a genuine award,
  *      a partnership, an expansion, a replatform) — marketing adjectives like
  *      "award-winning" don't count;
- *   3. it isn't the company's own website (a client adding a page to their own
- *      site isn't market intel), and it isn't stale.
+ *   4. it isn't the company's own website (a client adding a page to their own
+ *      site isn't market intel), and it's recent (default ≤90 days).
  */
 
 export interface SignalCandidate {
@@ -52,10 +56,11 @@ const RULES: Rule[] = [
 const SKIP_HOST = /(facebook\.|instagram\.|twitter\.|x\.com|youtube\.|tiktok\.|pinterest\.|reddit\.|wikipedia\.|glassdoor\.|indeed\.|google\.|accounts\.|login\.|rocketreach\.|tracxn\.|zoominfo\.|apollo\.io|leadiq\.|myjobmag\.|totaljobs\.|reed\.co|freelancer\.|upwork\.|coursesidekick\.|coursehero\.|studocu\.|twstalker\.|picuki\.|companieshouse\.|opencorporates\.|dnb\.com|bizapedia\.)/i;
 
 // Signals older than this are dropped even if the query's recency filter let them
-// through — Google's `qdr:y` is a hint, not a guarantee. Env-tunable.
+// through — Google's recency hint is a hint, not a guarantee. Env-tunable; the
+// default is deliberately tight (a stale "signal" is just make-work).
 function maxAgeMs(): number {
   const days = Number(process.env.INTEL_SIGNAL_MAX_AGE_DAYS);
-  return (Number.isFinite(days) && days > 0 ? days : 400) * 864e5;
+  return (Number.isFinite(days) && days > 0 ? days : 90) * 864e5;
 }
 
 /** Reduce a string to lowercased alphanumeric words separated by single spaces. */
@@ -63,16 +68,46 @@ function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+// Generic tokens that don't make a company name distinctive on their own. A name
+// built only from these (e.g. "Premier Holidays Group Ltd") isn't identifying.
+const GENERIC_NAME_TOKENS = new Set([
+  "the", "and", "co", "company", "group", "ltd", "limited", "llp", "plc", "inc",
+  "holdings", "services", "solutions", "uk", "gb", "worldwide", "global",
+  "international", "travel", "holiday", "holidays", "tours", "tour", "tourism",
+  "cruise", "cruises", "agency", "agents", "trips", "leisure", "getaways",
+]);
+
+/** Words that mark an article as travel-industry — used to disambiguate namesakes. */
+const TRAVEL_CONTEXT =
+  /\b(travel|tourism|tourist|holiday|holidays|vacation|getaway|agent|agency|tour operator|operator|cruise|cruises|airline|airlines|flight|flights|hotel|hotels|resort|resorts|booking|bookings|itinerary|destination|destinations|package holiday|staycation|abta|atol|iata|the travel network|advantage travel|ota|hospitality)\b/i;
+
 /**
  * Is this result actually about the company? Requires the full company name to
  * appear (punctuation-insensitive) — a single distinctive word matched too much
- * generic travel content (a "adults only hotels" listicle is not a signal about
+ * generic travel content (an "adults only hotels" listicle is not a signal about
  * a company that happens to be called that).
  */
 function mentionsCompany(hayNorm: string, name: string): boolean {
   const n = norm(name);
   if (!n) return false;
   return hayNorm.includes(n);
+}
+
+/**
+ * Does the name identify the company on its own, or could it collide with a
+ * business in another sector? Distinctive = a multi-word name carrying a real
+ * brand token (≥4 chars, not a generic word). Single-word names ("Horizon",
+ * "Premier") are never treated as distinctive — too collision-prone — so they
+ * must earn their place via travel context in the article.
+ */
+function isDistinctiveName(name: string): boolean {
+  const tokens = norm(name).split(" ").filter(Boolean);
+  if (tokens.length < 2) return false;
+  return tokens.some((t) => t.length >= 4 && !GENERIC_NAME_TOKENS.has(t));
+}
+
+function hasTravelContext(hay: string): boolean {
+  return TRAVEL_CONTEXT.test(hay);
 }
 
 /** Parse Google's date string — absolute ("12 Jan 2024") or relative ("3 months ago"). */
@@ -97,6 +132,7 @@ export function detectSignals(
   const max = opts?.max ?? 3;
   const ownBrand = opts?.domain ? hostBrand(opts.domain) : "";
   const cutoff = Date.now() - maxAgeMs();
+  const distinctive = isDistinctiveName(companyName);
   const out: SignalCandidate[] = [];
   const seen = new Set<string>();
 
@@ -116,13 +152,20 @@ export function detectSignals(
     if (when !== null && when < cutoff) continue;
 
     const title = (r.title || "").trim();
-    const hayNorm = norm(`${title} ${r.description || ""}`);
+    const hay = `${title} ${r.description || ""}`;
+    const hayNorm = norm(hay);
     if (!mentionsCompany(hayNorm, companyName)) continue;
+
+    // Namesake guard: a generically-named client only counts when the article
+    // itself reads as travel, so a private fund buying a same-named fence
+    // installer (or any other-industry namesake) never becomes a signal.
+    const travel = hasTravelContext(hay);
+    if (!distinctive && !travel) continue;
 
     let strongRule: Rule | null = null;
     let score = 0;
     for (const rule of RULES) {
-      if (rule.re.test(`${title} ${r.description || ""}`)) {
+      if (rule.re.test(hay)) {
         if (rule.strong && !strongRule) strongRule = rule;
         score += rule.weight;
       }
@@ -135,7 +178,8 @@ export function detectSignals(
       headline: title.slice(0, 250) || strongRule.type,
       url,
       type: strongRule.type,
-      relevanceScore: Math.min(5, score),
+      // Travel-context corroboration nudges the score, so on-topic signals rank first.
+      relevanceScore: Math.min(5, score + (travel ? 1 : 0)),
       date: when !== null ? new Date(when).toISOString() : undefined,
     });
   }

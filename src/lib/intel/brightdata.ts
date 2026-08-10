@@ -57,15 +57,27 @@ export interface SerpResult {
 }
 
 /**
+ * Google's recency token for intent scans. Defaults to the past 6 months
+ * (`qdr:m6`); tune with INTEL_SERP_QDR (e.g. "m3", "y"). It's only a coarse
+ * pre-filter — the detector still enforces a hard age cutoff — so a value Google
+ * ignores can't let stale signals through.
+ */
+function recencyToken(): string {
+  const raw = (process.env.INTEL_SERP_QDR || "m6").trim().toLowerCase();
+  return /^[dwmy]\d{0,2}$/.test(raw) ? raw : "m6";
+}
+
+/**
  * Run a Google search via the Bright Data SERP API; returns organic results.
  *
- * `recent` restricts Google to the past year (`tbs=qdr:y`) — signals are only
- * useful while they're current, so intent scans pass it. Name/LinkedIn discovery
- * leaves it off so an established company's pages still surface.
+ * `recent` restricts Google to a recent window (`tbs=qdr:…`, see recencyToken) —
+ * signals are only useful while they're current, so intent scans pass it.
+ * Name/LinkedIn discovery leaves it off so an established company's pages still
+ * surface.
  */
 async function serpOrganic(query: string, opts?: { recent?: boolean }): Promise<SerpResult[]> {
   if (!SERP_ZONE) throw new Error("Bright Data SERP zone is not set (BRIGHTDATA_SERP_ZONE)");
-  const recency = opts?.recent ? "&tbs=qdr:y" : "";
+  const recency = opts?.recent ? `&tbs=qdr:${recencyToken()}` : "";
   const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&gl=uk&hl=en&num=20${recency}`;
   const res = await fetch(SERP_API, {
     method: "POST",
