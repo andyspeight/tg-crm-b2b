@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Merge, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact, EmailTemplate } from "@/lib/crm/types";
+import { ContactEmailsDrawer } from "@/components/contact-emails-drawer";
 import {
   Button,
   ButtonLink,
@@ -88,7 +90,36 @@ export function ContactsView({
   const [enrolTargets, setEnrolTargets] = useState<EnrolTarget[] | null>(null);
   const [emailContact, setEmailContact] = useState<Contact | null>(null);
   const [merging, setMerging] = useState(false);
+  const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
+  const [drawerHighlight, setDrawerHighlight] = useState<string | undefined>(undefined);
   const toast = useToast();
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Deep links from the "Awaiting your reply" feed: ?contact= opens the email
+  // drawer (for people with no company page); ?reply= opens the composer.
+  useEffect(() => {
+    const cid = params.get("contact");
+    const email = params.get("email");
+    const rid = params.get("reply");
+    if (cid) {
+      setDrawerContactId(cid);
+      setDrawerHighlight(email || undefined);
+    }
+    if (rid) {
+      const inList = contacts.find((c) => c.id === rid);
+      if (inList) setEmailContact(inList);
+      else api<{ contact: Contact }>(`/api/contacts/${rid}/emails`).then((d) => setEmailContact(d.contact)).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function closeDrawer() {
+    setDrawerContactId(null);
+    setDrawerHighlight(undefined);
+    // Clear the deep-link params so a refresh/back doesn't reopen it.
+    if (params.get("contact") || params.get("email")) router.replace("/contacts");
+  }
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -532,6 +563,16 @@ export function ContactsView({
           }}
         />
       ) : null}
+
+      <ContactEmailsDrawer
+        contactId={drawerContactId}
+        highlightMessageId={drawerHighlight}
+        onClose={closeDrawer}
+        onReply={(c) => {
+          closeDrawer();
+          setEmailContact(c);
+        }}
+      />
 
       <MergePeopleModal
         open={merging}
