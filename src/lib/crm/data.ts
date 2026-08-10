@@ -1332,9 +1332,17 @@ export async function planContactLinks(): Promise<ContactLink[]> {
     if (nk.length >= 4) add(nk, c.id);
   }
 
+  // Strongest signal: a colleague already sitting at a company tells us that email
+  // domain belongs to that account — even when the company's own website/name
+  // doesn't match the domain (e.g. dtaylor@workingtravelgroup.com -> the account
+  // whose other people also use @workingtravelgroup.com).
+  const contacts = contactRecs.map(toContact);
+  for (const c of contacts) {
+    if (c.companyId) add(emailBrand(c.email), c.companyId);
+  }
+
   const links: ContactLink[] = [];
-  for (const rec of contactRecs) {
-    const c = toContact(rec);
+  for (const c of contacts) {
     if (c.companyId) continue; // already linked — leave it
     const brand = emailBrand(c.email);
     if (!brand) continue;

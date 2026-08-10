@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Merge, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
+import { Download, Link2, Merge, Pencil, Plus, SearchX, Send, Trash2, Users, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Contact, EmailTemplate } from "@/lib/crm/types";
 import { ContactEmailsDrawer } from "@/components/contact-emails-drawer";
@@ -40,7 +40,7 @@ function group(lc?: string): Group {
   if (lc && LEAD_LC.has(lc)) return "lead";
   return "other";
 }
-type Tab = "all" | "customer" | "lead";
+type Tab = "all" | "customer" | "lead" | "nocompany";
 type Sort = "name" | "recent" | "company";
 
 const SORTS: { id: Sort; label: string }[] = [
@@ -137,16 +137,23 @@ export function ContactsView({
   const counts = useMemo(() => {
     let customer = 0;
     let lead = 0;
+    let nocompany = 0;
     for (const c of contacts) {
       const g = group(c.companyLifecycle);
       if (g === "customer") customer++;
       else if (g === "lead") lead++;
+      if (!c.companyId) nocompany++;
     }
-    return { all: contacts.length, customer, lead };
+    return { all: contacts.length, customer, lead, nocompany };
   }, [contacts]);
 
   const shown = useMemo(() => {
-    const rows = tab === "all" ? contacts : contacts.filter((c) => group(c.companyLifecycle) === tab);
+    const rows =
+      tab === "all"
+        ? contacts
+        : tab === "nocompany"
+          ? contacts.filter((c) => !c.companyId)
+          : contacts.filter((c) => group(c.companyLifecycle) === tab);
     return [...rows].sort((a, b) => {
       switch (sort) {
         case "recent":
@@ -217,6 +224,7 @@ export function ContactsView({
     { id: "all", label: "Everyone", n: counts.all },
     { id: "customer", label: "Customers", n: counts.customer },
     { id: "lead", label: "Leads", n: counts.lead },
+    { id: "nocompany", label: "No company", n: counts.nocompany },
   ];
 
   return (
@@ -242,11 +250,23 @@ export function ContactsView({
 
       <DuplicatesReview onMerged={refresh} />
 
-      {/* Customer / lead filter + sort */}
+      {/* Customer / lead / no-company filter + sort */}
       <div className="flex flex-wrap items-center gap-2.5">
         <TabPills tabs={TABS} active={tab} onChange={setTab} />
         <SortSelect value={sort} onChange={setSort} options={SORTS} label="Sort people" />
       </div>
+
+      {tab === "nocompany" && counts.nocompany > 0 ? (
+        <div className="luna-fade flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3.5 py-2.5">
+          <p className="text-[13px] text-fg-muted">
+            These people aren&apos;t linked to a company. Auto-link the ones whose email domain
+            matches an account, then remove or link the rest here.
+          </p>
+          <ButtonLink href="/data?tab=relink" variant="secondary" size="sm">
+            <Link2 size={15} strokeWidth={1.9} /> Link contacts
+          </ButtonLink>
+        </div>
+      ) : null}
 
       {selected.size > 0 ? (
         <div className="luna-fade flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent-soft bg-accent-soft/30 px-3 py-2">
