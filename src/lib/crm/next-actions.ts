@@ -29,7 +29,7 @@ function daysUntil(iso?: string): number | null {
   return Number.isNaN(t) ? null : Math.ceil((t - Date.now()) / DAY);
 }
 
-const isOpen = (d: Deal) => d.stage !== "Won" && d.stage !== "Lost";
+const defaultIsOpen = (stage?: string) => stage !== "Won" && stage !== "Lost";
 
 export interface NbaInputs {
   companies: Company[];
@@ -37,6 +37,8 @@ export interface NbaInputs {
   nextTouchByCompany: Map<string, CareTouch>;
   lastByCompany: Record<string, string>;
   lastByDeal: Record<string, string>;
+  /** Open-stage test derived from the live stage config; falls back to Won/Lost names. */
+  isOpen?: (stage?: string) => boolean;
 }
 
 /**
@@ -50,9 +52,10 @@ function actionForCompany(
   nextTouch: CareTouch | undefined,
   lastContact: string | undefined,
   lastByDeal: Record<string, string>,
+  isOpen: (stage?: string) => boolean,
 ): NextAction | null {
   const base = { companyId: c.id, companyName: c.name, href: `/companies/${c.id}` };
-  const openDeals = deals.filter(isOpen);
+  const openDeals = deals.filter((d) => isOpen(d.stage));
 
   // 1. Overdue care touch — the #1 churn lever.
   const careOverdue = nextTouch?.dueDate ? -(daysUntil(nextTouch.dueDate) ?? 0) : 0;
@@ -156,6 +159,7 @@ export function computeNextActions(inp: NbaInputs, limit = 12): NextAction[] {
     else dealsByCompany.set(d.companyId, [d]);
   }
 
+  const isOpen = inp.isOpen ?? defaultIsOpen;
   const out: NextAction[] = [];
   for (const c of inp.companies) {
     const action = actionForCompany(
@@ -164,6 +168,7 @@ export function computeNextActions(inp: NbaInputs, limit = 12): NextAction[] {
       inp.nextTouchByCompany.get(c.id),
       inp.lastByCompany[c.id],
       inp.lastByDeal,
+      isOpen,
     );
     if (action) out.push(action);
   }

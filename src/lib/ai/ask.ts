@@ -4,6 +4,7 @@ import { anthropic, textFrom } from "./client";
 import {
   activityRecency,
   getCompany,
+  getPipelineStages,
   listActivitiesByIds,
   listCareBoard,
   listCompanies,
@@ -12,6 +13,7 @@ import {
   listDealsByIds,
   searchAll,
 } from "@/lib/crm/data";
+import { stageClassifier } from "@/lib/crm/pipeline";
 import {
   ACCOUNT_HEALTH,
   COMPANY_TYPES,
@@ -229,6 +231,12 @@ export async function askLuna(question: string): Promise<AskResponse> {
   let recencyCache: Awaited<ReturnType<typeof activityRecency>> | null = null;
   const recency = async () => (recencyCache ??= await activityRecency());
 
+  // Open/won/lost from the live stage config (this base's stages are onboarding
+  // milestones, not "Won"/"Lost"), memoised for the duration of one ask.
+  let openTestCache: ((stage?: string) => boolean) | null = null;
+  const isOpen = async () =>
+    (openTestCache ??= stageClassifier(await getPipelineStages()).isOpen);
+
   async function runTool(name: string, input: Record<string, unknown>): Promise<unknown> {
     const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined);
     const n = (k: string) => (typeof input[k] === "number" ? (input[k] as number) : undefined);
@@ -306,7 +314,10 @@ export async function askLuna(question: string): Promise<AskResponse> {
         const staleDays = n("staleDays");
         const minMrr = n("minMrr");
         if (stage) ds = ds.filter((d) => norm(d.stage) === norm(stage));
-        else ds = ds.filter((d) => d.stage !== "Won" && d.stage !== "Lost"); // open pipeline by default
+        else {
+          const open = await isOpen();
+          ds = ds.filter((d) => open(d.stage)); // open pipeline by default
+        }
         if (typeof minMrr === "number") ds = ds.filter((d) => (d.mrr ?? 0) >= minMrr);
         if (input.missingNextStep === true) ds = ds.filter((d) => !d.nextStep || !d.nextStepDate);
         if (typeof staleDays === "number") {
@@ -407,7 +418,8 @@ export async function askLuna(question: string): Promise<AskResponse> {
           listDealsByIds(company.dealIds),
           listActivitiesByIds(company.activityIds),
         ]);
-        const openDeals = deals.filter((d) => d.stage !== "Won" && d.stage !== "Lost");
+        const open = await isOpen();
+        const openDeals = deals.filter((d) => open(d.stage));
         addRef({
           type: "company",
           id: company.id,
