@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import type { Contact, EmailTemplate, MeetingConfig } from "@/lib/crm/types";
 import { Button, Field, IconButton, InlineAlert, Input, Select, Spinner } from "@/components/ui";
 import { RichTextEditor, htmlToText, plainToHtml, type RichTextEditorHandle } from "@/components/rich-text";
+import { MeetingSlotPicker } from "@/components/meeting-slot-picker";
 import { bookingLink, meetingButtonHtml, meetingConfigReady } from "@/lib/meetings";
 import { fillMergeTags, firstNameOf } from "@/lib/email/merge";
 import { useToast } from "@/components/feedback";
@@ -92,6 +93,7 @@ export function SendComposer({
   const editorRef = useRef<RichTextEditorHandle>(null);
   const [meetingCfg, setMeetingCfg] = useState<MeetingConfig | null>(null);
   const [meetingMenu, setMeetingMenu] = useState(false);
+  const [slotPicker, setSlotPicker] = useState(false);
   const toast = useToast();
 
   // Load the scheduler config once, so "Insert meeting" can offer booking links.
@@ -518,9 +520,19 @@ export function SendComposer({
                                   </span>
                                 </button>
                               ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMeetingMenu(false);
+                                  setSlotPicker(true);
+                                }}
+                                className="block w-full border-t border-border-soft px-3 py-2 text-left text-[12.5px] font-medium text-accent-strong hover:bg-muted"
+                              >
+                                Send specific times →
+                              </button>
                               <Link
                                 href="/meetings"
-                                className="block border-t border-border-soft px-3 py-2 text-[12px] text-fg-subtle hover:bg-muted hover:text-fg"
+                                className="block px-3 py-2 text-[12px] text-fg-subtle hover:bg-muted hover:text-fg"
                               >
                                 Manage meeting links →
                               </Link>
@@ -543,6 +555,14 @@ export function SendComposer({
                 </div>
                 <RichTextEditor ref={editorRef} value={body} onChange={setBody} minHeight={300} />
               </div>
+
+              {slotPicker && meetingCfg ? (
+                <MeetingSlotPicker
+                  config={meetingCfg}
+                  onInsert={(html) => editorRef.current?.insertHtml(html)}
+                  onClose={() => setSlotPicker(false)}
+                />
+              ) : null}
 
               {/* Attachments — from the template (tracked links) + ad-hoc uploads */}
               <div>
