@@ -340,6 +340,8 @@ export interface InboxBackfillStatus {
 
 /** A contact whose latest email was inbound — they wrote, you haven't replied yet. */
 export interface AwaitingReply {
+  /** Stable id for dismiss/pause (contactId + message date). */
+  key: string;
   contactId?: string;
   contactName?: string;
   companyId?: string;

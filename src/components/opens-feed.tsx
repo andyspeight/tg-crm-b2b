@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Download, MailOpen } from "lucide-react";
 import { api } from "@/lib/client";
+import { cn } from "@/components/ui";
 import type { EmailTracking } from "@/lib/crm/types";
 
 function timeAgo(iso?: string): string {
@@ -20,7 +21,7 @@ function timeAgo(iso?: string): string {
 }
 
 /** Today panel: emails opened / attachments downloaded recently. They're warm. */
-export function OpensFeed() {
+export function OpensFeed({ className }: { className?: string }) {
   const [opens, setOpens] = useState<EmailTracking[] | null>(null);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function OpensFeed() {
   if (!opens || opens.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-card">
+    <section className={cn("rounded-2xl border border-border bg-card p-4 shadow-card", className)}>
       <div className="mb-2.5 flex items-center gap-2">
         <MailOpen size={16} strokeWidth={1.9} className="text-accent-strong" />
         <h2 className="text-[14px] font-semibold text-fg">Opened your email</h2>

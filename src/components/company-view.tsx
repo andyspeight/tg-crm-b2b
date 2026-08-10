@@ -178,6 +178,7 @@ export function CompanyView({
   emailTemplates,
   stages,
   draftAngle,
+  replyContactId,
   openStatus,
   highlightMessageId,
 }: {
@@ -194,6 +195,8 @@ export function CompanyView({
   stages: PipelineStage[];
   /** When set (via ?angle= deep link from a signal), open the composer pre-seeded. */
   draftAngle?: string;
+  /** When set (via ?reply= from the Awaiting-reply feed), open the composer to this contact. */
+  replyContactId?: string;
   /** Open/download status per sent email (keyed by Gmail message id). */
   openStatus?: Record<string, EmailOpenStatus>;
   /** Scroll to + highlight the email with this Gmail message id (from ?email=). */
@@ -234,8 +237,8 @@ export function CompanyView({
   const [loggingCare, setLoggingCare] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState("");
-  const [outreachOpen, setOutreachOpen] = useState(!!draftAngle);
-  const [outreachContactId, setOutreachContactId] = useState<string | undefined>(undefined);
+  const [outreachOpen, setOutreachOpen] = useState(!!draftAngle || !!replyContactId);
+  const [outreachContactId, setOutreachContactId] = useState<string | undefined>(replyContactId);
   const [outreachAngle, setOutreachAngle] = useState<string | undefined>(draftAngle);
   const [outreachAutoDraft, setOutreachAutoDraft] = useState(!!draftAngle);
   const [onboardingOpen, setOnboardingOpen] = useState(false);

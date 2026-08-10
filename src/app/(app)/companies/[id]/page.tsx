@@ -21,10 +21,10 @@ export default async function CompanyPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ angle?: string; email?: string }>;
+  searchParams: Promise<{ angle?: string; email?: string; reply?: string }>;
 }) {
   const { id } = await params;
-  const { angle, email } = await searchParams;
+  const { angle, email, reply } = await searchParams;
 
   let company;
   try {
@@ -62,6 +62,7 @@ export default async function CompanyPage({
       emailTemplates={emailTemplates}
       stages={stages}
       draftAngle={angle}
+      replyContactId={reply}
       openStatus={openStatus}
       highlightMessageId={email}
     />

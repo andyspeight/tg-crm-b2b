@@ -79,7 +79,7 @@ export function TodayView({
   const needCount = nextActions.length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="mx-auto max-w-5xl space-y-5">
       <div>
         <h1 className="text-[26px] font-semibold tracking-tight text-fg">
           {greeting}
@@ -95,11 +95,13 @@ export function TodayView({
 
       {newWorkspace ? <GettingStarted /> : null}
 
-      <AwaitingReplyFeed />
-
-      <OpensFeed />
-
-      <SignalsFeed />
+      {/* The three attention feeds sit side by side on wide screens, stacked on
+          mobile. Each returns null when empty, so present ones flex to fill. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-start">
+        <AwaitingReplyFeed className="lg:min-w-[300px] lg:flex-1" />
+        <OpensFeed className="lg:min-w-[300px] lg:flex-1" />
+        <SignalsFeed className="lg:min-w-[300px] lg:flex-1" />
+      </div>
 
       <SequencesFeed />
 
