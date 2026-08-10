@@ -59,6 +59,7 @@ import type {
   EmailOpenStatus,
   InboxSyncStatus,
   InboxBackfillStatus,
+  AwaitingReply,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -757,12 +758,12 @@ export async function listActivitiesByCompany(companyId: string): Promise<Activi
   return listActivitiesByIds(idList(company.fields[FIELDS.companies.activities]));
 }
 
-/** Every logged email send across the base (Activity type "Email"). For analytics. */
+/** Every logged email across the base (Activity type "Email"). For analytics + reply state. */
 export async function listEmailActivities(): Promise<Activity[]> {
   const F = FIELDS.activities;
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
     filterByFormula: `{${F.type}}='Email'`,
-    fields: [F.date, F.type, F.company, F.contact, F.summary],
+    fields: [F.date, F.type, F.company, F.contact, F.summary, F.direction, F.gmailMessageId],
     maxRecords: 5000,
   });
   return records.map(toActivity);
@@ -2546,6 +2547,50 @@ export async function listRecentOpens(opts?: { sinceDays?: number; limit?: numbe
   const limited = opts?.limit ? rows.slice(0, opts.limit) : rows;
   await attachTrackingNames(limited);
   return limited;
+}
+
+/**
+ * Contacts whose most recent email was inbound — they wrote and we haven't
+ * replied since. Grouped per contact (latest email wins), limited to recent
+ * inbound so ancient one-sided threads pulled in by the backfill don't surface
+ * as "needs a reply today". Longest-waiting first.
+ */
+export async function listAwaitingReply(opts?: { withinDays?: number; limit?: number }): Promise<AwaitingReply[]> {
+  const withinDays = opts?.withinDays ?? 30;
+  const limit = opts?.limit ?? 12;
+  const emails = await listEmailActivities();
+
+  // Latest email per contact (only emails we can attribute to a person + a date).
+  const latest = new Map<string, Activity>();
+  for (const e of emails) {
+    if (!e.contactId || !e.date) continue;
+    const cur = latest.get(e.contactId);
+    if (!cur || e.date > (cur.date || "")) latest.set(e.contactId, e);
+  }
+
+  const cutoff = Date.now() - withinDays * 864e5;
+  const rows = [...latest.values()]
+    .filter((e) => e.direction === "Inbound" && Date.parse(e.date || "") >= cutoff)
+    .sort((a, b) => (a.date || "").localeCompare(b.date || "")) // oldest unanswered first
+    .slice(0, limit);
+
+  const contactIds = rows.map((r) => r.contactId || "").filter(Boolean);
+  const companyIds = rows.map((r) => r.companyId || "").filter(Boolean);
+  const [contacts, companies] = await Promise.all([
+    contactIds.length ? contactNameMap(contactIds) : Promise.resolve(new Map<string, string>()),
+    companyIds.length ? companyNameMap(companyIds) : Promise.resolve(new Map<string, string>()),
+  ]);
+
+  return rows.map((e) => ({
+    contactId: e.contactId,
+    contactName: e.contactId ? contacts.get(e.contactId) : undefined,
+    companyId: e.companyId,
+    companyName: e.companyId ? companies.get(e.companyId) : undefined,
+    subject: e.summary,
+    date: e.date!,
+    ageDays: Math.max(0, Math.floor((Date.now() - Date.parse(e.date!)) / 864e5)),
+    gmailMessageId: e.gmailMessageId,
+  }));
 }
 
 /** All tracking rows (for the performance summary). */

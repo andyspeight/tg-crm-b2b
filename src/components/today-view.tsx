@@ -12,6 +12,7 @@ import { AskLunaBox } from "@/components/ask-luna-box";
 import { SignalsFeed } from "@/components/signals-view";
 import { SequencesFeed } from "@/components/sequences-feed";
 import { OpensFeed } from "@/components/opens-feed";
+import { AwaitingReplyFeed } from "@/components/awaiting-reply-feed";
 import { LogTouchModal } from "@/components/log-touch-modal";
 import { GettingStarted } from "@/components/getting-started";
 import { useToast } from "@/components/feedback";
@@ -93,6 +94,8 @@ export function TodayView({
       <AskLunaBox />
 
       {newWorkspace ? <GettingStarted /> : null}
+
+      <AwaitingReplyFeed />
 
       <OpensFeed />
 

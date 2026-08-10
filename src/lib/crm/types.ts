@@ -338,6 +338,22 @@ export interface InboxBackfillStatus {
   oldestEmail?: string;
 }
 
+/** A contact whose latest email was inbound — they wrote, you haven't replied yet. */
+export interface AwaitingReply {
+  contactId?: string;
+  contactName?: string;
+  companyId?: string;
+  companyName?: string;
+  /** Subject/summary of their last message. */
+  subject?: string;
+  /** ISO date of their last (unanswered) message. */
+  date: string;
+  /** Whole days since that message. */
+  ageDays: number;
+  /** Gmail message id, for a click-through to the thread on the timeline. */
+  gmailMessageId?: string;
+}
+
 /** Aggregated open/download status for one sent email (keyed by Gmail message id). */
 export interface EmailOpenStatus {
   opened: boolean;
