@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { ReactNode, useState } from "react";
-import { Building2, CheckCircle2, ChevronRight, Circle, HeartHandshake, X } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, ChevronRight, Circle, HeartHandshake, Reply, Rocket, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Task } from "@/lib/crm/types";
 import type { NextAction } from "@/lib/crm/next-actions";
 import { isPast } from "@/lib/deal-flags";
-import { Button, EmptyState, cn } from "@/components/ui";
+import { Button, EmptyState, StatTile, cn } from "@/components/ui";
 import { AskLunaBox } from "@/components/ask-luna-box";
 import { SignalsFeed } from "@/components/signals-view";
 import { SequencesFeed } from "@/components/sequences-feed";
@@ -34,6 +34,8 @@ export type Vitals = {
   openMrr: number;
   needsAttention: number;
   careDue: number;
+  /** Contacts whose last email was inbound — waiting on a reply from us. */
+  repliesWaiting: number;
 };
 
 export type NurtureItem = { id: string; name: string; last?: string };
@@ -89,6 +91,38 @@ export function TodayView({
           {dateStr}
           {needCount > 0 ? ` · ${needCount} ${needCount === 1 ? "thing needs" : "things need"} you today` : " · all caught up"}
         </p>
+      </div>
+
+      {/* Vitals — the day's pulse. Honest about £0 (shows onboardings in flight,
+          not a fake pipeline value), and leads with what actually needs action. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label="In onboarding"
+          value={String(vitals.openDeals)}
+          sub={vitals.openMrr > 0 ? `${formatMoney(vitals.openMrr)}/mo` : "deals in flight"}
+          icon={<Rocket size={16} strokeWidth={1.9} />}
+        />
+        <StatTile
+          label="Replies waiting"
+          value={String(vitals.repliesWaiting)}
+          sub={vitals.repliesWaiting ? "the ball's with you" : "all answered"}
+          tone={vitals.repliesWaiting ? "warn" : undefined}
+          icon={<Reply size={16} strokeWidth={1.9} />}
+        />
+        <StatTile
+          label="At risk"
+          value={String(vitals.needsAttention)}
+          sub={`${vitals.customers} ${vitals.customers === 1 ? "customer" : "customers"}`}
+          tone={vitals.needsAttention ? "danger" : undefined}
+          icon={<AlertTriangle size={16} strokeWidth={1.9} />}
+        />
+        <StatTile
+          label="Care due"
+          value={String(careList.length)}
+          sub={`${openTasks} open ${openTasks === 1 ? "task" : "tasks"}`}
+          tone={careList.length ? "warn" : undefined}
+          icon={<HeartHandshake size={16} strokeWidth={1.9} />}
+        />
       </div>
 
       <AskLunaBox />
@@ -186,18 +220,6 @@ export function TodayView({
           )}
         </Section>
       </div>
-
-      {/* Slim vitals strip — the dashboard's closing summary line. */}
-      <p className="px-1 text-[13px] text-fg-subtle">
-        {[
-          `${vitals.customers} ${vitals.customers === 1 ? "customer" : "customers"}`,
-          `${formatMoney(vitals.openMrr)} live pipeline`,
-          `${vitals.openDeals} open ${vitals.openDeals === 1 ? "deal" : "deals"}`,
-          `${vitals.needsAttention} need attention`,
-          `${openTasks} open ${openTasks === 1 ? "task" : "tasks"}`,
-          `${careList.length} care due`,
-        ].join(" · ")}
-      </p>
 
       <LogTouchModal
         open={!!logging}

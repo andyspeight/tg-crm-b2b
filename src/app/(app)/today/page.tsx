@@ -2,6 +2,7 @@ import {
   activityRecency,
   getPipelineStages,
   getSnoozedActionKeys,
+  listAwaitingReply,
   listCareBoard,
   listCompanies,
   listDeals,
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 const ORG_NAME = "Travelgenix";
 
 export default async function TodayPage() {
-  const [tasks, companies, deals, recency, careBoard, snoozed, stages] = await Promise.all([
+  const [tasks, companies, deals, recency, careBoard, snoozed, stages, awaiting] = await Promise.all([
     listOpenTasks(),
     listCompanies(),
     listDeals(),
@@ -25,6 +26,7 @@ export default async function TodayPage() {
     listCareBoard(),
     getSnoozedActionKeys(),
     getPipelineStages(),
+    listAwaitingReply({ withinDays: 30, limit: 500 }),
   ]);
   const snoozedSet = new Set(snoozed);
   const isOpen = (stage?: string) => stageClassifier(stages).isOpen(stage);
@@ -68,6 +70,7 @@ export default async function TodayPage() {
     openMrr: openDeals.reduce((t, d) => t + (d.mrr ?? 0), 0),
     needsAttention: customers.filter((c) => c.accountHealth === "Amber" || c.accountHealth === "Red").length,
     careDue: careDue.length,
+    repliesWaiting: awaiting.length,
   };
 
   // Customers longest without a meaningful touch — shown when nothing is urgent.
