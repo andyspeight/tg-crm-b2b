@@ -16,6 +16,7 @@ const PUBLIC_APIS = [
   "/api/cron/sequences",
   "/api/cron/intel",
   "/api/cron/inbox",
+  "/api/cron/weekly-digest",
 ];
 // Email tracking pixels/links are fetched by the recipient's mail client with no
 // session — public by design. The routes carry an opaque token and only ever
