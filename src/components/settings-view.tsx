@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Inbox, Mail, Plug, RefreshCw } from "lucide-react";
+import { CheckCircle2, History, Inbox, Mail, Plug, RefreshCw } from "lucide-react";
 import { api } from "@/lib/client";
 import { Button, InlineAlert, PageHeader, Spinner } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
-import type { InboxSyncStatus } from "@/lib/crm/types";
+import type { InboxBackfillStatus, InboxSyncStatus } from "@/lib/crm/types";
 
 type Status = {
   configured: boolean;
@@ -82,6 +82,56 @@ function SyncProgress({ s }: { s: InboxSyncStatus }) {
   );
 }
 
+/** Progress readout for the one-off deep-history backfill. */
+function BackfillProgress({ s, note }: { s: InboxBackfillStatus; note?: string }) {
+  const pct = s.contactsTotal > 0 ? Math.round((s.contactsBackfilled / s.contactsTotal) * 100) : 0;
+  const done = s.contactsRemaining === 0 && s.contactsTotal > 0;
+  return (
+    <div className="mt-3 rounded-xl border border-border-soft bg-surface p-3.5">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <p className="text-[12.5px] font-medium text-fg">
+          {s.contactsBackfilled.toLocaleString()} of {s.contactsTotal.toLocaleString()} contacts backfilled
+        </p>
+        <p className="text-[12px] tabular-nums text-fg-subtle">
+          {done ? "complete" : `${s.contactsRemaining.toLocaleString()} left`}
+        </p>
+      </div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full bg-border-soft"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Contacts backfilled"
+      >
+        <div
+          className="h-full rounded-full bg-accent-strong transition-[width] duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Reaches back</dt>
+          <dd className="text-[13px] font-medium tabular-nums text-fg">
+            {Math.round(s.windowDays / 365)} years
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Emails on file</dt>
+          <dd className="text-[13px] font-medium tabular-nums text-fg">{s.emailsLogged.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Oldest email</dt>
+          <dd className="text-[13px] font-medium text-fg">
+            {s.oldestEmail ? formatDate(s.oldestEmail) : "—"}
+          </dd>
+        </div>
+      </dl>
+      {note ? <p className="mt-2.5 text-[12px] text-fg-subtle">{note}</p> : null}
+    </div>
+  );
+}
+
 export function SettingsView() {
   const params = useSearchParams();
   const toast = useToast();
@@ -91,6 +141,9 @@ export function SettingsView() {
   const [working, setWorking] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<InboxSyncStatus | null>(null);
+  const [backfillStatus, setBackfillStatus] = useState<InboxBackfillStatus | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillNote, setBackfillNote] = useState<string>("");
 
   const flag = params.get("google"); // connected | error | denied (from the OAuth callback)
 
@@ -114,11 +167,66 @@ export function SettingsView() {
     load();
   }, []);
 
+  async function loadBackfillStatus() {
+    try {
+      setBackfillStatus(await api<InboxBackfillStatus>("/api/inbox/backfill/status"));
+    } catch {
+      /* non-critical — the readout just won't show */
+    }
+  }
+
   // Fetch the sync progress once we know read access is on (kept separate from the
   // frequently-polled google/status so the contact scan doesn't slow the composer).
   useEffect(() => {
-    if (status?.canSyncInbox) loadSyncStatus();
+    if (status?.canSyncInbox) {
+      loadSyncStatus();
+      loadBackfillStatus();
+    }
   }, [status?.canSyncInbox]);
+
+  // "Backfill history" drives the bounded server passes in a loop until the whole
+  // base is done, refreshing the progress bar after each pass so it fills live.
+  async function runBackfill() {
+    setBackfilling(true);
+    setBackfillNote("Starting…");
+    let logged = 0;
+    try {
+      for (let pass = 0; pass < 500; pass++) {
+        const r = await api<{
+          ran: boolean;
+          reason?: string;
+          contactsScanned: number;
+          messagesLogged: number;
+          contactsRemaining: number;
+        }>("/api/inbox/backfill/run", { method: "POST" });
+        if (!r.ran) {
+          toast.error("Couldn't back-fill", { description: r.reason });
+          break;
+        }
+        logged += r.messagesLogged;
+        await loadBackfillStatus();
+        if (r.contactsRemaining <= 0) {
+          setBackfillNote("");
+          toast.success("Backfill complete", {
+            description: `${logged.toLocaleString()} email${logged === 1 ? "" : "s"} added to timelines`,
+          });
+          break;
+        }
+        // A pass that scanned nobody but reports work left means every remaining
+        // contact errored — stop rather than spin.
+        if (r.contactsScanned === 0) {
+          toast.error("Backfill stalled", { description: `${r.contactsRemaining} contacts couldn't be read.` });
+          break;
+        }
+        setBackfillNote(`${logged.toLocaleString()} emails added so far · ${r.contactsRemaining} contacts to go…`);
+      }
+    } catch (e) {
+      toast.error("Backfill failed", { description: (e as Error).message });
+    } finally {
+      setBackfilling(false);
+      setBackfillNote("");
+    }
+  }
 
   async function syncNow() {
     setSyncing(true);
@@ -247,6 +355,34 @@ export function SettingsView() {
                   <SyncProgress s={syncStatus} />
                 ) : null}
               </div>
+
+              {/* Deep-history backfill — one-off, pulls each contact's full history */}
+              {status.canSyncInbox ? (
+                <div className="w-full border-t border-border-soft pt-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <History size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-accent-strong" />
+                      <div>
+                        <p className="text-[13.5px] font-medium text-fg">Backfill full history</p>
+                        <p className="max-w-md text-[12.5px] text-fg-subtle">
+                          A one-off deep pass that pulls each contact&apos;s entire Gmail history — not just the
+                          rolling window — so every timeline reads back to the first email. Runs in the background;
+                          you can leave this page.
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={runBackfill} disabled={backfilling}>
+                      {backfilling ? <Spinner /> : <History size={15} strokeWidth={1.9} />}
+                      {backfillStatus && backfillStatus.contactsRemaining === 0 && backfillStatus.contactsTotal > 0
+                        ? "Backfill again"
+                        : "Backfill history"}
+                    </Button>
+                  </div>
+                  {backfillStatus ? (
+                    <BackfillProgress s={backfillStatus} note={backfilling ? backfillNote : undefined} />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">

@@ -237,6 +237,7 @@ export const FIELDS = {
     source: "Source",
     company: "Company",
     inboxSynced: "Inbox Synced",
+    inboxBackfilled: "Inbox Backfilled",
   },
   deals: {
     name: "Deal Name",

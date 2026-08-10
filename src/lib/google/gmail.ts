@@ -306,11 +306,24 @@ export interface SyncMessage {
 
 /** Message ids matching a Gmail search query (newest first), capped. */
 export async function listMessageIds(accessToken: string, query: string, max = 25): Promise<string[]> {
-  const url = `${API_BASE}/messages?maxResults=${Math.max(1, Math.min(100, max))}&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
-  if (!res.ok) throw new Error(`Gmail search failed (${res.status})`);
-  const data = (await res.json()) as { messages?: { id: string }[] };
-  return (data.messages || []).map((m) => m.id).filter(Boolean);
+  const hardMax = Math.max(1, Math.min(1000, max));
+  const out: string[] = [];
+  let pageToken: string | undefined;
+  // Page through results (Gmail caps a page at 100) until we have `max` ids or the
+  // result set is exhausted — the rolling sync asks for a single small page; the
+  // deep-history backfill asks for hundreds.
+  do {
+    const pageSize = Math.min(100, hardMax - out.length);
+    const url =
+      `${API_BASE}/messages?maxResults=${pageSize}&q=${encodeURIComponent(query)}` +
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+    if (!res.ok) throw new Error(`Gmail search failed (${res.status})`);
+    const data = (await res.json()) as { messages?: { id: string }[]; nextPageToken?: string };
+    for (const m of data.messages || []) if (m.id) out.push(m.id);
+    pageToken = data.nextPageToken;
+  } while (pageToken && out.length < hardMax);
+  return out.slice(0, hardMax);
 }
 
 /** Fetch one message in full and shape it for the timeline (readonly scope). */
