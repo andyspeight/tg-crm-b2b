@@ -58,6 +58,7 @@ import type {
   EmailTrackingInput,
   EmailOpenStatus,
   InboxSyncStatus,
+  InboxBackfillStatus,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -262,6 +263,7 @@ function toContact(rec: AirtableRecord): Contact {
     source: str(f[F.source]),
     companyId: firstId(f[F.company]),
     inboxSyncedAt: str(f[F.inboxSynced]),
+    inboxBackfilledAt: str(f[F.inboxBackfilled]),
     createdTime: rec.createdTime,
   };
 }
@@ -344,6 +346,7 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
   if (has("source")) f[F.source] = text(input.source);
   if (has("enrichedAt")) f[F.enrichedAt] = text(input.enrichedAt);
   if (has("inboxSyncedAt")) f[F.inboxSynced] = text(input.inboxSyncedAt);
+  if (has("inboxBackfilledAt")) f[F.inboxBackfilled] = text(input.inboxBackfilledAt);
   if (has("companyId")) {
     const id = text(input.companyId);
     f[F.company] = id ? [id] : [];
@@ -2661,6 +2664,59 @@ export async function inboxSyncStatus(): Promise<InboxSyncStatus> {
     contactsSynced: synced.length,
     contactsRemaining: withEmail.length - synced.length,
     lastSyncedAt,
+    windowDays,
+    emailsLogged: emails.length,
+    oldestEmail,
+  };
+}
+
+/**
+ * Contacts still awaiting the deep-history backfill — those with an email that
+ * have never been backfilled first, so repeated bounded runs work through the
+ * whole base exactly once each.
+ */
+export async function contactsForInboxBackfill(limit: number): Promise<Contact[]> {
+  const contacts = await listContacts({ limit: 5000 });
+  return contacts
+    .filter((c) => c.email && !c.inboxBackfilledAt)
+    .slice(0, Math.max(0, limit));
+}
+
+/** How many email-bearing contacts still need a backfill (drives the run loop). */
+export async function inboxBackfillRemaining(): Promise<number> {
+  const contacts = await listContacts({ limit: 5000 });
+  return contacts.filter((c) => c.email && !c.inboxBackfilledAt).length;
+}
+
+/**
+ * Progress of the one-off deep-history backfill: how many contacts have had their
+ * full Gmail history pulled, how many remain, and how far correspondence now
+ * reaches. Powers the readout beside the "Backfill history" button in Settings.
+ */
+export async function inboxBackfillStatus(): Promise<InboxBackfillStatus> {
+  const windowRaw = Number(process.env.INBOX_BACKFILL_WINDOW_DAYS);
+  const windowDays =
+    Number.isFinite(windowRaw) && windowRaw > 0 ? Math.min(3650, Math.floor(windowRaw)) : 3650;
+
+  const [contacts, emails] = await Promise.all([listContacts({ limit: 5000 }), listEmailActivities()]);
+
+  const withEmail = contacts.filter((c) => c.email);
+  const done = withEmail.filter((c) => c.inboxBackfilledAt);
+  const lastBackfilledAt = done.reduce<string | undefined>((max, c) => {
+    const t = c.inboxBackfilledAt;
+    return t && (!max || t > max) ? t : max;
+  }, undefined);
+
+  const oldestEmail = emails.reduce<string | undefined>((min, e) => {
+    const d = e.date;
+    return d && (!min || d < min) ? d : min;
+  }, undefined);
+
+  return {
+    contactsTotal: withEmail.length,
+    contactsBackfilled: done.length,
+    contactsRemaining: withEmail.length - done.length,
+    lastBackfilledAt,
     windowDays,
     emailsLogged: emails.length,
     oldestEmail,

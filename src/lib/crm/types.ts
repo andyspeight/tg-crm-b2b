@@ -105,6 +105,8 @@ export interface Contact {
   companyId?: string;
   /** When the Gmail inbox sync last checked this person's correspondence. */
   inboxSyncedAt?: string;
+  /** When the deep-history Gmail backfill last completed for this person. */
+  inboxBackfilledAt?: string;
   /** Resolved from the linked company where available (convenience for list views). */
   companyName?: string;
   companyLifecycle?: LifecycleStage;
@@ -315,6 +317,24 @@ export interface InboxSyncStatus {
   /** Email activities on file across the base. */
   emailsLogged: number;
   /** Date of the oldest email on file (how far back correspondence reaches). */
+  oldestEmail?: string;
+}
+
+/** Progress of the one-off deep-history Gmail backfill across the contact base. */
+export interface InboxBackfillStatus {
+  /** Contacts that have an email address (the universe to backfill). */
+  contactsTotal: number;
+  /** Of those, how many have had their full history pulled at least once. */
+  contactsBackfilled: number;
+  /** Contacts with an email still awaiting a backfill. */
+  contactsRemaining: number;
+  /** When the backfill last completed for anyone (most recent stamp). */
+  lastBackfilledAt?: string;
+  /** How far back each backfill run reaches, in days. */
+  windowDays: number;
+  /** Email activities on file across the base. */
+  emailsLogged: number;
+  /** Date of the oldest email on file (how far back correspondence now reaches). */
   oldestEmail?: string;
 }
 
