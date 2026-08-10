@@ -179,8 +179,9 @@ export async function runInboxBackfill(): Promise<InboxBackfillSummary> {
   base.ran = true;
 
   const seen = await loggedGmailMessageIds();
-  // Fewer contacts per run than the rolling sync, but each pulls far more mail.
-  const contacts = await contactsForInboxBackfill(cap("INBOX_BACKFILL_CONTACTS_PER_RUN", 6, 100));
+  // Take a generous slice — the wall-clock budget below bounds how many actually
+  // get processed, so shallow contacts fly through while deep ones still fit.
+  const contacts = await contactsForInboxBackfill(cap("INBOX_BACKFILL_CONTACTS_PER_RUN", 30, 200));
   await processContacts(
     {
       accessToken: conn.accessToken,
