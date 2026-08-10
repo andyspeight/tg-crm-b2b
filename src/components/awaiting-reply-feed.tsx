@@ -14,14 +14,19 @@ function waited(days: number): string {
   return `${days} days`;
 }
 
-/** Where clicking the row goes — the email on the timeline, or the person in People. */
+/**
+ * Where clicking the row goes to see the email — the company timeline when the
+ * person has a company, otherwise the People email drawer (people with no
+ * company page still get their correspondence).
+ */
 function emailHref(r: AwaitingReply): string {
   if (r.companyId) {
     return r.gmailMessageId
       ? `/companies/${r.companyId}?email=${encodeURIComponent(r.gmailMessageId)}`
       : `/companies/${r.companyId}`;
   }
-  return `/contacts?q=${encodeURIComponent(r.contactName || "")}`;
+  const email = r.gmailMessageId ? `&email=${encodeURIComponent(r.gmailMessageId)}` : "";
+  return `/contacts?contact=${encodeURIComponent(r.contactId || "")}${email}`;
 }
 
 /** Where "Reply" goes — opens the composer for this contact. */
@@ -29,7 +34,7 @@ function replyHref(r: AwaitingReply): string {
   if (r.companyId && r.contactId) {
     return `/companies/${r.companyId}?reply=${encodeURIComponent(r.contactId)}`;
   }
-  return `/contacts?q=${encodeURIComponent(r.contactName || "")}`;
+  return `/contacts?reply=${encodeURIComponent(r.contactId || "")}`;
 }
 
 /** Today panel: contacts who emailed and are still waiting on a reply. */

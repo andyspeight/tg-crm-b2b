@@ -2654,6 +2654,22 @@ export async function dismissReply(key: string, mode: "ignore" | "pause"): Promi
   await setSetting(REPLY_DISMISS_KEY, JSON.stringify(next));
 }
 
+/** Email activities for one contact, newest first (for the contact email drawer). */
+export async function listContactEmails(contactId: string, limit = 40): Promise<Activity[]> {
+  if (!contactId) return [];
+  const F = FIELDS.activities;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    filterByFormula: `{${F.type}}='Email'`,
+    fields: [F.date, F.type, F.summary, F.rawContent, F.direction, F.gmailMessageId, F.company, F.contact],
+    maxRecords: 5000,
+  });
+  return records
+    .map(toActivity)
+    .filter((a) => a.contactId === contactId)
+    .sort((a, b) => (b.date || b.createdTime || "").localeCompare(a.date || a.createdTime || ""))
+    .slice(0, limit);
+}
+
 /** All tracking rows (for the performance summary). */
 export async function listTrackings(): Promise<EmailTracking[]> {
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.emailTracking, { maxRecords: 5000 });
