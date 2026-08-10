@@ -356,6 +356,27 @@ export interface AwaitingReply {
   gmailMessageId?: string;
 }
 
+// --- Meeting options (our own Appointment Scheduler / tg-widgets) -----------
+
+/** One bookable meeting type on the scheduler (maps to a widget event type). */
+export interface MeetingOption {
+  id: string;
+  label: string;
+  /** The scheduler event type id (e.g. "consult", "demo"). */
+  eventId: string;
+  mins?: number;
+  description?: string;
+}
+
+/** The scheduler connection + the meeting options offered from it. */
+export interface MeetingConfig {
+  /** Scheduler host, e.g. https://tg-widgets.vercel.app or widgets.travelify.io */
+  host: string;
+  /** The appointment widget id (data-tg-id). */
+  widgetId: string;
+  options: MeetingOption[];
+}
+
 /** Aggregated open/download status for one sent email (keyed by Gmail message id). */
 export interface EmailOpenStatus {
   opened: boolean;

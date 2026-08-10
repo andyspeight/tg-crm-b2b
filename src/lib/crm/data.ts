@@ -32,6 +32,7 @@ import {
   SIGNAL_STATUSES,
   DEFAULT_PIPELINE_STAGES,
   PIPELINE_STAGES_KEY,
+  MEETING_CONFIG_KEY,
   STAGE_COLORS,
   STAGE_KINDS,
   PACKAGES,
@@ -60,6 +61,7 @@ import type {
   InboxSyncStatus,
   InboxBackfillStatus,
   AwaitingReply,
+  MeetingConfig,
   Sequence,
   SequenceInput,
   SequenceStep,
@@ -70,6 +72,7 @@ import type {
   TaskInput,
 } from "./types";
 import { findDuplicateGroups, type DuplicateGroup } from "./duplicates";
+import { normalizeMeetingConfig } from "@/lib/meetings";
 import {
   AirtableRecord,
   createRecord,
@@ -2611,6 +2614,26 @@ export async function listAwaitingReply(opts?: { withinDays?: number; limit?: nu
       gmailMessageId: e.gmailMessageId,
     };
   });
+}
+
+// --- Meeting options (our Appointment Scheduler config) ---------------------
+
+/** The stored scheduler config (host, widget id, meeting options), normalised. */
+export async function getMeetingConfig(): Promise<MeetingConfig> {
+  const raw = await getSetting(MEETING_CONFIG_KEY).catch(() => null);
+  if (!raw) return normalizeMeetingConfig({});
+  try {
+    return normalizeMeetingConfig(JSON.parse(raw));
+  } catch {
+    return normalizeMeetingConfig({});
+  }
+}
+
+/** Save the scheduler config. Returns the cleaned value that was stored. */
+export async function setMeetingConfig(input: unknown): Promise<MeetingConfig> {
+  const clean = normalizeMeetingConfig(input);
+  await setSetting(MEETING_CONFIG_KEY, JSON.stringify(clean));
+  return clean;
 }
 
 // --- Awaiting-reply dismissals (Ignore = permanent, Pause = back tomorrow) --

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Building2,
+  CalendarClock,
   Columns3,
   Database,
   HeartHandshake,
@@ -35,6 +36,7 @@ const WORKSPACE: Item[] = [
 
 const TOOLS: Item[] = [
   { href: "/templates", label: "Email templates", icon: Mail },
+  { href: "/meetings", label: "Meeting links", icon: CalendarClock },
   { href: "/sequences", label: "Sequences", icon: Send },
   { href: "/performance", label: "Email performance", icon: BarChart3 },
   { href: "/signals", label: "Signals", icon: Radar },

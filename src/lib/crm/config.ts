@@ -100,6 +100,9 @@ export const DEFAULT_PIPELINE_STAGES: { name: string; color: string; kind: strin
 
 export const PIPELINE_STAGES_KEY = "pipeline_stages";
 
+/** App Setting key for the meeting-scheduler config (host, widget id, options). */
+export const MEETING_CONFIG_KEY = "meeting_options";
+
 export const DEAL_SOURCES = [
   "Referral",
   "PTS/TNG Partnership",
