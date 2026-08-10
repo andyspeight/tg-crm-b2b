@@ -190,15 +190,32 @@ export function SettingsView() {
     setBackfilling(true);
     setBackfillNote("Starting…");
     let logged = 0;
+    let fails = 0; // consecutive failed passes — a blip shouldn't kill the run
     try {
-      for (let pass = 0; pass < 500; pass++) {
-        const r = await api<{
+      for (let pass = 0; pass < 1000; pass++) {
+        let r: {
           ran: boolean;
           reason?: string;
           contactsScanned: number;
           messagesLogged: number;
           contactsRemaining: number;
-        }>("/api/inbox/backfill/run", { method: "POST" });
+        };
+        try {
+          r = await api("/api/inbox/backfill/run", { method: "POST" });
+        } catch {
+          // A single pass timing out or dropping shouldn't stop the whole backfill.
+          if (++fails >= 4) {
+            setBackfillNote("");
+            toast.error("Backfill paused", {
+              description: "A few passes failed in a row. It keeps running in the background — reopen to resume.",
+            });
+            break;
+          }
+          setBackfillNote("A pass hiccupped — retrying…");
+          await new Promise((res) => setTimeout(res, 4000));
+          continue;
+        }
+        fails = 0;
         if (!r.ran) {
           toast.error("Couldn't back-fill", { description: r.reason });
           break;
@@ -210,12 +227,6 @@ export function SettingsView() {
           toast.success("Backfill complete", {
             description: `${logged.toLocaleString()} email${logged === 1 ? "" : "s"} added to timelines`,
           });
-          break;
-        }
-        // A pass that scanned nobody but reports work left means every remaining
-        // contact errored — stop rather than spin.
-        if (r.contactsScanned === 0) {
-          toast.error("Backfill stalled", { description: `${r.contactsRemaining} contacts couldn't be read.` });
           break;
         }
         setBackfillNote(`${logged.toLocaleString()} emails added so far · ${r.contactsRemaining} contacts to go…`);
@@ -366,8 +377,9 @@ export function SettingsView() {
                         <p className="text-[13.5px] font-medium text-fg">Backfill full history</p>
                         <p className="max-w-md text-[12.5px] text-fg-subtle">
                           A one-off deep pass that pulls each contact&apos;s entire Gmail history — not just the
-                          rolling window — so every timeline reads back to the first email. Runs in the background;
-                          you can leave this page.
+                          rolling window — so every timeline reads back to the first email. It keeps running on a
+                          background schedule even if you close this page; click below to push it along faster while
+                          you watch.
                         </p>
                       </div>
                     </div>
