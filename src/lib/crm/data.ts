@@ -2558,7 +2558,13 @@ export async function listRecentOpens(opts?: { sinceDays?: number; limit?: numbe
 export async function listAwaitingReply(opts?: { withinDays?: number; limit?: number }): Promise<AwaitingReply[]> {
   const withinDays = opts?.withinDays ?? 30;
   const limit = opts?.limit ?? 12;
-  const emails = await listEmailActivities();
+  const [emails, contacts, dismissed] = await Promise.all([
+    listEmailActivities(),
+    listContacts({ limit: 5000 }),
+    getDismissedReplyKeys(),
+  ]);
+  const dismissedSet = new Set(dismissed);
+  const contactById = new Map(contacts.map((c) => [c.id, c]));
 
   // Latest email per contact (only emails we can attribute to a person + a date).
   const latest = new Map<string, Activity>();
@@ -2571,26 +2577,81 @@ export async function listAwaitingReply(opts?: { withinDays?: number; limit?: nu
   const cutoff = Date.now() - withinDays * 864e5;
   const rows = [...latest.values()]
     .filter((e) => e.direction === "Inbound" && Date.parse(e.date || "") >= cutoff)
+    .filter((e) => !dismissedSet.has(`${e.contactId}:${e.date}`))
     .sort((a, b) => (a.date || "").localeCompare(b.date || "")) // oldest unanswered first
     .slice(0, limit);
 
-  const contactIds = rows.map((r) => r.contactId || "").filter(Boolean);
-  const companyIds = rows.map((r) => r.companyId || "").filter(Boolean);
-  const [contacts, companies] = await Promise.all([
-    contactIds.length ? contactNameMap(contactIds) : Promise.resolve(new Map<string, string>()),
-    companyIds.length ? companyNameMap(companyIds) : Promise.resolve(new Map<string, string>()),
-  ]);
+  // Resolve the company from the *contact* record (the email row's own company can
+  // be stale/blank), so every row that can link to a timeline does.
+  const companyIds = rows
+    .map((e) => contactById.get(e.contactId!)?.companyId || e.companyId || "")
+    .filter(Boolean);
+  const companies = companyIds.length ? await companyNameMap(companyIds) : new Map<string, string>();
 
-  return rows.map((e) => ({
-    contactId: e.contactId,
-    contactName: e.contactId ? contacts.get(e.contactId) : undefined,
-    companyId: e.companyId,
-    companyName: e.companyId ? companies.get(e.companyId) : undefined,
-    subject: e.summary,
-    date: e.date!,
-    ageDays: Math.max(0, Math.floor((Date.now() - Date.parse(e.date!)) / 864e5)),
-    gmailMessageId: e.gmailMessageId,
-  }));
+  return rows.map((e) => {
+    const c = contactById.get(e.contactId!);
+    const companyId = c?.companyId || e.companyId || undefined;
+    return {
+      key: `${e.contactId}:${e.date}`,
+      contactId: e.contactId,
+      contactName: c?.name || undefined,
+      companyId,
+      companyName: companyId ? companies.get(companyId) : undefined,
+      subject: e.summary,
+      date: e.date!,
+      ageDays: Math.max(0, Math.floor((Date.now() - Date.parse(e.date!)) / 864e5)),
+      gmailMessageId: e.gmailMessageId,
+    };
+  });
+}
+
+// --- Awaiting-reply dismissals (Ignore = permanent, Pause = back tomorrow) --
+
+const REPLY_DISMISS_KEY = "reply_dismissed";
+
+async function readReplyDismissMap(): Promise<Record<string, string>> {
+  const raw = await getSetting(REPLY_DISMISS_KEY);
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === "object" ? (obj as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Reply keys still hidden (expired/past pauses dropped). */
+export async function getDismissedReplyKeys(): Promise<string[]> {
+  const map = await readReplyDismissMap();
+  const now = new Date().toISOString();
+  return Object.entries(map)
+    .filter(([, until]) => until > now)
+    .map(([key]) => key);
+}
+
+/**
+ * Hide one awaiting-reply row. "pause" brings it back at the start of tomorrow;
+ * "ignore" hides it effectively forever — but the key includes the message date,
+ * so a *newer* email from the same person makes a fresh key and reappears.
+ */
+export async function dismissReply(key: string, mode: "ignore" | "pause"): Promise<void> {
+  const clean = key.trim();
+  if (!clean) return;
+  const map = await readReplyDismissMap();
+  const now = Date.now();
+  const next: Record<string, string> = {};
+  for (const [k, until] of Object.entries(map)) if (Date.parse(until) > now) next[k] = until;
+
+  let until: number;
+  if (mode === "pause") {
+    const midnight = new Date(now);
+    midnight.setUTCHours(0, 0, 0, 0);
+    until = Math.max(midnight.getTime() + 864e5, now + 6 * 3600e3); // tomorrow 00:00, min +6h
+  } else {
+    until = now + 100 * 365 * 864e5; // ~a century = permanent in practice
+  }
+  next[clean] = new Date(until).toISOString();
+  await setSetting(REPLY_DISMISS_KEY, JSON.stringify(next));
 }
 
 /** All tracking rows (for the performance summary). */

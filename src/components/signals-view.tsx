@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, ExternalLink, ListPlus, Radar, Sparkles, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { Signal, SignalType } from "@/lib/crm/types";
-import { Badge, type BadgeColor, IconButton, Spinner } from "@/components/ui";
+import { Badge, type BadgeColor, IconButton, Spinner, cn } from "@/components/ui";
 import { useToast } from "@/components/feedback";
 
 /** The outreach angle Luna drafts from when you act on a signal. */
@@ -132,7 +132,7 @@ function SignalRow({
 }
 
 /** Today feed: recent New signals across the whole base. Renders nothing if empty. */
-export function SignalsFeed() {
+export function SignalsFeed({ className }: { className?: string }) {
   const [signals, setSignals] = useState<Signal[] | null>(null);
 
   useEffect(() => {
@@ -146,7 +146,7 @@ export function SignalsFeed() {
   if (!signals || signals.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-card">
+    <section className={cn("rounded-2xl border border-border bg-card p-4 shadow-card", className)}>
       <div className="mb-2.5 flex items-center gap-2">
         <Radar size={16} strokeWidth={1.9} className="text-accent-strong" />
         <h2 className="text-[14px] font-semibold text-fg">Signals</h2>
