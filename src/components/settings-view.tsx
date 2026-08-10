@@ -7,6 +7,7 @@ import { api } from "@/lib/client";
 import { Button, InlineAlert, PageHeader, Spinner } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
+import type { InboxSyncStatus } from "@/lib/crm/types";
 
 type Status = {
   configured: boolean;
@@ -18,6 +19,69 @@ type Status = {
   canSyncInbox?: boolean;
 };
 
+function timeAgo(iso?: string): string {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "never";
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+/** Progress readout for the inbox sync — how much is done, how far it reaches. */
+function SyncProgress({ s }: { s: InboxSyncStatus }) {
+  const pct = s.contactsTotal > 0 ? Math.round((s.contactsSynced / s.contactsTotal) * 100) : 0;
+  return (
+    <div className="mt-3 rounded-xl border border-border-soft bg-surface p-3.5">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <p className="text-[12.5px] font-medium text-fg">
+          {s.contactsSynced.toLocaleString()} of {s.contactsTotal.toLocaleString()} contacts synced
+        </p>
+        <p className="text-[12px] tabular-nums text-fg-subtle">
+          {s.contactsRemaining > 0 ? `${s.contactsRemaining.toLocaleString()} left` : "all caught up"}
+        </p>
+      </div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full bg-border-soft"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Contacts synced"
+      >
+        <div
+          className="h-full rounded-full bg-success transition-[width] duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Reaches back</dt>
+          <dd className="text-[13px] font-medium tabular-nums text-fg">{s.windowDays} days</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Emails on file</dt>
+          <dd className="text-[13px] font-medium tabular-nums text-fg">{s.emailsLogged.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Oldest email</dt>
+          <dd className="text-[13px] font-medium text-fg">
+            {s.oldestEmail ? formatDate(s.oldestEmail) : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Last checked</dt>
+          <dd className="text-[13px] font-medium text-fg">{timeAgo(s.lastSyncedAt)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const params = useSearchParams();
   const toast = useToast();
@@ -26,6 +90,7 @@ export function SettingsView() {
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<InboxSyncStatus | null>(null);
 
   const flag = params.get("google"); // connected | error | denied (from the OAuth callback)
 
@@ -37,9 +102,23 @@ export function SettingsView() {
     }
   }
 
+  async function loadSyncStatus() {
+    try {
+      setSyncStatus(await api<InboxSyncStatus>("/api/inbox/sync/status"));
+    } catch {
+      /* non-critical — the readout just won't show */
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
+
+  // Fetch the sync progress once we know read access is on (kept separate from the
+  // frequently-polled google/status so the contact scan doesn't slow the composer).
+  useEffect(() => {
+    if (status?.canSyncInbox) loadSyncStatus();
+  }, [status?.canSyncInbox]);
 
   async function syncNow() {
     setSyncing(true);
@@ -56,6 +135,7 @@ export function SettingsView() {
           description: `${r.contactsScanned} ${r.contactsScanned === 1 ? "contact" : "contacts"} checked`,
         });
       }
+      await loadSyncStatus();
     } catch (e) {
       toast.error("Sync failed", { description: (e as Error).message });
     } finally {
@@ -163,6 +243,8 @@ export function SettingsView() {
                       </a>
                     </InlineAlert>
                   </div>
+                ) : syncStatus ? (
+                  <SyncProgress s={syncStatus} />
                 ) : null}
               </div>
             </div>
