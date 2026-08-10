@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AirtableError } from "@/lib/airtable";
 import {
   getCompany,
+  getPipelineStages,
   listActivitiesByIds,
   listCareTouchesByCompany,
   listContactsByIds,
@@ -33,7 +34,7 @@ export default async function CompanyPage({
     throw e;
   }
 
-  const [contacts, deals, activities, tasks, careTouches, suggestedContacts, emailTemplates] =
+  const [contacts, deals, activities, tasks, careTouches, suggestedContacts, emailTemplates, stages] =
     await Promise.all([
       listContactsByIds(company.contactIds),
       listDealsByIds(company.dealIds),
@@ -42,6 +43,7 @@ export default async function CompanyPage({
       listCareTouchesByCompany(company.id),
       listSuggestedContactsForCompany(company, company.contactIds),
       listEmailTemplates(),
+      getPipelineStages(),
     ]);
 
   // Open/download status for the sent emails on this timeline.
@@ -58,6 +60,7 @@ export default async function CompanyPage({
       initialTasks={tasks}
       initialCareTouches={careTouches}
       emailTemplates={emailTemplates}
+      stages={stages}
       draftAngle={angle}
       openStatus={openStatus}
       highlightMessageId={email}

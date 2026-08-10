@@ -48,9 +48,11 @@ import type {
   Deal,
   EmailOpenStatus,
   EmailTemplate,
+  PipelineStage,
   Task,
 } from "@/lib/crm/types";
 import { TOUCH_TYPES } from "@/lib/crm/config";
+import { stageClassifier } from "@/lib/crm/pipeline";
 import {
   Button,
   EmptyState,
@@ -174,6 +176,7 @@ export function CompanyView({
   initialTasks,
   initialCareTouches,
   emailTemplates,
+  stages,
   draftAngle,
   openStatus,
   highlightMessageId,
@@ -187,6 +190,8 @@ export function CompanyView({
   initialCareTouches: CareTouch[];
   /** Templates offered in the email composer's picker. */
   emailTemplates: EmailTemplate[];
+  /** Live pipeline stages, so open/won/lost follows the configured kinds. */
+  stages: PipelineStage[];
   /** When set (via ?angle= deep link from a signal), open the composer pre-seeded. */
   draftAngle?: string;
   /** Open/download status per sent email (keyed by Gmail message id). */
@@ -241,7 +246,7 @@ export function CompanyView({
   const dealOptions = deals.map((d) => ({ id: d.id, name: d.name }));
 
   const isCustomer = CUSTOMER_STAGES.includes(company.lifecycleStage ?? "");
-  const openDeals = deals.filter((d) => d.stage && d.stage !== "Won" && d.stage !== "Lost");
+  const openDeals = deals.filter((d) => stageClassifier(stages).isOpen(d.stage));
   const openPipeline = openDeals.reduce((sum, d) => sum + (d.mrr ?? 0), 0);
   const lastDays = daysSince(company.lastMeaningfulContact);
   const lastTone = lastDays == null ? undefined : lastDays > 60 ? "danger" : lastDays > 30 ? "warn" : "success";

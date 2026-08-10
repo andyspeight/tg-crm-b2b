@@ -1,5 +1,6 @@
 import {
   activityRecency,
+  getPipelineStages,
   getSnoozedActionKeys,
   listCareBoard,
   listCompanies,
@@ -7,24 +8,26 @@ import {
   listOpenTasks,
 } from "@/lib/crm/data";
 import { computeNextActions } from "@/lib/crm/next-actions";
+import { stageClassifier } from "@/lib/crm/pipeline";
 import type { CareTouch } from "@/lib/crm/types";
 import { TodayView, type CareDueItem, type NurtureItem, type Vitals } from "@/components/today-view";
 
 export const dynamic = "force-dynamic";
 
 const ORG_NAME = "Travelgenix";
-const isOpen = (stage?: string) => stage !== "Won" && stage !== "Lost";
 
 export default async function TodayPage() {
-  const [tasks, companies, deals, recency, careBoard, snoozed] = await Promise.all([
+  const [tasks, companies, deals, recency, careBoard, snoozed, stages] = await Promise.all([
     listOpenTasks(),
     listCompanies(),
     listDeals(),
     activityRecency(),
     listCareBoard(),
     getSnoozedActionKeys(),
+    getPipelineStages(),
   ]);
   const snoozedSet = new Set(snoozed);
+  const isOpen = (stage?: string) => stageClassifier(stages).isOpen(stage);
 
   const nextTouchByCompany = new Map<string, CareTouch>();
   for (const { company, nextTouch } of careBoard) {

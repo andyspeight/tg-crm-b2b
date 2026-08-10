@@ -19,6 +19,8 @@ import {
 import { api } from "@/lib/client";
 import { STAGE_COLORS, STAGE_KINDS } from "@/lib/crm/config";
 import type { Deal, PipelineStage, StageKind } from "@/lib/crm/types";
+import type { PipelineForecast } from "@/lib/crm/pipeline";
+import { PipelineForecastPanel } from "@/components/pipeline-forecast";
 import { dealFlag } from "@/lib/deal-flags";
 import {
   Button,
@@ -75,11 +77,13 @@ export function PipelineView({
   companies,
   recency,
   initialStages,
+  forecast,
 }: {
   initial: Deal[];
   companies: CompanyOption[];
   recency: { byDeal: Record<string, string>; byCompany: Record<string, string> };
   initialStages: PipelineStage[];
+  forecast: PipelineForecast;
 }) {
   const [deals, setDeals] = useState<Deal[]>(initial);
   const [stages, setStages] = useState<PipelineStage[]>(initialStages);
@@ -236,6 +240,8 @@ export function PipelineView({
           </>
         }
       />
+
+      <PipelineForecastPanel forecast={forecast} />
 
       <div className="mt-4">
         <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">

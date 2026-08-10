@@ -1,7 +1,15 @@
 import "server-only";
 import { anthropic, textFrom } from "./client";
-import { activityRecency, listCareBoard, listCompanies, listDeals, listOpenTasks } from "@/lib/crm/data";
+import {
+  activityRecency,
+  getPipelineStages,
+  listCareBoard,
+  listCompanies,
+  listDeals,
+  listOpenTasks,
+} from "@/lib/crm/data";
 import { computeNextActions } from "@/lib/crm/next-actions";
+import { stageClassifier } from "@/lib/crm/pipeline";
 import type { CareTouch } from "@/lib/crm/types";
 
 /** Fast model — the digest is a narrative over facts we compute deterministically. */
@@ -10,6 +18,8 @@ const MODEL = "claude-sonnet-5";
 export interface DigestFacts {
   openDeals: number;
   openMrr: number;
+  /** Open deals that have an MRR value entered (so the UI can be honest about £0). */
+  dealsWithValue: number;
   closingThisWeek: { count: number; mrr: number };
   atRisk: { name: string; health: string }[];
   overdueCare: number;
@@ -26,16 +36,19 @@ export interface Digest {
 }
 
 const DAY = 86_400_000;
-const isOpen = (stage?: string) => stage !== "Won" && stage !== "Lost";
 
 export async function generateDigest(): Promise<Digest> {
-  const [companies, deals, recency, careBoard, tasks] = await Promise.all([
+  const [companies, deals, recency, careBoard, tasks, stages] = await Promise.all([
     listCompanies(),
     listDeals(),
     activityRecency(),
     listCareBoard(),
     listOpenTasks(),
+    getPipelineStages(),
   ]);
+  // Open/won/lost comes from the configured stage kinds, not hard-coded names.
+  const cls = stageClassifier(stages);
+  const isOpen = (stage?: string) => cls.isOpen(stage);
 
   const today = new Date().toISOString().slice(0, 10);
   const weekAhead = new Date(Date.now() + 7 * DAY).toISOString().slice(0, 10);
@@ -47,6 +60,7 @@ export async function generateDigest(): Promise<Digest> {
 
   const openDealList = deals.filter((d) => isOpen(d.stage));
   const openMrr = openDealList.reduce((t, d) => t + (d.mrr ?? 0), 0);
+  const dealsWithValue = openDealList.filter((d) => (d.mrr ?? 0) > 0).length;
 
   const closing = openDealList.filter(
     (d) => d.expectedCloseDate && d.expectedCloseDate >= today && d.expectedCloseDate <= weekAhead,
@@ -79,7 +93,14 @@ export async function generateDigest(): Promise<Digest> {
   }).length;
 
   const nextActions = computeNextActions(
-    { companies, deals, nextTouchByCompany, lastByCompany: recency.byCompany, lastByDeal: recency.byDeal },
+    {
+      companies,
+      deals,
+      nextTouchByCompany,
+      lastByCompany: recency.byCompany,
+      lastByDeal: recency.byDeal,
+      isOpen,
+    },
     6,
   );
   const topPriorities = nextActions.map((a) => ({ label: a.label, company: a.companyName }));
@@ -87,6 +108,7 @@ export async function generateDigest(): Promise<Digest> {
   const facts: DigestFacts = {
     openDeals: openDealList.length,
     openMrr,
+    dealsWithValue,
     closingThisWeek: { count: closing.length, mrr: closing.reduce((t, d) => t + (d.mrr ?? 0), 0) },
     atRisk,
     overdueCare,

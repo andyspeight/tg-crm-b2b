@@ -29,6 +29,7 @@ type Digest = {
   facts: {
     openDeals: number;
     openMrr: number;
+    dealsWithValue: number;
     closingThisWeek: { count: number; mrr: number };
     atRisk: { name: string; health: string }[];
     overdueCare: number;
@@ -99,7 +100,12 @@ export function DigestView() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile
               label="Open pipeline"
-              value={`${formatMoney(digest.facts.openMrr)}/mo`}
+              value={digest.facts.dealsWithValue > 0 ? `${formatMoney(digest.facts.openMrr)}/mo` : "—"}
+              sub={
+                digest.facts.dealsWithValue > 0
+                  ? `${digest.facts.dealsWithValue} of ${digest.facts.openDeals} priced`
+                  : "no deal values set"
+              }
               icon={<TrendingUp size={16} strokeWidth={1.9} />}
             />
             <StatTile
