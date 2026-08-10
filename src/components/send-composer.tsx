@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CheckCircle2, Paperclip, Plug, Search, Send, Sparkles, Upload, X } from "lucide-react";
+import { CalendarClock, CheckCircle2, Paperclip, Plug, Search, Send, Sparkles, Upload, X } from "lucide-react";
 import { api } from "@/lib/client";
-import type { Contact, EmailTemplate } from "@/lib/crm/types";
+import type { Contact, EmailTemplate, MeetingConfig } from "@/lib/crm/types";
 import { Button, Field, IconButton, InlineAlert, Input, Select, Spinner } from "@/components/ui";
-import { RichTextEditor, htmlToText, plainToHtml } from "@/components/rich-text";
+import { RichTextEditor, htmlToText, plainToHtml, type RichTextEditorHandle } from "@/components/rich-text";
+import { bookingLink, meetingButtonHtml, meetingConfigReady } from "@/lib/meetings";
 import { fillMergeTags, firstNameOf } from "@/lib/email/merge";
 import { useToast } from "@/components/feedback";
 
@@ -88,7 +89,25 @@ export function SendComposer({
   const [error, setError] = useState("");
   const [sentTo, setSentTo] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
+  const [meetingCfg, setMeetingCfg] = useState<MeetingConfig | null>(null);
+  const [meetingMenu, setMeetingMenu] = useState(false);
   const toast = useToast();
+
+  // Load the scheduler config once, so "Insert meeting" can offer booking links.
+  useEffect(() => {
+    api<MeetingConfig>("/api/meetings")
+      .then((c) => setMeetingCfg(c))
+      .catch(() => setMeetingCfg(null));
+  }, []);
+
+  function insertMeeting(opt: MeetingConfig["options"][number]) {
+    if (!meetingCfg) return;
+    const url = bookingLink(meetingCfg, opt);
+    if (!url) return;
+    editorRef.current?.insertHtml(`<p>${meetingButtonHtml(opt.label, url)}</p>`);
+    setMeetingMenu(false);
+  }
 
   const activeTemplate = useMemo(
     () => template ?? templates?.find((t) => t.id === templateId) ?? null,
@@ -470,20 +489,59 @@ export function SendComposer({
               </Field>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
                   <span className="text-[13px] font-medium text-fg-muted">Message</span>
-                  {contact ? (
-                    <button
-                      type="button"
-                      onClick={personalise}
-                      disabled={personalising}
-                      className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong hover:underline disabled:opacity-50"
-                    >
-                      {personalising ? <Spinner /> : <Sparkles size={13} strokeWidth={2} />} Personalise for {firstNameOf(contact.name) || "them"}
-                    </button>
-                  ) : null}
+                  <div className="flex items-center gap-3">
+                    {meetingCfg && meetingConfigReady(meetingCfg) ? (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMeetingMenu((v) => !v)}
+                          className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong hover:underline"
+                        >
+                          <CalendarClock size={13} strokeWidth={2} /> Insert meeting
+                        </button>
+                        {meetingMenu ? (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMeetingMenu(false)} aria-hidden />
+                            <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-float">
+                              {meetingCfg.options.map((o) => (
+                                <button
+                                  key={o.id}
+                                  type="button"
+                                  onClick={() => insertMeeting(o)}
+                                  className="block w-full px-3 py-2 text-left transition-colors hover:bg-muted"
+                                >
+                                  <span className="block text-[13px] font-medium text-fg">{o.label}</span>
+                                  <span className="block text-[11.5px] text-fg-subtle">
+                                    {o.mins ? `${o.mins} min · ` : ""}booking link
+                                  </span>
+                                </button>
+                              ))}
+                              <Link
+                                href="/meetings"
+                                className="block border-t border-border-soft px-3 py-2 text-[12px] text-fg-subtle hover:bg-muted hover:text-fg"
+                              >
+                                Manage meeting links →
+                              </Link>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {contact ? (
+                      <button
+                        type="button"
+                        onClick={personalise}
+                        disabled={personalising}
+                        className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong hover:underline disabled:opacity-50"
+                      >
+                        {personalising ? <Spinner /> : <Sparkles size={13} strokeWidth={2} />} Personalise for {firstNameOf(contact.name) || "them"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <RichTextEditor value={body} onChange={setBody} minHeight={300} />
+                <RichTextEditor ref={editorRef} value={body} onChange={setBody} minHeight={300} />
               </div>
 
               {/* Attachments — from the template (tracked links) + ad-hoc uploads */}

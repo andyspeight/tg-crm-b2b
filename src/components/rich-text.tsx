@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { Bold, Heading, Italic, Link2, List, ListOrdered, Quote, RemoveFormatting, Underline } from "lucide-react";
 import { cn } from "@/components/ui";
 
@@ -50,17 +50,21 @@ const COMMANDS: Cmd[] = [
   { icon: RemoveFormatting, label: "Clear formatting", run: (e) => e("removeFormat") },
 ];
 
-export function RichTextEditor({
-  value,
-  onChange,
-  placeholder,
-  minHeight = 320,
-}: {
-  value: string;
-  onChange: (html: string) => void;
-  placeholder?: string;
-  minHeight?: number;
-}) {
+export type RichTextEditorHandle = {
+  /** Insert HTML at the caret (or the end if never focused), then emit. */
+  insertHtml: (html: string) => void;
+  focus: () => void;
+};
+
+export const RichTextEditor = forwardRef<
+  RichTextEditorHandle,
+  {
+    value: string;
+    onChange: (html: string) => void;
+    placeholder?: string;
+    minHeight?: number;
+  }
+>(function RichTextEditor({ value, onChange, placeholder, minHeight = 320 }, handleRef) {
   const ref = useRef<HTMLDivElement>(null);
 
   // Sync external value in only when it differs, so typing never jumps the caret.
@@ -72,6 +76,27 @@ export function RichTextEditor({
   function emit() {
     onChange(ref.current?.innerHTML ?? "");
   }
+
+  useImperativeHandle(handleRef, () => ({
+    focus: () => ref.current?.focus(),
+    insertHtml: (html: string) => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      // If the selection isn't inside the editor, drop the caret at the end so
+      // the insert always lands in the body.
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+      document.execCommand("insertHTML", false, html);
+      emit();
+    },
+  }));
 
   function exec(command: string, arg?: string) {
     ref.current?.focus();
@@ -118,7 +143,7 @@ export function RichTextEditor({
       />
     </div>
   );
-}
+});
 
 function ToolbarButton({
   icon: Icon,
