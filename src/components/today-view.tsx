@@ -79,7 +79,7 @@ export function TodayView({
   const needCount = nextActions.length;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="space-y-5">
       <div>
         <h1 className="text-[26px] font-semibold tracking-tight text-fg">
           {greeting}
