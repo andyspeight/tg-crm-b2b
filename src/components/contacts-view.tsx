@@ -599,11 +599,17 @@ export function ContactsView({
       <ContactEmailsDrawer
         contactId={drawerContactId}
         highlightMessageId={drawerHighlight}
+        companies={companies}
         onClose={closeDrawer}
         onReply={(c) => {
           closeDrawer();
           setEmailContact(c);
         }}
+        onEnrol={(c) => {
+          closeDrawer();
+          setEnrolTargets([enrolTarget(c)]);
+        }}
+        onChanged={refresh}
       />
 
       <MergePeopleModal

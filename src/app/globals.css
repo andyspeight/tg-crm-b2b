@@ -165,6 +165,25 @@ body {
 .luna-toast-in {
   animation: lunaToastIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+@keyframes lunaSlideIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+/* Right-anchored slide-over panel entrance. */
+.luna-slide-in {
+  animation: lunaSlideIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .luna-slide-in {
+    animation: lunaFade 160ms ease-out both;
+  }
+}
 .luna-toast-out {
   animation: lunaToastOut 160ms ease-in both;
 }
