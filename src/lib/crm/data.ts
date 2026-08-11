@@ -17,6 +17,7 @@ import {
   CARE_CADENCES,
   SIZE_BANDS,
   DEAL_SOURCES,
+  CONTACT_STATUSES,
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
   ACTIVITY_SOURCES,
@@ -259,6 +260,7 @@ function toContact(rec: AirtableRecord): Contact {
     email: str(f[F.email]),
     alternateEmails: splitLines(str(f[F.alternateEmails])),
     phone: normalizePhone(str(f[F.phone])),
+    status: str(f[F.status]) as Contact["status"],
     linkedin: str(f[F.linkedin]),
     marketingOptIn: str(f[F.marketingOptIn]) as Contact["marketingOptIn"],
     notes: str(f[F.notes]),
@@ -342,6 +344,7 @@ function buildContactFields(input: ContactInput, partial: boolean): Record<strin
     f[F.alternateEmails] = list.length ? list.join("\n") : null;
   }
   if (has("phone")) f[F.phone] = normalizePhone(text(input.phone)) ?? null;
+  if (has("status")) f[F.status] = enumOrNull(input.status, CONTACT_STATUSES, "status");
   if (has("linkedin")) f[F.linkedin] = text(input.linkedin);
   if (has("marketingOptIn"))
     f[F.marketingOptIn] = enumOrNull(input.marketingOptIn, MARKETING_OPT_IN, "marketing opt-in");

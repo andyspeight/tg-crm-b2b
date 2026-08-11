@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, type BadgeColor } from "@/components/ui";
-import type { AccountHealth, DealStage, LifecycleStage } from "@/lib/crm/types";
+import type { AccountHealth, ContactStatus, DealStage, LifecycleStage } from "@/lib/crm/types";
 
 const HEALTH: Record<string, BadgeColor> = { Green: "success", Amber: "warning", Red: "danger" };
 export function healthColor(value?: string): BadgeColor {
@@ -23,6 +23,13 @@ const LIFECYCLE: Record<string, BadgeColor> = {
 export function LifecycleBadge({ value }: { value?: LifecycleStage }) {
   if (!value) return null;
   return <Badge color={LIFECYCLE[value] ?? "neutral"}>{value}</Badge>;
+}
+
+// A person's own lead/customer status (for individuals not tied to an account).
+const CONTACT_STATUS: Record<string, BadgeColor> = { Lead: "accent", Customer: "success" };
+export function ContactStatusBadge({ value }: { value?: ContactStatus }) {
+  if (!value) return null;
+  return <Badge color={CONTACT_STATUS[value] ?? "neutral"}>{value}</Badge>;
 }
 
 // A deliberate gradient so the pipeline reads as progress, not a grey wall.
