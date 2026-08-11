@@ -2748,17 +2748,35 @@ export async function listContactEmails(contactId: string, limit = 40): Promise<
     .slice(0, limit);
 }
 
-/** A person's full timeline — every activity type, newest first. Powers the 360 drawer. */
+/**
+ * A person's full timeline — every activity type, newest first. Powers the 360
+ * drawer. Fetches the contact's activities precisely via its reverse-link ids
+ * (chunked) rather than scanning the whole Activities table, so it stays correct
+ * once the base holds tens of thousands of synced/back-filled emails.
+ */
 export async function listContactActivities(contactId: string, limit = 80): Promise<Activity[]> {
   if (!contactId) return [];
+  const contact = await getRecord(AIRTABLE_BASE_ID, TABLES.contacts, contactId).catch(() => null);
+  if (!contact) return [];
+  // Prefer the most-recently-linked; bound total work to a few requests.
+  const ids = idList(contact.fields[FIELDS.contacts.activities]).slice(-500);
+  if (ids.length === 0) return [];
+
   const F = FIELDS.activities;
-  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
-    fields: [F.date, F.type, F.summary, F.rawContent, F.direction, F.gmailMessageId, F.source, F.company, F.contact],
-    maxRecords: 5000,
-  });
-  return records
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  const batches = await Promise.all(
+    chunks.map((chunk) =>
+      listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+        filterByFormula: `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(",")})`,
+        fields: [F.date, F.type, F.summary, F.rawContent, F.direction, F.gmailMessageId, F.source, F.company, F.contact],
+        maxRecords: chunk.length,
+      }).catch(() => []),
+    ),
+  );
+  return batches
+    .flat()
     .map(toActivity)
-    .filter((a) => a.contactId === contactId)
     .sort((a, b) => (b.date || b.createdTime || "").localeCompare(a.date || a.createdTime || ""))
     .slice(0, limit);
 }
