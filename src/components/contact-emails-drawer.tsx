@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Eye,
   HeartHandshake,
+  History,
   LifeBuoy,
   Mail,
   Megaphone,
@@ -32,6 +33,7 @@ import { formatDateTime } from "@/lib/format";
 import type { Activity, ActivityType, Contact, EmailOpenStatus } from "@/lib/crm/types";
 
 type Payload = { contact: Contact; activities: Activity[]; opens?: Record<string, EmailOpenStatus> };
+type OlderMsg = { id: string; subject: string; date: string; direction: "Inbound" | "Outbound"; body: string };
 
 const ACTIVITY_ICON: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   Email: Mail,
@@ -84,6 +86,9 @@ export function ContactEmailsDrawer({
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [older, setOlder] = useState<OlderMsg[] | null>(null);
+  const [olderState, setOlderState] = useState<"idle" | "loading" | "error">("idle");
+  const [olderError, setOlderError] = useState("");
 
   async function load() {
     if (!contactId) return;
@@ -99,6 +104,9 @@ export function ContactEmailsDrawer({
     setError("");
     setEditing(false);
     setExpanded(new Set());
+    setOlder(null);
+    setOlderState("idle");
+    setOlderError("");
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
@@ -125,6 +133,19 @@ export function ContactEmailsDrawer({
     setEditing(false);
     await load();
     onChanged?.();
+  }
+
+  async function loadOlder() {
+    setOlderState("loading");
+    setOlderError("");
+    try {
+      const r = await api<{ messages: OlderMsg[] }>(`/api/contacts/${contactId}/older-emails`);
+      setOlder(r.messages ?? []);
+      setOlderState("idle");
+    } catch (e) {
+      setOlderError(e instanceof Error ? e.message : "Couldn't load older mail from Gmail");
+      setOlderState("error");
+    }
   }
 
   return createPortal(
@@ -351,6 +372,90 @@ export function ContactEmailsDrawer({
                     })}
                   </ul>
                 )}
+
+                {/* Older correspondence — pulled live from Gmail, never stored */}
+                {contact?.email ? (
+                  <div className="mt-4 border-t border-border-soft pt-4">
+                    {older === null ? (
+                      <button
+                        type="button"
+                        onClick={loadOlder}
+                        disabled={olderState === "loading"}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12.5px] font-medium text-fg-muted hover:bg-muted disabled:opacity-60"
+                      >
+                        {olderState === "loading" ? <Spinner /> : <History size={14} strokeWidth={1.9} />}
+                        Load older from Gmail
+                      </button>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                            Older — live from Gmail
+                          </span>
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-fg-subtle">not stored</span>
+                        </div>
+                        {older.length === 0 ? (
+                          <p className="text-[13px] text-fg-subtle">No older mail found in Gmail.</p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {older.map((m) => {
+                              const inbound = m.direction === "Inbound";
+                              const html = looksLikeHtml(m.body) ? sanitizeEmailHtml(m.body) : "";
+                              const text = html ? "" : readableEmailText(m.body);
+                              const isOpen = expanded.has(m.id);
+                              return (
+                                <li key={m.id} className="rounded-xl border border-border-soft bg-surface p-3">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium",
+                                        inbound ? "bg-accent/10 text-accent-strong" : "bg-muted text-fg-muted",
+                                      )}
+                                    >
+                                      {inbound ? <ArrowDownLeft size={12} strokeWidth={2} /> : <ArrowUpRight size={12} strokeWidth={2} />}
+                                      {inbound ? "Received" : "Sent"}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-fg">
+                                      {m.subject || "(no subject)"}
+                                    </span>
+                                    <span className="tnum shrink-0 text-[11.5px] text-fg-subtle">{formatDateTime(m.date)}</span>
+                                  </div>
+                                  {html ? (
+                                    <div
+                                      className={cn("tg-email mt-2 overflow-hidden", !isOpen && "max-h-40")}
+                                      dangerouslySetInnerHTML={{ __html: html }}
+                                    />
+                                  ) : text ? (
+                                    <p className={cn("mt-2 whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-muted", !isOpen && "line-clamp-4")}>
+                                      {text}
+                                    </p>
+                                  ) : null}
+                                  {html || (text && text.length > 240) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpanded((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(m.id)) next.delete(m.id);
+                                          else next.add(m.id);
+                                          return next;
+                                        })
+                                      }
+                                      className="mt-1 text-[12px] font-medium text-accent-strong hover:underline"
+                                    >
+                                      {isOpen ? "Show less" : "Show more"}
+                                    </button>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                    {olderState === "error" ? <p className="mt-2 text-[12px] text-danger">{olderError}</p> : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

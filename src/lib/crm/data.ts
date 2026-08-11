@@ -782,6 +782,41 @@ export async function listEmailActivities(opts?: { sinceDays?: number }): Promis
   return records.map(toActivity);
 }
 
+/**
+ * Retention: delete synced/sent *email* activities older than the window (12 months
+ * by default). Bounded by a wall-clock budget so a cron tick stays inside the
+ * serverless limit; repeated runs converge. Manual notes, calls, meetings, demos
+ * and care touches are kept regardless of age — Gmail remains the archive for the
+ * older mail, reachable on demand from the 360.
+ */
+export async function pruneOldEmailActivities(
+  olderThanDays = 365,
+  opts?: { budgetMs?: number; maxDeletes?: number },
+): Promise<{ deleted: number; more: boolean }> {
+  const F = FIELDS.activities;
+  const budgetMs = opts?.budgetMs ?? 240_000;
+  const maxDeletes = opts?.maxDeletes ?? 20_000;
+  const days = Math.max(1, Math.floor(olderThanDays));
+  const filter = `AND({${F.type}}='Email', IS_BEFORE({${F.date}}, DATEADD(TODAY(), -${days}, 'days')))`;
+  const started = Date.now();
+  let deleted = 0;
+  let lastFull = false;
+  while (deleted < maxDeletes && Date.now() - started < budgetMs) {
+    const batch = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+      filterByFormula: filter,
+      fields: [F.date],
+      maxRecords: 200,
+    });
+    if (batch.length === 0) {
+      lastFull = false;
+      break;
+    }
+    deleted += await deleteRecords(AIRTABLE_BASE_ID, TABLES.activities, batch.map((r) => r.id));
+    lastFull = batch.length >= 200;
+  }
+  return { deleted, more: lastFull };
+}
+
 export async function createActivity(input: ActivityInput): Promise<Activity> {
   const F = FIELDS.activities;
   const fields = buildActivityFields(input, false);
