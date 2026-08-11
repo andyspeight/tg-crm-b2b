@@ -121,9 +121,12 @@ async function processContacts(
       completed = false;
       console.error(`[inbox-sync] failed for ${contact.email}:`, e);
     }
-    // Only stamp a backfill as done when the contact finished — a run cut short by
-    // the time budget is retried next pass (de-dup makes that idempotent). The
-    // rolling sync stamps regardless so its round-robin keeps advancing.
+    // Stamp the contact done even when the time budget (or an error) cut it short.
+    // De-dup makes re-runs idempotent, but the point of best-effort stamping is
+    // forward progress: a single deep mailbox that can't finish in one 270s pass
+    // would otherwise be retried at the head of every pass forever, stalling the
+    // whole backfill on that one contact. Stamping it means the pass captures its
+    // most-recent N messages and moves on; the rolling sync backfills the rest.
     if (completed || opts.stampOnPartial) {
       const patch =
         opts.stampField === "inboxBackfilledAt"
@@ -189,7 +192,7 @@ export async function runInboxBackfill(): Promise<InboxBackfillSummary> {
       windowDays: cap("INBOX_BACKFILL_WINDOW_DAYS", 3650, 3650),
       perContact: cap("INBOX_BACKFILL_MESSAGES_PER_CONTACT", 300, 1000),
       stampField: "inboxBackfilledAt",
-      stampOnPartial: false,
+      stampOnPartial: true,
     },
     base,
     seen,
