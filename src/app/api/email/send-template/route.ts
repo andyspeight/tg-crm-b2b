@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity, setTrackingMessageId } from "@/lib/crm/data";
+import { createActivity, getEmailSignature, setTrackingMessageId } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich, type RichAttachment } from "@/lib/google/gmail";
 import { applyEmailTracking } from "@/lib/email/tracking";
+import { appendSignatureHtml } from "@/lib/email/signature";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -86,10 +87,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Pixel for open tracking; template attachments go out as tracked links;
-    // ad-hoc files uploaded in the composer ride along directly.
+    // Append the operator's signature (idempotent — skipped if the body already
+    // carries one), then add the tracking pixel/links on top.
+    const signedHtml = appendSignatureHtml(html, await getEmailSignature().catch(() => ""));
     const { html: trackedHtml, attachments, trackingIds } = await applyEmailTracking({
-      html,
+      html: signedHtml,
       subject,
       recipient: to,
       companyId,

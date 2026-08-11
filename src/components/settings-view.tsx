@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, History, Inbox, Mail, Plug, RefreshCw } from "lucide-react";
+import { CheckCircle2, History, Inbox, Mail, PenLine, Plug, RefreshCw } from "lucide-react";
 import { api } from "@/lib/client";
 import { Button, InlineAlert, PageHeader, Spinner } from "@/components/ui";
+import { RichTextEditor } from "@/components/rich-text";
 import { useConfirm, useToast } from "@/components/feedback";
 import { formatDate } from "@/lib/format";
 import type { InboxBackfillStatus, InboxSyncStatus } from "@/lib/crm/types";
@@ -144,6 +145,8 @@ export function SettingsView() {
   const [backfillStatus, setBackfillStatus] = useState<InboxBackfillStatus | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillNote, setBackfillNote] = useState<string>("");
+  const [signature, setSignature] = useState<string | null>(null);
+  const [savingSig, setSavingSig] = useState(false);
 
   const flag = params.get("google"); // connected | error | denied (from the OAuth callback)
 
@@ -163,8 +166,34 @@ export function SettingsView() {
     }
   }
 
+  async function loadSignature() {
+    try {
+      const r = await api<{ html: string }>("/api/settings/signature");
+      setSignature(r.html ?? "");
+    } catch {
+      setSignature(""); // editable even if the fetch hiccups
+    }
+  }
+
+  async function saveSignature() {
+    setSavingSig(true);
+    try {
+      const r = await api<{ html: string }>("/api/settings/signature", {
+        method: "PUT",
+        body: JSON.stringify({ html: signature ?? "" }),
+      });
+      setSignature(r.html ?? "");
+      toast.success("Signature saved — it'll be added to every email you send.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't save the signature");
+    } finally {
+      setSavingSig(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadSignature();
   }, []);
 
   async function loadBackfillStatus() {
@@ -412,6 +441,33 @@ export function SettingsView() {
                 </Button>
               </a>
             </div>
+          )}
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+        <div className="flex items-center gap-2 border-b border-border-soft px-5 py-3.5">
+          <PenLine size={16} strokeWidth={1.9} className="text-accent-strong" />
+          <h2 className="text-[14px] font-semibold text-fg">Email signature</h2>
+        </div>
+        <div className="space-y-3 p-5">
+          <p className="text-[13px] text-fg-subtle">
+            Added automatically to the end of every email you send from Luna Desk — one-off emails and sequence
+            steps alike. You don&apos;t need to type it into each message.
+          </p>
+          {signature === null ? (
+            <div className="flex items-center gap-2 text-[13px] text-fg-subtle">
+              <Spinner /> Loading…
+            </div>
+          ) : (
+            <>
+              <RichTextEditor value={signature} onChange={setSignature} minHeight={180} />
+              <div className="flex justify-end">
+                <Button size="sm" onClick={saveSignature} disabled={savingSig}>
+                  {savingSig ? <Spinner /> : null} Save signature
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </section>

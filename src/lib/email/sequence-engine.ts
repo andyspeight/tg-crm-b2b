@@ -14,6 +14,7 @@ import {
   createActivity,
   createEnrollmentRecord,
   getContact,
+  getEmailSignature,
   getEmailTemplate,
   getSequence,
   hasLiveEnrollment,
@@ -27,6 +28,7 @@ import type { Sequence, SequenceEnrollment } from "@/lib/crm/types";
 import { getAccessToken, getConnection } from "@/lib/google/oauth";
 import { getMessageMeta, sendGmailRich, threadHasReplyFrom } from "@/lib/google/gmail";
 import { applyEmailTracking } from "@/lib/email/tracking";
+import { appendSignatureHtml } from "@/lib/email/signature";
 import { fillMergeTags, firstNameOf } from "@/lib/email/merge";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -212,13 +214,15 @@ async function processEnrollment(
   const vars = { firstName: firstNameOf(contact.name), company: contact.companyName };
   const filledSubject = fillMergeTags(template.subject || "", vars).trim() || "(no subject)";
   const filledHtml = fillMergeTags(template.body || "", vars);
+  // Append the operator's signature (idempotent) so sequence steps sign off too.
+  const signedHtml = appendSignatureHtml(filledHtml, await getEmailSignature().catch(() => ""));
 
   const isFollowUp = !!enrollment.threadId;
   const subject = isFollowUp ? replySubject(enrollment.threadSubject || filledSubject) : filledSubject;
 
   // Pixel for open tracking; template attachments go out as tracked links.
   const { html, attachments, trackingIds } = await applyEmailTracking({
-    html: filledHtml,
+    html: signedHtml,
     subject,
     recipient: contact.email,
     companyId: enrollment.companyId,
