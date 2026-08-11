@@ -82,6 +82,7 @@ import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequen
 import { CompanySignals } from "@/components/signals-view";
 import { StartOnboardingModal } from "@/components/start-onboarding-modal";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { isOpenSignalNote, looksLikeHtml, readableEmailText, sanitizeEmailHtml } from "@/lib/email-render";
 
 const ONBOARDING_URL = process.env.NEXT_PUBLIC_ONBOARDING_URL;
 
@@ -255,6 +256,8 @@ export function CompanyView({
   const lastTone = lastDays == null ? undefined : lastDays > 60 ? "danger" : lastDays > 30 ? "warn" : "success";
   const nextTouch = careTouches.find((t) => t.status === "Scheduled");
   const careHistory = careTouches.filter((t) => t.status !== "Scheduled");
+  // Hide the auto "📬 Opened …" notes — the email's own Opened badge conveys it.
+  const timelineActivities = activities.filter((a) => !isOpenSignalNote(a));
   const showCare = isCustomer || careTouches.length > 0;
   const hasSupport =
     company.supportUpdated != null ||
@@ -792,7 +795,7 @@ export function CompanyView({
           {/* Activity timeline */}
           <Section
             title="Activity"
-            count={activities.length}
+            count={timelineActivities.length}
             action={
               <Button variant="secondary" size="sm" onClick={() => setLoggingActivity(true)}>
                 <Plus size={15} strokeWidth={2} /> Log activity
@@ -800,9 +803,11 @@ export function CompanyView({
             }
           >
             {(() => {
-              const hasDirectional = activities.some((a) => a.direction);
+              const hasDirectional = timelineActivities.some((a) => a.direction);
               const shownActivities =
-                activityDir === "all" ? activities : activities.filter((a) => a.direction === activityDir);
+                activityDir === "all"
+                  ? timelineActivities
+                  : timelineActivities.filter((a) => a.direction === activityDir);
               return (
                 <>
                   {hasDirectional ? (
@@ -830,7 +835,7 @@ export function CompanyView({
                       ))}
                     </div>
                   ) : null}
-                  {activities.length === 0 ? (
+                  {timelineActivities.length === 0 ? (
                     <EmptyState
                       title="No activity yet"
                       hint="Log a note, call, meeting or demo to start the timeline."
@@ -862,11 +867,18 @@ export function CompanyView({
                                   {formatDateTime(a.date)}
                                 </span>
                               </div>
-                        {a.rawContent ? (
-                          <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-fg-muted">
-                            {a.rawContent}
-                          </p>
-                        ) : null}
+                        {(() => {
+                          const raw = a.rawContent || "";
+                          if (!raw) return null;
+                          const html = a.type === "Email" && looksLikeHtml(raw) ? sanitizeEmailHtml(raw) : "";
+                          return html ? (
+                            <div className="tg-email mt-0.5" dangerouslySetInnerHTML={{ __html: html }} />
+                          ) : (
+                            <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-fg-muted">
+                              {readableEmailText(raw)}
+                            </p>
+                          );
+                        })()}
                         <p className="mt-1 text-[11px] text-fg-subtle">
                           {a.type}
                           {a.source && a.source !== "Manual" ? ` · ${a.source}` : ""}
