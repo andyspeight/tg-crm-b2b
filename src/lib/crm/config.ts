@@ -46,6 +46,10 @@ export const LIFECYCLE_STAGES = [
   "Lost / Churned",
 ] as const;
 
+// A person's own lead/customer status — for individuals who aren't (yet) tied to
+// a company account. Blank means "inherit from the linked company's lifecycle".
+export const CONTACT_STATUSES = ["Lead", "Customer"] as const;
+
 export const ACCOUNT_HEALTH = ["Green", "Amber", "Red"] as const;
 
 export const CARE_CADENCES = ["Monthly", "Quarterly", "None"] as const;
@@ -231,6 +235,7 @@ export const FIELDS = {
     email: "Email",
     alternateEmails: "Alternate Emails",
     phone: "Phone",
+    status: "Status",
     linkedin: "LinkedIn URL",
     marketingOptIn: "Marketing Opt-In",
     notes: "Notes",

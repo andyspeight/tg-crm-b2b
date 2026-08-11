@@ -6,6 +6,7 @@ import {
   CARE_CADENCES,
   SIZE_BANDS,
   DEAL_SOURCES,
+  CONTACT_STATUSES,
   MARKETING_OPT_IN,
   ACTIVITY_TYPES,
   ACTIVITY_SOURCES,
@@ -41,6 +42,7 @@ export interface PipelineStage {
   kind: StageKind;
 }
 export type MarketingOptIn = (typeof MARKETING_OPT_IN)[number];
+export type ContactStatus = (typeof CONTACT_STATUSES)[number];
 export type SupportSentiment = "Improving" | "Stable" | "Declining";
 
 export interface Company {
@@ -95,6 +97,8 @@ export interface Contact {
   /** Other addresses for the same person, accumulated when duplicates are merged. */
   alternateEmails?: string[];
   phone?: string;
+  /** This person's own lead/customer status; blank = inherit the company's lifecycle. */
+  status?: ContactStatus;
   linkedin?: string;
   marketingOptIn?: MarketingOptIn;
   notes?: string;

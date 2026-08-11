@@ -18,7 +18,7 @@ import {
   Monogram,
   PageHeader,
 } from "@/components/ui";
-import { LifecycleBadge } from "@/components/badges";
+import { ContactStatusBadge, LifecycleBadge } from "@/components/badges";
 import { ContactForm, type CompanyOption } from "@/components/forms";
 import { AddToSequenceModal, type EnrolTarget } from "@/components/add-to-sequence";
 import { SendComposer } from "@/components/send-composer";
@@ -39,6 +39,12 @@ function group(lc?: string): Group {
   if (lc && CUSTOMER_LC.has(lc)) return "customer";
   if (lc && LEAD_LC.has(lc)) return "lead";
   return "other";
+}
+/** The list a person belongs to: their own status wins, else the company's lifecycle. */
+function effGroup(c: Contact): Group {
+  if (c.status === "Customer") return "customer";
+  if (c.status === "Lead") return "lead";
+  return group(c.companyLifecycle);
 }
 type Tab = "all" | "customer" | "lead" | "nocompany";
 type Sort = "name" | "recent" | "company";
@@ -139,7 +145,7 @@ export function ContactsView({
     let lead = 0;
     let nocompany = 0;
     for (const c of contacts) {
-      const g = group(c.companyLifecycle);
+      const g = effGroup(c);
       if (g === "customer") customer++;
       else if (g === "lead") lead++;
       if (!c.companyId) nocompany++;
@@ -153,7 +159,7 @@ export function ContactsView({
         ? contacts
         : tab === "nocompany"
           ? contacts.filter((c) => !c.companyId)
-          : contacts.filter((c) => group(c.companyLifecycle) === tab);
+          : contacts.filter((c) => effGroup(c) === tab);
     return [...rows].sort((a, b) => {
       switch (sort) {
         case "recent":
@@ -429,7 +435,9 @@ export function ContactsView({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {c.companyLifecycle ? (
+                      {c.status ? (
+                        <ContactStatusBadge value={c.status} />
+                      ) : c.companyLifecycle ? (
                         <LifecycleBadge value={c.companyLifecycle} />
                       ) : (
                         <span className="text-fg-subtle">—</span>
@@ -518,7 +526,11 @@ export function ContactsView({
                             {c.companyName || "Company"}
                           </Link>
                         ) : null}
-                        {c.companyLifecycle ? <LifecycleBadge value={c.companyLifecycle} /> : null}
+                        {c.status ? (
+                          <ContactStatusBadge value={c.status} />
+                        ) : c.companyLifecycle ? (
+                          <LifecycleBadge value={c.companyLifecycle} />
+                        ) : null}
                       </div>
                       <div className="mt-1.5 space-y-0.5 text-[13px] text-fg-muted">
                         {c.email ? (

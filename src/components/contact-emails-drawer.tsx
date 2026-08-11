@@ -86,6 +86,7 @@ export function ContactEmailsDrawer({
         {contact ? (
           <>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-xl border border-border-soft bg-surface p-3">
+              <Detail label="Status">{contact.status}</Detail>
               <Detail label="Role">{contact.role}</Detail>
               <Detail label="Phone">{contact.phone}</Detail>
               <Detail label="Marketing opt-in">{contact.marketingOptIn}</Detail>

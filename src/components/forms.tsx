@@ -300,14 +300,9 @@ export function ContactForm({
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
-  // Which list they're in (Leads vs Customers) — derived from their account's
-  // lifecycle, editable here. Sets the account status on save.
-  const [status, setStatus] = useState<"" | "customer" | "lead">(() => {
-    const lc = initial?.companyLifecycle;
-    if (lc === "Customer" || lc === "At Risk") return "customer";
-    if (lc === "Prospect" || lc === "Engaged" || lc === "Opportunity") return "lead";
-    return "";
-  });
+  // This person's own lead/customer status. Blank means "inherit from their
+  // company's lifecycle" (the People list falls back to that when it's unset).
+  const [status, setStatus] = useState<"" | "Lead" | "Customer">(() => initial?.status ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showDetail, setShowDetail] = useState(
@@ -334,7 +329,7 @@ export function ContactForm({
     setSaving(true);
     setError("");
     try {
-      await onSave({ ...f, ...(status ? { setStatus: status } : {}) });
+      await onSave({ ...f, status });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
       setSaving(false);
@@ -364,11 +359,11 @@ export function ContactForm({
           </Select>
         </Field>
       )}
-      <Field label="Status" hint="Which list they're in. Sets their account's status.">
-        <Select value={status} onChange={(e) => setStatus(e.target.value as "" | "customer" | "lead")}>
-          <option value="">— Leave as is</option>
-          <option value="lead">Lead</option>
-          <option value="customer">Customer</option>
+      <Field label="Status" hint="Marks this person as a lead or customer. Leave blank to inherit their company's.">
+        <Select value={status} onChange={(e) => setStatus(e.target.value as "" | "Lead" | "Customer")}>
+          <option value="">— None / inherit from company</option>
+          <option value="Lead">Lead</option>
+          <option value="Customer">Customer</option>
         </Select>
       </Field>
 
