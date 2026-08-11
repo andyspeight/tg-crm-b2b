@@ -1,12 +1,20 @@
 import "server-only";
+import { bustCache, cached } from "@/lib/cache";
 
 /**
  * Thin server-only Airtable REST client. The PAT is read from the environment on
  * every call and never leaves the server. UI code must go through src/lib/crm/data.ts,
  * never this module directly.
+ *
+ * Reads (list/get) are memoised for a few seconds on the warm instance; any write
+ * busts that cache, so a single user's edits show immediately while their repeat
+ * page navigations stay near-instant. See src/lib/cache.ts.
  */
 
 const API_BASE = "https://api.airtable.com/v0";
+// Short read TTLs — long enough to make navigation instant, short enough to feel live.
+const LIST_TTL_MS = 20_000;
+const RECORD_TTL_MS = 20_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,6 +53,8 @@ async function request<T = unknown>(path: string, init?: RequestInit): Promise<T
   if (!res.ok) {
     throw new AirtableError(res.status, await res.text());
   }
+  // Any successful write invalidates the read cache so edits show immediately.
+  if ((init?.method || "GET").toUpperCase() !== "GET") bustCache();
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -57,7 +67,17 @@ export interface ListOptions {
   pageSize?: number;
 }
 
-export async function listRecords<T = Record<string, unknown>>(
+export function listRecords<T = Record<string, unknown>>(
+  baseId: string,
+  tableId: string,
+  opts: ListOptions = {},
+): Promise<AirtableRecord<T>[]> {
+  return cached(`L:${baseId}:${tableId}:${JSON.stringify(opts)}`, LIST_TTL_MS, () =>
+    fetchRecords<T>(baseId, tableId, opts),
+  );
+}
+
+async function fetchRecords<T = Record<string, unknown>>(
   baseId: string,
   tableId: string,
   opts: ListOptions = {},
@@ -93,7 +113,9 @@ export function getRecord<T = Record<string, unknown>>(
   tableId: string,
   recordId: string,
 ): Promise<AirtableRecord<T>> {
-  return request<AirtableRecord<T>>(`${baseId}/${tableId}/${recordId}`);
+  return cached(`R:${baseId}:${tableId}:${recordId}`, RECORD_TTL_MS, () =>
+    request<AirtableRecord<T>>(`${baseId}/${tableId}/${recordId}`),
+  );
 }
 
 /** Write options. typecast lets Airtable coerce strings (and auto-create a new
