@@ -244,6 +244,7 @@ export const FIELDS = {
     enrichedAt: "Enriched At",
     source: "Source",
     company: "Company",
+    activities: "Activities",
     inboxSynced: "Inbox Synced",
     inboxBackfilled: "Inbox Backfilled",
   },

@@ -174,7 +174,10 @@ export function ContactEmailsDrawer({
   if (!contactId || typeof document === "undefined") return null;
   const contact = data?.contact;
   const opens = data?.opens ?? {};
-  const activities = data?.activities ?? [];
+  // Drop the auto "📬 Opened …" signal notes — the email's own Opened badge says it.
+  const activities = (data?.activities ?? []).filter(
+    (a) => !(a.type === "Signal" && (a.summary ?? "").startsWith("📬 Opened")),
+  );
 
   async function saveEdit(payload: Record<string, unknown>) {
     await api(`/api/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify(payload) });
