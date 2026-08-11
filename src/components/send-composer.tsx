@@ -94,6 +94,8 @@ export function SendComposer({
   const [meetingCfg, setMeetingCfg] = useState<MeetingConfig | null>(null);
   const [meetingMenu, setMeetingMenu] = useState(false);
   const [slotPicker, setSlotPicker] = useState(false);
+  const [dripSeq, setDripSeq] = useState<{ id: string; name: string; followUps: number } | null>(null);
+  const [startDrip, setStartDrip] = useState(true);
   const toast = useToast();
 
   // Load the scheduler config once, so "Insert meeting" can offer booking links.
@@ -116,6 +118,30 @@ export function SendComposer({
     [template, templates, templateId],
   );
   const attachments = activeTemplate?.attachments ?? [];
+
+  // Does the chosen template kick off a drip? If so, offer to start it on send.
+  useEffect(() => {
+    const tid = activeTemplate?.id;
+    if (!tid) {
+      setDripSeq(null);
+      return;
+    }
+    let alive = true;
+    api<{ sequence: { id: string; name: string; followUps: number } | null }>(
+      `/api/sequences/for-template?templateId=${encodeURIComponent(tid)}`,
+    )
+      .then((r) => {
+        if (!alive) return;
+        setDripSeq(r.sequence);
+        setStartDrip(!!r.sequence); // default on when a drip exists
+      })
+      .catch(() => {
+        if (alive) setDripSeq(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeTemplate?.id]);
 
   // Esc closes; lock body scroll; check the Gmail connection once.
   useEffect(() => {
@@ -297,19 +323,26 @@ export function SendComposer({
     setError("");
     setSending(true);
     try {
-      await api<{ ok: boolean }>("/api/email/send-template", {
-        method: "POST",
-        body: JSON.stringify({
-          to: contact.email,
-          subject,
-          html: body,
-          contactId: contact.id,
-          companyId: contact.companyId ?? company?.id,
-          templateId: templateId || undefined,
-          attachments: files.map((f) => ({ filename: f.filename, contentType: f.contentType, base64: f.base64 })),
-        }),
-      });
+      const res = await api<{ ok: boolean; drip?: { started: boolean; sequenceName?: string } }>(
+        "/api/email/send-template",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            to: contact.email,
+            subject,
+            html: body,
+            contactId: contact.id,
+            companyId: contact.companyId ?? company?.id,
+            templateId: templateId || undefined,
+            startDrip: !!dripSeq && startDrip,
+            attachments: files.map((f) => ({ filename: f.filename, contentType: f.contentType, base64: f.base64 })),
+          }),
+        },
+      );
       setSentTo(contact.email);
+      if (res.drip?.started) {
+        toast.success(`Sent — ${res.drip.sequenceName} started. Follow-ups will go out automatically.`);
+      }
       await onSent?.();
       setTimeout(onClose, 1200);
     } catch (e) {
@@ -635,6 +668,23 @@ export function SendComposer({
                 </InlineAlert>
               ) : null}
             </div>
+
+            {dripSeq && contact ? (
+              <label className="flex shrink-0 cursor-pointer items-start gap-2.5 border-t border-border-soft bg-accent-soft px-6 py-3">
+                <input
+                  type="checkbox"
+                  checked={startDrip}
+                  onChange={(e) => setStartDrip(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-accent-strong"
+                />
+                <span className="text-[12.5px] leading-snug text-fg-muted">
+                  <span className="font-medium text-fg">Start the “{dripSeq.name}” drip after sending.</span>{" "}
+                  This email counts as the first touch — {dripSeq.followUps} follow-up
+                  {dripSeq.followUps === 1 ? "" : "s"} will go out automatically over the following weeks and stop
+                  the moment {firstNameOf(contact.name) || "they"} repl{firstNameOf(contact.name) ? "ies" : "y"}.
+                </span>
+              </label>
+            ) : null}
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border-soft bg-surface px-6 py-3.5">
               <p className="text-[12px] text-fg-subtle">

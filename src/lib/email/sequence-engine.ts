@@ -14,6 +14,7 @@ import {
   createActivity,
   createEnrollmentRecord,
   getContact,
+  findDripSequenceForTemplate,
   getEmailSignature,
   getEmailTemplate,
   getSequence,
@@ -81,6 +82,60 @@ export async function enrollContact(
     lastError: "",
     label: `${contact.name || "Contact"} → ${sequence.name}`,
   });
+}
+
+/**
+ * Start a drip right after the composer has sent the intro itself.
+ *
+ * The intro (a sequence's step 1) has already gone out from the composer, so we
+ * must NOT re-send it. Instead we create the enrollment already advanced to step 2,
+ * carrying the just-sent message's thread id, subject and RFC822 Message-ID so the
+ * follow-ups reply straight onto that conversation. Returns quietly (started:false)
+ * when there's no matching active drip, the drip has no follow-ups, the contact is
+ * opted out, or they're already enrolled — the send itself is never affected.
+ */
+export async function startDripAfterSend(opts: {
+  templateId: string;
+  contactId: string;
+  companyId?: string;
+  accessToken: string;
+  sentMessageId: string;
+  threadId: string;
+  filledSubject: string;
+}): Promise<{ started: boolean; sequenceName?: string }> {
+  const sequence = await findDripSequenceForTemplate(opts.templateId);
+  if (!sequence || sequence.steps.length < 2) return { started: false };
+
+  const contact = await getContact(opts.contactId).catch(() => null);
+  if (!contact || !contact.email) return { started: false };
+  if (contact.marketingOptIn === "Opted Out") return { started: false };
+  if (await hasLiveEnrollment(sequence.id, opts.contactId)) return { started: false };
+
+  // Capture the intro's Message-ID so step 2 threads as a proper reply.
+  let lastMessageId = "";
+  try {
+    const meta = await getMessageMeta(opts.accessToken, opts.sentMessageId);
+    lastMessageId = meta.messageIdHeader || "";
+  } catch {
+    /* threading degrades gracefully without it */
+  }
+
+  const now = new Date().toISOString();
+  await createEnrollmentRecord({
+    sequenceId: sequence.id,
+    contactId: opts.contactId,
+    companyId: opts.companyId ?? contact.companyId,
+    status: "Active",
+    stepIndex: 1, // intro already sent by the composer — resume at the first follow-up
+    nextSendAt: addDays(now, sequence.steps[1]?.delayDays ?? 0),
+    threadId: opts.threadId,
+    threadSubject: opts.filledSubject,
+    lastMessageId,
+    enrolledAt: now,
+    lastError: "",
+    label: `${contact.name || "Contact"} → ${sequence.name}`,
+  });
+  return { started: true, sequenceName: sequence.name };
 }
 
 // --- the tick ---------------------------------------------------------------
