@@ -385,13 +385,13 @@ export function ContactsView({
                   <tr
                     key={c.id}
                     id={anchorLetterById.has(c.id) ? `ppl-d-${anchorLetterById.get(c.id)}` : undefined}
-                    onClick={() => setEditing(c)}
+                    onClick={() => setDrawerContactId(c.id)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setEditing(c);
+                        setDrawerContactId(c.id);
                       }
                     }}
                     className={cn(
@@ -486,7 +486,7 @@ export function ContactsView({
                 id={anchorLetterById.has(c.id) ? `ppl-m-${anchorLetterById.get(c.id)}` : undefined}
                 className="scroll-mt-[104px]"
               >
-                <Card onClick={() => setEditing(c)} className="p-3.5">
+                <Card onClick={() => setDrawerContactId(c.id)} className="p-3.5">
                   <div className="flex items-start gap-3">
                     <Monogram name={c.name || "Unnamed"} size="sm" tone="accent" />
                     <div className="min-w-0 flex-1">

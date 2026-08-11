@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Reply } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Eye, Reply } from "lucide-react";
 import { api } from "@/lib/client";
 import { Button, Modal, Spinner, cn } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
-import type { Activity, Contact } from "@/lib/crm/types";
+import type { Activity, Contact, EmailOpenStatus } from "@/lib/crm/types";
 
-type Payload = { contact: Contact; emails: Activity[] };
+type Payload = { contact: Contact; emails: Activity[]; opens?: Record<string, EmailOpenStatus> };
 
 /** Strip the "Received from…/Sent to…" header line the sync prepends to the body. */
 function bodyText(raw?: string): string {
@@ -17,7 +17,18 @@ function bodyText(raw?: string): string {
   return body.trim();
 }
 
-/** A person's email correspondence — reachable for contacts with no company page. */
+/** One labelled detail, only rendered when there's a value. */
+function Detail({ label, children }: { label: string; children: ReactNode }) {
+  if (children == null || children === "") return null;
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</dt>
+      <dd className="truncate text-[13px] text-fg">{children}</dd>
+    </div>
+  );
+}
+
+/** A person's profile and email correspondence — reachable for contacts with no company page. */
 export function ContactEmailsDrawer({
   contactId,
   highlightMessageId,
@@ -43,9 +54,10 @@ export function ContactEmailsDrawer({
 
   if (!contactId) return null;
   const contact = data?.contact;
+  const opens = data?.opens ?? {};
 
   return (
-    <Modal open onClose={onClose} title={contact?.name || "Emails"}>
+    <Modal open onClose={onClose} title={contact?.name || "Person"}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 text-[13px] text-fg-subtle">
@@ -70,6 +82,37 @@ export function ContactEmailsDrawer({
           ) : null}
         </div>
 
+        {/* Profile details */}
+        {contact ? (
+          <>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-xl border border-border-soft bg-surface p-3">
+              <Detail label="Role">{contact.role}</Detail>
+              <Detail label="Phone">{contact.phone}</Detail>
+              <Detail label="Marketing opt-in">{contact.marketingOptIn}</Detail>
+              <Detail label="LinkedIn">
+                {contact.linkedin ? (
+                  <a
+                    href={contact.linkedin}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent-strong hover:underline"
+                  >
+                    View profile
+                  </a>
+                ) : null}
+              </Detail>
+              {contact.location ? <Detail label="Location">{contact.location}</Detail> : null}
+            </dl>
+            {contact.notes ? (
+              <p className="whitespace-pre-wrap rounded-xl border border-border-soft bg-surface p-3 text-[12.5px] leading-relaxed text-fg-muted">
+                {contact.notes}
+              </p>
+            ) : null}
+          </>
+        ) : null}
+
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Email history</div>
+
         {error ? (
           <p className="text-[13px] text-danger">{error}</p>
         ) : !data ? (
@@ -79,10 +122,11 @@ export function ContactEmailsDrawer({
         ) : data.emails.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-fg-subtle">No emails on file for this person yet.</p>
         ) : (
-          <ul className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+          <ul className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
             {data.emails.map((e) => {
               const inbound = e.direction === "Inbound";
               const highlight = !!highlightMessageId && e.gmailMessageId === highlightMessageId;
+              const open = !inbound && e.gmailMessageId ? opens[e.gmailMessageId] : undefined;
               return (
                 <li
                   key={e.id}
@@ -112,6 +156,18 @@ export function ContactEmailsDrawer({
                       {formatDateTime(e.date || e.createdTime)}
                     </span>
                   </div>
+                  {/* Open tracking, sent emails only */}
+                  {!inbound && e.gmailMessageId ? (
+                    open?.opened ? (
+                      <div className="mb-1 inline-flex items-center gap-1 rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] font-medium text-success">
+                        <Eye size={12} strokeWidth={2} />
+                        Opened{open.opens > 1 ? ` ${open.opens}×` : ""}
+                        {open.lastOpenedAt ? ` · last ${formatDateTime(open.lastOpenedAt)}` : ""}
+                      </div>
+                    ) : (
+                      <div className="mb-1 text-[11px] text-fg-subtle">Not opened yet</div>
+                    )
+                  ) : null}
                   {bodyText(e.rawContent) ? (
                     <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-muted line-clamp-6">
                       {bodyText(e.rawContent)}
