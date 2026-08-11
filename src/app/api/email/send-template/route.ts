@@ -4,6 +4,7 @@ import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich, type RichAttachment } from "@/lib/google/gmail";
 import { applyEmailTracking } from "@/lib/email/tracking";
 import { appendSignatureHtml } from "@/lib/email/signature";
+import { startDripAfterSend } from "@/lib/email/sequence-engine";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
     const companyId = typeof body.companyId === "string" ? body.companyId : undefined;
     const contactId = typeof body.contactId === "string" ? body.contactId : undefined;
     const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
+    const startDrip = body.startDrip === true;
     const extraAttachments = parseAttachments(body.attachments);
 
     if (!to || /[\r\n]/.test(to) || !EMAIL_RE.test(to)) {
@@ -124,7 +126,25 @@ export async function POST(req: NextRequest) {
       direction: "Outbound",
     }).catch((e) => console.error("[email/send-template] activity log failed:", e));
 
-    return NextResponse.json({ ok: true, id: sent.id, from: sender.email });
+    // Optionally kick off the drip: this send counts as step 1, so the follow-ups
+    // resume from step 2 on the same thread. Never let a drip hiccup fail the send.
+    let drip: { started: boolean; sequenceName?: string } = { started: false };
+    if (startDrip && templateId && contactId) {
+      drip = await startDripAfterSend({
+        templateId,
+        contactId,
+        companyId,
+        accessToken: sender.accessToken,
+        sentMessageId: sent.id,
+        threadId: sent.threadId,
+        filledSubject: subject,
+      }).catch((e) => {
+        console.error("[email/send-template] drip enroll failed:", e);
+        return { started: false };
+      });
+    }
+
+    return NextResponse.json({ ok: true, id: sent.id, from: sender.email, drip });
   } catch (e) {
     if (e instanceof Error && /Gmail send failed/i.test(e.message)) {
       console.error("[email/send-template]", e);

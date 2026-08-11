@@ -2060,6 +2060,21 @@ export async function getSequence(id: string): Promise<Sequence> {
   return toSequence(await getRecord(AIRTABLE_BASE_ID, TABLES.sequences, id));
 }
 
+/**
+ * The Active drip whose first step sends this template and that has at least one
+ * follow-up, or null. Lets the composer offer "send the intro, then start the
+ * drip" for a template that is a sequence's step 1.
+ */
+export async function findDripSequenceForTemplate(templateId: string): Promise<Sequence | null> {
+  if (!templateId) return null;
+  const seqs = await listSequences();
+  return (
+    seqs.find(
+      (s) => s.status === "Active" && s.steps.length > 1 && s.steps[0]?.templateId === templateId,
+    ) ?? null
+  );
+}
+
 export async function createSequence(input: SequenceInput): Promise<Sequence> {
   const F = FIELDS.sequences;
   const fields = buildSequenceFields(input, false);
