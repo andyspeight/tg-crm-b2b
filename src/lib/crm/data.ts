@@ -766,10 +766,16 @@ export async function listActivitiesByCompany(companyId: string): Promise<Activi
 }
 
 /** Every logged email across the base (Activity type "Email"). For analytics + reply state. */
-export async function listEmailActivities(): Promise<Activity[]> {
+export async function listEmailActivities(opts?: { sinceDays?: number }): Promise<Activity[]> {
   const F = FIELDS.activities;
+  // Scope to a recent window when asked — with tens of thousands of back-filled
+  // emails, an unbounded scan is dozens of sequential Airtable pages.
+  const since = opts?.sinceDays && opts.sinceDays > 0 ? Math.floor(opts.sinceDays) : 0;
+  const filter = since
+    ? `AND({${F.type}}='Email', IS_AFTER({${F.date}}, DATEADD(TODAY(), -${since}, 'days')))`
+    : `{${F.type}}='Email'`;
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
-    filterByFormula: `{${F.type}}='Email'`,
+    filterByFormula: filter,
     fields: [F.date, F.type, F.company, F.contact, F.summary, F.direction, F.gmailMessageId],
     maxRecords: 5000,
   });
@@ -821,7 +827,11 @@ export async function activityRecency(): Promise<{
   byCompany: Record<string, string>;
 }> {
   const F = FIELDS.activities;
+  // Only the last ~6 months matter for "recent activity" / stale flagging. Scoping
+  // this keeps it off a full scan of the (now large) Activities table; a deal or
+  // company with no activity in the window simply reads as "no recent activity".
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
+    filterByFormula: `IS_AFTER({${F.date}}, DATEADD(TODAY(), -180, 'days'))`,
     fields: [F.date, F.deal, F.company],
     maxRecords: 5000,
   });
@@ -2492,13 +2502,26 @@ export async function setTrackingMessageId(ids: string[], messageId: string): Pr
 
 /** Open/download status per Gmail message id, for badging sent emails on the timeline. */
 export async function trackingByMessageIds(messageIds: string[]): Promise<Record<string, EmailOpenStatus>> {
-  const wanted = new Set(messageIds.filter(Boolean));
-  if (wanted.size === 0) return {};
-  const rows = await listTrackings();
+  const wanted = [...new Set(messageIds.filter(Boolean))];
+  if (wanted.length === 0) return {};
+  const F = FIELDS.emailTracking;
+  // Fetch only the tracking rows for these messages (chunked OR-filter) instead of
+  // scanning the whole — now large — Email Tracking table.
+  const chunks: string[][] = [];
+  for (let i = 0; i < wanted.length; i += 50) chunks.push(wanted.slice(i, i + 50));
+  const batches = await Promise.all(
+    chunks.map((chunk) =>
+      listRecords(AIRTABLE_BASE_ID, TABLES.emailTracking, {
+        filterByFormula: `OR(${chunk.map((id) => `{${F.gmailMessageId}}='${id}'`).join(",")})`,
+        maxRecords: chunk.length * 6, // a message can have several rows (pixel + attachments)
+      }).catch(() => []),
+    ),
+  );
+  const rows = batches.flat().map(toTracking);
   const out: Record<string, EmailOpenStatus> = {};
   for (const r of rows) {
     const mid = r.gmailMessageId || "";
-    if (!wanted.has(mid)) continue;
+    if (!mid) continue;
     const s = (out[mid] ??= { opened: false, opens: 0, downloaded: false, downloads: 0 });
     if (r.kind === "Email") {
       s.opens += r.opens;
@@ -2589,7 +2612,9 @@ export async function listAwaitingReply(opts?: { withinDays?: number; limit?: nu
   const withinDays = opts?.withinDays ?? 30;
   const limit = opts?.limit ?? 12;
   const [emails, contacts, dismissed] = await Promise.all([
-    listEmailActivities(),
+    // Only recent mail matters — a contact whose latest email is older than the
+    // window can't be "awaiting a reply" now. A small buffer avoids boundary misses.
+    listEmailActivities({ sinceDays: withinDays + 3 }),
     listContacts({ limit: 5000 }),
     getDismissedReplyKeys(),
   ]);
