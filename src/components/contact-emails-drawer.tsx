@@ -61,9 +61,18 @@ const ALLOWED_ATTR = new Set(["href", "src", "alt", "title", "style", "width", "
 
 /** Sanitise email HTML in the browser (DOM allowlist) before rendering it. */
 function sanitizeEmailHtml(html: string): string {
-  if (typeof window === "undefined") return "";
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const clean = (el: Element) => {
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") return "";
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    // Clean the body's CHILDREN only — never the <body> element itself, or we'd
+    // unwrap it and then read innerHTML off a detached node.
+    Array.from(doc.body.children).forEach((el) => clean(el));
+    return doc.body.innerHTML;
+  } catch {
+    return "";
+  }
+
+  function clean(el: Element) {
     for (const child of Array.from(el.children)) clean(child);
     const tag = el.tagName;
     if (DROP_TAGS.has(tag)) {
@@ -93,9 +102,7 @@ function sanitizeEmailHtml(html: string): string {
       el.setAttribute("target", "_blank");
       el.setAttribute("rel", "noreferrer noopener");
     }
-  };
-  clean(doc.body);
-  return doc.body.innerHTML;
+  }
 }
 
 /** Plain-text bodies (synced mail, notes): drop the sync header line, flatten stray HTML. */
