@@ -179,6 +179,40 @@ body {
 .luna-slide-in {
   animation: lunaSlideIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+/* Rendered (sanitised) email HTML inside the person 360. */
+.tg-email {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-fg-muted);
+  word-break: break-word;
+}
+.tg-email p {
+  margin: 0 0 0.6em;
+}
+.tg-email a {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+}
+.tg-email ul,
+.tg-email ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.2em;
+}
+.tg-email li {
+  margin: 0.15em 0;
+}
+.tg-email hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 0.8em 0;
+}
+.tg-email img {
+  max-width: 100%;
+  height: auto;
+}
+.tg-email table {
+  max-width: 100%;
+}
 @media (prefers-reduced-motion: reduce) {
   .luna-slide-in {
     animation: lunaFade 160ms ease-out both;
