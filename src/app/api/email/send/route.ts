@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity, setTrackingMessageId } from "@/lib/crm/data";
+import { createActivity, getEmailSignature, setTrackingMessageId } from "@/lib/crm/data";
 import { getAccessToken } from "@/lib/google/oauth";
 import { sendGmailRich } from "@/lib/google/gmail";
 import { applyEmailTracking, plainToHtml } from "@/lib/email/tracking";
+import { appendSignatureHtml } from "@/lib/email/signature";
 import { errorResponse, readJson } from "@/lib/api";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 
@@ -59,8 +60,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Send as HTML so we can carry an open-tracking pixel (plain text can't).
+    // Append the operator's signature, then the tracking pixel on top. Let the
+    // Gmail helper derive the plain-text alternative from the signed HTML so the
+    // signature shows in both parts.
+    const signedHtml = appendSignatureHtml(plainToHtml(text), await getEmailSignature().catch(() => ""));
     const { html, attachments, trackingIds } = await applyEmailTracking({
-      html: plainToHtml(text),
+      html: signedHtml,
       subject,
       recipient: to,
       companyId,
@@ -74,7 +79,6 @@ export async function POST(req: NextRequest) {
       to,
       subject,
       html,
-      text,
       attachments,
     });
 

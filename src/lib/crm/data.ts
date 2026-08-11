@@ -73,6 +73,7 @@ import type {
 } from "./types";
 import { findDuplicateGroups, type DuplicateGroup } from "./duplicates";
 import { normalizeMeetingConfig } from "@/lib/meetings";
+import { DEFAULT_SIGNATURE_HTML, normalizeSignature } from "@/lib/email/signature";
 import {
   AirtableRecord,
   createRecord,
@@ -2634,6 +2635,34 @@ export async function setMeetingConfig(input: unknown): Promise<MeetingConfig> {
   const clean = normalizeMeetingConfig(input);
   await setSetting(MEETING_CONFIG_KEY, JSON.stringify(clean));
   return clean;
+}
+
+// --- Email signature (appended to every client-facing send) -----------------
+
+const EMAIL_SIGNATURE_KEY = "email_signature";
+
+/**
+ * The stored signature HTML. Never set → the default (Andy's) so sends carry a
+ * signature out of the box; explicitly cleared → "" (stored as {"html":""}) so
+ * the operator can genuinely turn it off.
+ */
+export async function getEmailSignature(): Promise<string> {
+  const raw = await getSetting(EMAIL_SIGNATURE_KEY).catch(() => null);
+  if (!raw) return DEFAULT_SIGNATURE_HTML;
+  try {
+    const parsed = JSON.parse(raw) as { html?: unknown };
+    if (parsed && typeof parsed.html === "string") return parsed.html;
+  } catch {
+    return raw; // tolerate a legacy plain-string value
+  }
+  return DEFAULT_SIGNATURE_HTML;
+}
+
+/** Save the signature. Returns the cleaned HTML stored (may be ""). */
+export async function setEmailSignature(input: unknown): Promise<string> {
+  const html = normalizeSignature(input);
+  await setSetting(EMAIL_SIGNATURE_KEY, JSON.stringify({ html }));
+  return html;
 }
 
 // --- Awaiting-reply dismissals (Ignore = permanent, Pause = back tomorrow) --

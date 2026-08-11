@@ -554,6 +554,9 @@ export function SendComposer({
                   </div>
                 </div>
                 <RichTextEditor ref={editorRef} value={body} onChange={setBody} minHeight={300} />
+                <p className="mt-1.5 text-[12px] text-fg-subtle">
+                  Your signature is added automatically at the end — no need to type it here.
+                </p>
               </div>
 
               {slotPicker && meetingCfg ? (
