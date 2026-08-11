@@ -189,7 +189,9 @@ export async function runInboxBackfill(): Promise<InboxBackfillSummary> {
     {
       accessToken: conn.accessToken,
       contacts,
-      windowDays: cap("INBOX_BACKFILL_WINDOW_DAYS", 3650, 3650),
+      // Retention window: only the last 12 months are worth storing in the CRM.
+      // Older mail lives in Gmail and is reachable on demand from the 360.
+      windowDays: cap("INBOX_BACKFILL_WINDOW_DAYS", 365, 3650),
       perContact: cap("INBOX_BACKFILL_MESSAGES_PER_CONTACT", 300, 1000),
       stampField: "inboxBackfilledAt",
       stampOnPartial: true,
