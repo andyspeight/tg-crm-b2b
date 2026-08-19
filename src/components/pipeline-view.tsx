@@ -8,6 +8,8 @@ import {
   ChevronUp,
   CircleDashed,
   Columns3,
+  Eye,
+  EyeOff,
   Link2,
   Pencil,
   Plus,
@@ -95,6 +97,7 @@ export function PipelineView({
   const [emailContact, setEmailContact] = useState<Contact | null>(null);
   const [ownerFilter, setOwnerFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [view, setView] = useState<"board" | "table">(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("view") === "table"
@@ -135,6 +138,29 @@ export function PipelineView({
           (!ownerFilter || d.owner === ownerFilter) && (!sourceFilter || d.source === sourceFilter),
       ),
     [deals, ownerFilter, sourceFilter],
+  );
+
+  // Onboarding lanes = every "won" stage after the first (Contract Signed stays
+  // visible as the deal-closed marker; the fulfilment lanes past it collapse so
+  // the board isn't a dozen columns wide by default).
+  const onboardingSet = useMemo(() => {
+    const set = new Set<string>();
+    let seenWon = false;
+    for (const s of stages) {
+      if (s.kind === "won") {
+        if (seenWon) set.add(s.name);
+        else seenWon = true;
+      }
+    }
+    return set;
+  }, [stages]);
+  const onboardingCount = useMemo(
+    () => filteredDeals.filter((d) => d.stage && onboardingSet.has(d.stage)).length,
+    [filteredDeals, onboardingSet],
+  );
+  const visibleStages = useMemo(
+    () => (showOnboarding ? stages : stages.filter((s) => !onboardingSet.has(s.name))),
+    [showOnboarding, stages, onboardingSet],
   );
 
   const byStage = useMemo(() => {
@@ -338,6 +364,35 @@ export function PipelineView({
             Clear
           </Button>
         ) : null}
+
+        {view === "board" && onboardingSet.size > 0 ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setShowOnboarding((v) => !v)}
+            title={
+              showOnboarding
+                ? "Hide the post-sale onboarding lanes"
+                : "Show the post-sale onboarding lanes"
+            }
+          >
+            {showOnboarding ? (
+              <>
+                <EyeOff size={15} strokeWidth={1.9} /> Hide onboarding
+              </>
+            ) : (
+              <>
+                <Eye size={15} strokeWidth={1.9} /> Show onboarding
+                {onboardingCount > 0 ? (
+                  <span className="tnum ml-0.5 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-fg-subtle">
+                    {onboardingCount}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -348,7 +403,7 @@ export function PipelineView({
 
       {view === "board" ? (
       <div className="-mx-1 mt-4 flex items-start gap-3 overflow-x-auto px-1 pb-3">
-        {stages.map((stage) => {
+        {visibleStages.map((stage) => {
           const items = byStage.get(stage.name) ?? [];
           const total = items.reduce((s, d) => s + (d.mrr ?? 0), 0);
           const active = dragOver === stage.name;
