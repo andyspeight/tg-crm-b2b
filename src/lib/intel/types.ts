@@ -21,4 +21,15 @@ export interface EnrichedCompanyData {
   socials?: string;
 }
 
+/**
+ * A candidate LinkedIn profile turned up by name-search (no URL on file). Carries
+ * the search result's title/snippet so the UI can show WHY it matched and the
+ * user can confirm it's the right person before anything is saved.
+ */
+export interface ProfileCandidate {
+  url: string;
+  title?: string;
+  snippet?: string;
+}
+
 export type LinkedInKind = "profile" | "company";

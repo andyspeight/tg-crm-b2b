@@ -1,5 +1,10 @@
 import "server-only";
-import type { EnrichedCompanyData, EnrichedContactData, LinkedInKind } from "./types";
+import type {
+  EnrichedCompanyData,
+  EnrichedContactData,
+  LinkedInKind,
+  ProfileCandidate,
+} from "./types";
 import { BrightDataProvider, type SerpResult } from "./brightdata";
 
 /** Provider interface so Bright Data can be swapped without touching callers. */
@@ -8,6 +13,12 @@ export interface IntelProvider {
   profileFromUrl(url: string): Promise<EnrichedContactData>;
   companyFromUrl(url: string): Promise<EnrichedCompanyData>;
   discoverCompany(name: string): Promise<EnrichedCompanyData | null>;
+  /**
+   * Best-effort hunt for a person's public LinkedIn profile from their name (+
+   * company to disambiguate). Returns a candidate to CONFIRM, never a saved
+   * record — a wrong person is worse than no data.
+   */
+  discoverProfileUrl(name: string, companyName?: string): Promise<ProfileCandidate | null>;
 }
 
 export class IntelNotConfiguredError extends Error {

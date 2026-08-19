@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Building2,
   CalendarClock,
+  Check,
   ExternalLink,
   Eye,
   HeartHandshake,
@@ -22,6 +23,7 @@ import {
   Reply,
   StickyNote,
   Users,
+  Wand2,
   X,
 } from "lucide-react";
 import { api } from "@/lib/client";
@@ -31,6 +33,26 @@ import { ContactForm, type CompanyOption } from "@/components/forms";
 import { isOpenSignalNote, looksLikeHtml, readableEmailText, sanitizeEmailHtml } from "@/lib/email-render";
 import { formatDateTime } from "@/lib/format";
 import type { Activity, ActivityType, Contact, EmailOpenStatus } from "@/lib/crm/types";
+import type { EnrichedContactData } from "@/lib/intel/types";
+
+type EnrichChange = {
+  field: string;
+  label: string;
+  current: string | null;
+  next: string;
+  action: "fill" | "update";
+};
+type EnrichResult = {
+  found: boolean;
+  sourceUrl?: string;
+  autoFound?: boolean;
+  candidate?: { title?: string; snippet?: string } | null;
+  profile?: EnrichedContactData;
+  changes?: EnrichChange[];
+  contact?: { name?: string; companyName?: string };
+  reason?: string;
+  message?: string;
+};
 
 type Payload = { contact: Contact; activities: Activity[]; opens?: Record<string, EmailOpenStatus> };
 type OlderMsg = { id: string; subject: string; date: string; direction: "Inbound" | "Outbound"; body: string };
@@ -56,6 +78,16 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
     <div className="min-w-0">
       <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</dt>
       <dd className="mt-0.5 break-words text-[13.5px] text-fg">{children}</dd>
+    </div>
+  );
+}
+
+/** Like Detail but always renders (shows "—" when blank) — for the enrich preview. */
+function EnrichFact({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</dt>
+      <dd className="mt-0.5 break-words text-[13px] text-fg">{value || "—"}</dd>
     </div>
   );
 }
@@ -89,6 +121,11 @@ export function ContactEmailsDrawer({
   const [older, setOlder] = useState<OlderMsg[] | null>(null);
   const [olderState, setOlderState] = useState<"idle" | "loading" | "error">("idle");
   const [olderError, setOlderError] = useState("");
+  const [enrichOpen, setEnrichOpen] = useState(false);
+  const [enrichState, setEnrichState] = useState<"idle" | "looking" | "saving">("idle");
+  const [enrichResult, setEnrichResult] = useState<EnrichResult | null>(null);
+  const [enrichError, setEnrichError] = useState("");
+  const [pasteUrl, setPasteUrl] = useState("");
 
   async function load() {
     if (!contactId) return;
@@ -107,6 +144,11 @@ export function ContactEmailsDrawer({
     setOlder(null);
     setOlderState("idle");
     setOlderError("");
+    setEnrichOpen(false);
+    setEnrichState("idle");
+    setEnrichResult(null);
+    setEnrichError("");
+    setPasteUrl("");
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
@@ -148,10 +190,61 @@ export function ContactEmailsDrawer({
     }
   }
 
+  async function runEnrichLookup(url?: string) {
+    if (!contactId) return;
+    setEnrichState("looking");
+    setEnrichError("");
+    setEnrichResult(null);
+    try {
+      const r = await api<EnrichResult>(`/api/intel/enrich/contact/${contactId}`, {
+        method: "POST",
+        body: JSON.stringify(url ? { url } : {}),
+      });
+      setEnrichResult(r);
+    } catch (e) {
+      setEnrichError(e instanceof Error ? e.message : "Lookup failed");
+    } finally {
+      setEnrichState("idle");
+    }
+  }
+
+  function openEnrich() {
+    setEnrichOpen(true);
+    setEnrichResult(null);
+    setEnrichError("");
+    setPasteUrl("");
+    runEnrichLookup();
+  }
+
+  async function applyEnrich() {
+    if (!contactId || !enrichResult?.found || !enrichResult.sourceUrl) return;
+    setEnrichState("saving");
+    setEnrichError("");
+    try {
+      await api(`/api/intel/enrich/contact/${contactId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "apply",
+          sourceUrl: enrichResult.sourceUrl,
+          profile: enrichResult.profile,
+        }),
+      });
+      setEnrichOpen(false);
+      setEnrichResult(null);
+      setPasteUrl("");
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setEnrichError(e instanceof Error ? e.message : "Couldn't save enrichment");
+    } finally {
+      setEnrichState("idle");
+    }
+  }
+
   return createPortal(
     <div className="luna-fade fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
       <div className="flex-1 bg-[rgba(11,18,32,0.6)] backdrop-blur-md" onClick={onClose} />
-      <aside className="luna-slide-in flex h-full w-full max-w-[1080px] flex-col border-l border-border bg-card shadow-float">
+      <aside className="luna-slide-in relative flex h-full w-full max-w-[1080px] flex-col border-l border-border bg-card shadow-float">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-border-soft px-6 py-4">
           <div className="flex min-w-0 items-start gap-3">
@@ -200,6 +293,9 @@ export function ContactEmailsDrawer({
             ) : null}
             <Button size="sm" variant="secondary" onClick={() => setEditing((v) => !v)}>
               <Pencil size={15} strokeWidth={1.9} /> {editing ? "Close editor" : "Edit details"}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={openEnrich} disabled={enrichState === "looking"}>
+              <Wand2 size={15} strokeWidth={1.9} /> Enrich
             </Button>
             {contact.companyId ? (
               <Link href={`/companies/${contact.companyId}`} className="ml-auto">
@@ -460,6 +556,170 @@ export function ContactEmailsDrawer({
             </div>
           )}
         </div>
+
+        {/* Enrich overlay — resolve a profile, preview the diff, confirm before any write */}
+        {enrichOpen ? (
+          <div className="luna-fade absolute inset-0 z-20 flex flex-col bg-card">
+            <div className="flex items-center justify-between gap-3 border-b border-border-soft px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Wand2 size={18} strokeWidth={1.9} className="text-accent-strong" />
+                <h3 className="text-[16px] font-semibold tracking-tight text-fg">
+                  Enrich {contact?.name || "person"}
+                </h3>
+              </div>
+              <IconButton label="Close" onClick={() => setEnrichOpen(false)}>
+                <X size={18} strokeWidth={1.75} />
+              </IconButton>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {enrichState === "looking" ? (
+                <div className="flex items-center gap-2 py-10 text-[13px] text-fg-subtle">
+                  <Spinner /> Searching LinkedIn — this can take up to a minute…
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {enrichError ? <p className="text-[13px] text-danger">{enrichError}</p> : null}
+
+                  {enrichResult && !enrichResult.found ? (
+                    <p className="text-[13px] text-fg-muted">{enrichResult.message}</p>
+                  ) : null}
+
+                  {enrichResult && enrichResult.found ? (
+                    <>
+                      {enrichResult.autoFound ? (
+                        <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-fg-muted">
+                          <span className="font-medium text-fg">Found by search — check it&apos;s the right person.</span>{" "}
+                          We matched on name
+                          {enrichResult.contact?.companyName ? ` + ${enrichResult.contact.companyName}` : ""}. Open the
+                          profile to confirm before saving.
+                        </div>
+                      ) : null}
+
+                      <div className="rounded-xl border border-border-soft bg-surface p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                            Matched profile
+                          </span>
+                          <a
+                            href={enrichResult.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[12.5px] font-medium text-accent-strong hover:underline"
+                          >
+                            <ExternalLink size={13} strokeWidth={1.9} /> Open on LinkedIn
+                          </a>
+                        </div>
+                        {enrichResult.candidate?.title ? (
+                          <p className="mt-1.5 text-[13px] font-medium text-fg">{enrichResult.candidate.title}</p>
+                        ) : null}
+                        {enrichResult.candidate?.snippet ? (
+                          <p className="mt-0.5 line-clamp-2 text-[12px] text-fg-subtle">
+                            {enrichResult.candidate.snippet}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 break-all text-[11.5px] text-fg-subtle">{enrichResult.sourceUrl}</p>
+                      </div>
+
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                          What we found
+                        </p>
+                        <dl className="grid grid-cols-1 gap-2 rounded-xl border border-border-soft bg-surface p-3 sm:grid-cols-2">
+                          <EnrichFact label="Headline" value={enrichResult.profile?.headline} />
+                          <EnrichFact label="Role" value={enrichResult.profile?.role} />
+                          <EnrichFact label="Location" value={enrichResult.profile?.location} />
+                          <EnrichFact label="Company" value={enrichResult.profile?.companyName} />
+                          {enrichResult.profile?.notes ? (
+                            <div className="sm:col-span-2">
+                              <dt className="text-[11px] uppercase tracking-wide text-fg-subtle">Bio</dt>
+                              <dd className="mt-0.5 line-clamp-4 whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-muted">
+                                {enrichResult.profile.notes}
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </div>
+
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                          {enrichResult.changes && enrichResult.changes.length
+                            ? `Will save to this record (${enrichResult.changes.length})`
+                            : "Nothing new to add"}
+                        </p>
+                        {enrichResult.changes && enrichResult.changes.length ? (
+                          <ul className="space-y-1.5">
+                            {enrichResult.changes.map((c) => (
+                              <li key={c.field} className="flex items-start gap-2 text-[12.5px]">
+                                <span
+                                  className={cn(
+                                    "mt-px shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase",
+                                    c.action === "update"
+                                      ? "bg-warning/15 text-warning"
+                                      : "bg-success/15 text-success",
+                                  )}
+                                >
+                                  {c.action === "update" ? "Update" : "Add"}
+                                </span>
+                                <span className="shrink-0 text-fg-subtle">{c.label}</span>
+                                <span className="min-w-0 flex-1 break-words text-fg line-clamp-2">{c.next}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[12.5px] text-fg-subtle">
+                            This person&apos;s record already has everything we found on LinkedIn.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
+
+                  {enrichResult || enrichError ? (
+                    <div className="rounded-xl border border-border-soft bg-surface p-3">
+                      <label className="text-[12px] font-medium text-fg-muted">
+                        {enrichResult?.found
+                          ? "Not them? Paste the correct LinkedIn profile URL"
+                          : "Paste their LinkedIn profile URL"}
+                      </label>
+                      <div className="mt-1.5 flex gap-2">
+                        <input
+                          value={pasteUrl}
+                          onChange={(e) => setPasteUrl(e.target.value)}
+                          placeholder="https://www.linkedin.com/in/…"
+                          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 text-[13px] text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => runEnrichLookup(pasteUrl)}
+                          disabled={!pasteUrl.trim()}
+                        >
+                          Look up
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 border-t border-border-soft px-6 py-4">
+              {enrichResult?.found && enrichResult.changes && enrichResult.changes.length ? (
+                <Button onClick={applyEnrich} disabled={enrichState === "saving"}>
+                  {enrichState === "saving" ? <Spinner /> : <Check size={15} strokeWidth={2} />} Save enrichment
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                onClick={() => setEnrichOpen(false)}
+                disabled={enrichState === "saving"}
+              >
+                {enrichResult?.found && enrichResult.changes && enrichResult.changes.length ? "Cancel" : "Close"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </aside>
     </div>,
     document.body,

@@ -1,5 +1,5 @@
 import "server-only";
-import type { EnrichedCompanyData, EnrichedContactData } from "./types";
+import type { EnrichedCompanyData, EnrichedContactData, ProfileCandidate } from "./types";
 import { SIZE_BANDS } from "@/lib/crm/config";
 import { hostBrand } from "@/lib/domain";
 
@@ -274,5 +274,32 @@ export class BrightDataProvider {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Find a person's public LinkedIn profile from their name via Google (SERP).
+   * Company name (when known) disambiguates common names. Returns the first
+   * `/in/` result WITH its title/snippet so the caller can show what matched and
+   * have a human confirm before saving — a wrong person is worse than no data.
+   */
+  async discoverProfileUrl(name: string, companyName?: string): Promise<ProfileCandidate | null> {
+    const clean = name.trim();
+    if (!clean) return null;
+    const queries = [
+      companyName ? `"${clean}" ${companyName} site:linkedin.com/in` : "",
+      `"${clean}" site:linkedin.com/in`,
+    ].filter(Boolean);
+    for (const q of queries) {
+      try {
+        const res = await serpOrganic(q);
+        const hit = res.find((r) => /linkedin\.com\/in\//i.test(r.link));
+        if (hit) {
+          return { url: hit.link.split("?")[0], title: hit.title, snippet: hit.description };
+        }
+      } catch {
+        // ignore and try the next query
+      }
+    }
+    return null;
   }
 }
