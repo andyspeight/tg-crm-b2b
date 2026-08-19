@@ -11,6 +11,7 @@ import "server-only";
  */
 
 import {
+  advanceNurtureDeal,
   createActivity,
   createEnrollmentRecord,
   getContact,
@@ -363,6 +364,15 @@ async function processEnrollment(
     gmailMessageId: sent.id,
     direction: "Outbound",
   }).catch((e) => console.error("[sequence-engine] activity log failed:", e));
+
+  // Move the lead's pipeline card into "Nurturing", showing how far through the
+  // drip they are (the step just sent is enrollment.stepIndex, 1-based).
+  await advanceNurtureDeal({
+    name: contact.name || "",
+    companyId: enrollment.companyId,
+    emailNumber: enrollment.stepIndex + 1,
+    totalEmails: sequence.steps.length,
+  }).catch((e) => console.error("[sequence-engine] nurture advance failed:", e));
 
   return done ? "completed" : "sent";
 }

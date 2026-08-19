@@ -681,30 +681,70 @@ async function savePipelineStages(stages: PipelineStage[]): Promise<void> {
 
 // --- lead → pipeline --------------------------------------------------------
 
+/** The account's existing active (not-lost) deal, if any — used to avoid dupes. */
+async function findActiveDeal(
+  opts: { name: string; companyId?: string },
+  stages: PipelineStage[],
+): Promise<Deal | null> {
+  const notLost = new Set(stages.filter((s) => s.kind !== "lost").map((s) => s.name));
+  const active = (d: Deal) => !d.stage || notLost.has(d.stage); // blank stage = first (open) lane
+  if (opts.companyId) {
+    const deals = await listDealsByCompany(opts.companyId);
+    return deals.find(active) ?? null;
+  }
+  const name = (opts.name || "").trim().toLowerCase();
+  if (!name) return null;
+  return (
+    (await listDeals()).find(
+      (d) => !d.companyId && d.name.trim().toLowerCase() === name && active(d),
+    ) ?? null
+  );
+}
+
+function newDealInput(name: string, stage: string, companyId?: string): DealInput {
+  return { name: name || "New lead", stage, ...(companyId ? { companyId } : {}) };
+}
+
 /**
  * Put a lead on the pipeline: create a first-stage ("New Lead") deal for their
- * account if it doesn't already have an open deal. Company leads dedupe by
- * company; a company-less individual dedupes by an open deal of the same name.
+ * account if it doesn't already have an active deal. Company leads dedupe by
+ * company; a company-less individual by an active deal of the same name.
  * Idempotent — safe to call whenever someone is classified as a lead.
  */
 export async function ensureLeadDeal(opts: { name: string; companyId?: string }): Promise<Deal | null> {
   const stages = await getPipelineStages();
+  if (await findActiveDeal(opts, stages)) return null; // already on the pipeline
   const firstStage = stages[0]?.name ?? "New Lead";
-  const openStages = new Set(stages.filter((s) => s.kind === "open").map((s) => s.name));
-  const isOpen = (stage?: string) => !!stage && openStages.has(stage);
+  return createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+}
 
-  if (opts.companyId) {
-    const deals = await listDealsByCompany(opts.companyId);
-    if (deals.some((d) => isOpen(d.stage))) return null; // already active in the pipeline
-    return createDeal({ name: opts.name || "New lead", stage: firstStage, companyId: opts.companyId });
-  }
-  const name = (opts.name || "").trim();
-  if (!name) return null;
-  const existing = (await listDeals()).find(
-    (d) => !d.companyId && d.name.trim().toLowerCase() === name.toLowerCase() && isOpen(d.stage),
-  );
-  if (existing) return null;
-  return createDeal({ name, stage: firstStage });
+/**
+ * Reflect drip progress on the board: nudge the lead's deal into the "Nurturing"
+ * stage as each sequence email goes out, with the step shown via Next Step. Only
+ * advances while the deal is still in an early sales stage (New Lead / Nurturing)
+ * — never overrides a manual move to Demo / Contract / onboarding. Creates the
+ * deal if the lead somehow has none yet. No-ops if there's no nurture stage.
+ */
+export async function advanceNurtureDeal(opts: {
+  name: string;
+  companyId?: string;
+  emailNumber: number;
+  totalEmails: number;
+}): Promise<void> {
+  const stages = await getPipelineStages();
+  const firstStage = stages[0]?.name ?? "New Lead";
+  const nurtureStage = stages.find((s) => /nurtur/i.test(s.name))?.name;
+  if (!nurtureStage) return; // pipeline not (yet) configured with a nurture stage
+
+  let deal = await findActiveDeal(opts, stages);
+  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+
+  // Only while still in the early sales lanes — respect any manual advance.
+  if (deal.stage && deal.stage !== firstStage && deal.stage !== nurtureStage) return;
+  await updateDeal(deal.id, {
+    stage: nurtureStage,
+    nextStep: `Nurture — email ${opts.emailNumber} of ${opts.totalEmails} sent`,
+  });
 }
 
 /** Ensure a lead's pipeline card, deciding lead-ness from the contact itself. */
