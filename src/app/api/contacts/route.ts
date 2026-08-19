@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   applyLeadCustomerStatus,
   createContact,
+  ensureLeadDealForContact,
   listContacts,
   listContactsByCompany,
 } from "@/lib/crm/data";
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
     if ((body.setStatus === "customer" || body.setStatus === "lead") && contact.companyId) {
       await applyLeadCustomerStatus(contact.companyId, body.setStatus);
     }
+    // A new lead joins the pipeline; no-ops for non-leads and dedupes existing deals.
+    await ensureLeadDealForContact(contact.id).catch(() => {});
     return NextResponse.json({ contact }, { status: 201 });
   } catch (e) {
     return errorResponse(e);

@@ -71,17 +71,35 @@ export async function enrollContact(
 
   const now = new Date().toISOString();
   const firstDelay = sequence.steps[0]?.delayDays ?? 0;
-  return createEnrollmentRecord({
+  const nextSendAt = firstDelay > 0 ? addDays(now, firstDelay) : now;
+  const enrollment = await createEnrollmentRecord({
     sequenceId,
     contactId,
     status: "Active",
     stepIndex: 0,
-    nextSendAt: firstDelay > 0 ? addDays(now, firstDelay) : now,
+    nextSendAt,
     companyId: contact.companyId,
     enrolledAt: now,
     lastError: "",
     label: `${contact.name || "Contact"} → ${sequence.name}`,
   });
+
+  // Leave a mark on the timeline straight away — the first email (and its own
+  // activity) only lands when the drip cron next sends, which may be days off.
+  await createActivity({
+    type: "Campaign",
+    source: "Manual",
+    summary: `Added to sequence "${sequence.name}"`,
+    rawContent:
+      firstDelay > 0
+        ? `First email scheduled for ${nextSendAt.slice(0, 10)}.`
+        : `First email sends on the next sequence run.`,
+    date: now,
+    companyId: contact.companyId,
+    contactId,
+  }).catch((e) => console.error("[sequence-engine] enrol activity log failed:", e));
+
+  return enrollment;
 }
 
 /**
@@ -135,6 +153,17 @@ export async function startDripAfterSend(opts: {
     lastError: "",
     label: `${contact.name || "Contact"} → ${sequence.name}`,
   });
+
+  await createActivity({
+    type: "Campaign",
+    source: "Manual",
+    summary: `Enrolled in drip "${sequence.name}"`,
+    rawContent: "Follow-ups will send on the thread from the intro just sent.",
+    date: now,
+    companyId: opts.companyId ?? contact.companyId,
+    contactId: opts.contactId,
+  }).catch((e) => console.error("[sequence-engine] drip enrol activity log failed:", e));
+
   return { started: true, sequenceName: sequence.name };
 }
 

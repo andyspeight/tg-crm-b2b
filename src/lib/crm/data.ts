@@ -679,6 +679,48 @@ async function savePipelineStages(stages: PipelineStage[]): Promise<void> {
   await setSetting(PIPELINE_STAGES_KEY, JSON.stringify(stages));
 }
 
+// --- lead → pipeline --------------------------------------------------------
+
+/**
+ * Put a lead on the pipeline: create a first-stage ("New Lead") deal for their
+ * account if it doesn't already have an open deal. Company leads dedupe by
+ * company; a company-less individual dedupes by an open deal of the same name.
+ * Idempotent — safe to call whenever someone is classified as a lead.
+ */
+export async function ensureLeadDeal(opts: { name: string; companyId?: string }): Promise<Deal | null> {
+  const stages = await getPipelineStages();
+  const firstStage = stages[0]?.name ?? "New Lead";
+  const openStages = new Set(stages.filter((s) => s.kind === "open").map((s) => s.name));
+  const isOpen = (stage?: string) => !!stage && openStages.has(stage);
+
+  if (opts.companyId) {
+    const deals = await listDealsByCompany(opts.companyId);
+    if (deals.some((d) => isOpen(d.stage))) return null; // already active in the pipeline
+    return createDeal({ name: opts.name || "New lead", stage: firstStage, companyId: opts.companyId });
+  }
+  const name = (opts.name || "").trim();
+  if (!name) return null;
+  const existing = (await listDeals()).find(
+    (d) => !d.companyId && d.name.trim().toLowerCase() === name.toLowerCase() && isOpen(d.stage),
+  );
+  if (existing) return null;
+  return createDeal({ name, stage: firstStage });
+}
+
+/** Ensure a lead's pipeline card, deciding lead-ness from the contact itself. */
+export async function ensureLeadDealForContact(contactId: string): Promise<Deal | null> {
+  const contact = await getContact(contactId).catch(() => null);
+  if (!contact) return null;
+  const isLead =
+    contact.status === "Lead" ||
+    (!contact.status && !!contact.companyLifecycle && LEAD_LIFECYCLES.has(contact.companyLifecycle));
+  if (!isLead) return null;
+  return ensureLeadDeal({
+    name: contact.companyName || contact.name || "New lead",
+    companyId: contact.companyId,
+  });
+}
+
 /** Relabel every deal currently in `from` to `to`. Small table, filtered in JS. */
 async function moveDealsStage(from: string, to: string): Promise<number> {
   if (!from || !to || from === to) return 0;
@@ -1330,6 +1372,11 @@ export async function quickAddPerson(input: {
       phone: text(input.phone) ?? undefined,
       companyId: company.id,
     });
+  }
+
+  // A newly classified lead joins the pipeline at the first ("New Lead") stage.
+  if (lifecycle && LEAD_LIFECYCLES.has(lifecycle)) {
+    await ensureLeadDeal({ name: company.name, companyId: company.id }).catch(() => {});
   }
   return { company, contact };
 }
