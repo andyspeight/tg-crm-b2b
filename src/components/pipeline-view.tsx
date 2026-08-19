@@ -504,6 +504,15 @@ function DealCard({
         ) : null}
       </div>
 
+      {deal.nextStep ? (
+        <p className="mt-2 truncate text-[11.5px] text-fg-muted" title={deal.nextStep}>
+          {deal.nextStep}
+          {deal.nextStepDate ? (
+            <span className="tnum text-fg-subtle"> · {formatDate(deal.nextStepDate)}</span>
+          ) : null}
+        </p>
+      ) : null}
+
       <div className="relative mt-2 flex items-center gap-1.5">
         <StageDot color={color} />
         <select

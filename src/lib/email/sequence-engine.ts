@@ -15,6 +15,7 @@ import {
   createActivity,
   createEnrollmentRecord,
   getContact,
+  noteLeadNextStep,
   findDripSequenceForTemplate,
   getEmailSignature,
   getEmailTemplate,
@@ -100,6 +101,16 @@ export async function enrollContact(
     contactId,
   }).catch((e) => console.error("[sequence-engine] enrol activity log failed:", e));
 
+  // Show the drip on their pipeline card immediately (before the first send).
+  await noteLeadNextStep({
+    name: contact.name || "",
+    companyId: contact.companyId,
+    nextStep:
+      firstDelay > 0
+        ? `In sequence "${sequence.name}" — email 1 of ${sequence.steps.length} on ${nextSendAt.slice(0, 10)}`
+        : `In sequence "${sequence.name}" — email 1 of ${sequence.steps.length} imminent`,
+  }).catch((e) => console.error("[sequence-engine] note next step failed:", e));
+
   return enrollment;
 }
 
@@ -164,6 +175,12 @@ export async function startDripAfterSend(opts: {
     companyId: opts.companyId ?? contact.companyId,
     contactId: opts.contactId,
   }).catch((e) => console.error("[sequence-engine] drip enrol activity log failed:", e));
+
+  await noteLeadNextStep({
+    name: contact.name || "",
+    companyId: opts.companyId ?? contact.companyId,
+    nextStep: `In drip "${sequence.name}" — intro sent, follow-ups scheduled`,
+  }).catch((e) => console.error("[sequence-engine] note next step failed:", e));
 
   return { started: true, sequenceName: sequence.name };
 }

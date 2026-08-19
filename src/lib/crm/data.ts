@@ -747,6 +747,23 @@ export async function advanceNurtureDeal(opts: {
   });
 }
 
+/**
+ * Annotate a lead's pipeline card with a Next Step (e.g. the drip status), so the
+ * card isn't blank while they wait for the first email. Creates the deal if the
+ * lead has none yet; leaves the stage alone.
+ */
+export async function noteLeadNextStep(opts: {
+  name: string;
+  companyId?: string;
+  nextStep: string;
+}): Promise<void> {
+  const stages = await getPipelineStages();
+  const firstStage = stages[0]?.name ?? "New Lead";
+  let deal = await findActiveDeal(opts, stages);
+  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+  await updateDeal(deal.id, { nextStep: opts.nextStep });
+}
+
 /** Ensure a lead's pipeline card, deciding lead-ness from the contact itself. */
 export async function ensureLeadDealForContact(contactId: string): Promise<Deal | null> {
   const contact = await getContact(contactId).catch(() => null);
