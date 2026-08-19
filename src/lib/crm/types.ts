@@ -131,6 +131,10 @@ export interface Deal {
   nextStepDate?: string;
   companyId?: string;
   companyName?: string;
+  /** The lead/primary person on this deal — lets a card open the person 360. */
+  contactId?: string;
+  contactName?: string;
+  contactEmail?: string;
   createdTime?: string;
 }
 
@@ -394,6 +398,8 @@ export type CompanyInput = Partial<
   Omit<Company, "id" | "contactIds" | "dealIds" | "activityIds" | "taskIds" | "createdTime">
 >;
 export type ContactInput = Partial<Omit<Contact, "id" | "companyName" | "companyLifecycle" | "createdTime">>;
-export type DealInput = Partial<Omit<Deal, "id" | "companyName" | "createdTime">>;
+export type DealInput = Partial<
+  Omit<Deal, "id" | "companyName" | "contactName" | "contactEmail" | "createdTime">
+>;
 export type ActivityInput = Partial<Omit<Activity, "id" | "createdTime">>;
 export type TaskInput = Partial<Omit<Task, "id" | "companyName" | "createdTime">>;

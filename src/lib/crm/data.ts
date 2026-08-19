@@ -291,6 +291,7 @@ function toDeal(rec: AirtableRecord): Deal {
     nextStep: str(f[F.nextStep]),
     nextStepDate: str(f[F.nextStepDate]),
     companyId: firstId(f[F.company]),
+    contactId: firstId(f[F.contact]),
     createdTime: rec.createdTime,
   };
 }
@@ -382,6 +383,10 @@ function buildDealFields(input: DealInput, partial: boolean): Record<string, unk
   if (has("companyId")) {
     const id = text(input.companyId);
     f[F.company] = id ? [id] : [];
+  }
+  if (has("contactId")) {
+    const id = text(input.contactId);
+    f[F.contact] = id ? [id] : [];
   }
   return f;
 }
@@ -594,7 +599,7 @@ export async function listDeals(opts: { q?: string; limit?: number } = {}): Prom
     maxRecords: opts.limit ?? LIST_CAP,
   });
   const deals = records.map(toDeal);
-  await attachDealCompanyNames(deals);
+  await Promise.all([attachDealCompanyNames(deals), attachDealContactMeta(deals)]);
   return deals;
 }
 
@@ -701,21 +706,37 @@ async function findActiveDeal(
   );
 }
 
-function newDealInput(name: string, stage: string, companyId?: string): DealInput {
-  return { name: name || "New lead", stage, ...(companyId ? { companyId } : {}) };
+function newDealInput(name: string, stage: string, companyId?: string, contactId?: string): DealInput {
+  return {
+    name: name || "New lead",
+    stage,
+    ...(companyId ? { companyId } : {}),
+    ...(contactId ? { contactId } : {}),
+  };
 }
 
 /**
  * Put a lead on the pipeline: create a first-stage ("New Lead") deal for their
  * account if it doesn't already have an active deal. Company leads dedupe by
- * company; a company-less individual by an active deal of the same name.
- * Idempotent — safe to call whenever someone is classified as a lead.
+ * company; a company-less individual by an active deal of the same name. Links
+ * the deal to the person so the card can open their 360. Idempotent.
  */
-export async function ensureLeadDeal(opts: { name: string; companyId?: string }): Promise<Deal | null> {
+export async function ensureLeadDeal(opts: {
+  name: string;
+  companyId?: string;
+  contactId?: string;
+}): Promise<Deal | null> {
   const stages = await getPipelineStages();
-  if (await findActiveDeal(opts, stages)) return null; // already on the pipeline
+  const existing = await findActiveDeal(opts, stages);
+  if (existing) {
+    // Backfill the contact link on an existing card that lacks one.
+    if (opts.contactId && !existing.contactId) {
+      await updateDeal(existing.id, { contactId: opts.contactId }).catch(() => {});
+    }
+    return null;
+  }
   const firstStage = stages[0]?.name ?? "New Lead";
-  return createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+  return createDeal(newDealInput(opts.name, firstStage, opts.companyId, opts.contactId));
 }
 
 /**
@@ -728,6 +749,7 @@ export async function ensureLeadDeal(opts: { name: string; companyId?: string })
 export async function advanceNurtureDeal(opts: {
   name: string;
   companyId?: string;
+  contactId?: string;
   emailNumber: number;
   totalEmails: number;
 }): Promise<void> {
@@ -737,7 +759,7 @@ export async function advanceNurtureDeal(opts: {
   if (!nurtureStage) return; // pipeline not (yet) configured with a nurture stage
 
   let deal = await findActiveDeal(opts, stages);
-  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId, opts.contactId));
 
   // Only while still in the early sales lanes — respect any manual advance.
   if (deal.stage && deal.stage !== firstStage && deal.stage !== nurtureStage) return;
@@ -755,12 +777,13 @@ export async function advanceNurtureDeal(opts: {
 export async function noteLeadNextStep(opts: {
   name: string;
   companyId?: string;
+  contactId?: string;
   nextStep: string;
 }): Promise<void> {
   const stages = await getPipelineStages();
   const firstStage = stages[0]?.name ?? "New Lead";
   let deal = await findActiveDeal(opts, stages);
-  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId));
+  if (!deal) deal = await createDeal(newDealInput(opts.name, firstStage, opts.companyId, opts.contactId));
   await updateDeal(deal.id, { nextStep: opts.nextStep });
 }
 
@@ -775,6 +798,7 @@ export async function ensureLeadDealForContact(contactId: string): Promise<Deal 
   return ensureLeadDeal({
     name: contact.companyName || contact.name || "New lead",
     companyId: contact.companyId,
+    contactId: contact.id,
   });
 }
 
@@ -1433,7 +1457,11 @@ export async function quickAddPerson(input: {
 
   // A newly classified lead joins the pipeline at the first ("New Lead") stage.
   if (lifecycle && LEAD_LIFECYCLES.has(lifecycle)) {
-    await ensureLeadDeal({ name: company.name, companyId: company.id }).catch(() => {});
+    await ensureLeadDeal({
+      name: company.name,
+      companyId: company.id,
+      contactId: contact?.id,
+    }).catch(() => {});
   }
   return { company, contact };
 }
@@ -1443,6 +1471,29 @@ async function attachDealCompanyNames(deals: Deal[]): Promise<void> {
   if (ids.length === 0) return;
   const map = await companyNameMap(ids);
   for (const d of deals) if (d.companyId) d.companyName = map.get(d.companyId);
+}
+
+/** Attach the linked contact's name + email so a card can show and open the person. */
+async function attachDealContactMeta(deals: Deal[]): Promise<void> {
+  const unique = [...new Set(deals.map((d) => d.contactId).filter((x): x is string => !!x))];
+  if (unique.length === 0) return;
+  const F = FIELDS.contacts;
+  const records = await listRecords(AIRTABLE_BASE_ID, TABLES.contacts, {
+    ...(unique.length <= ID_FILTER_MAX
+      ? { filterByFormula: idFormula(unique), maxRecords: unique.length }
+      : { maxRecords: LIST_CAP }),
+    fields: [F.name, F.email],
+  });
+  const map = new Map(
+    records.map((r) => [r.id, { name: str(r.fields[F.name]) ?? "", email: str(r.fields[F.email]) }]),
+  );
+  for (const d of deals) {
+    const m = d.contactId ? map.get(d.contactId) : undefined;
+    if (m) {
+      d.contactName = m.name;
+      d.contactEmail = m.email;
+    }
+  }
 }
 
 // --- contact re-linking (reunite orphaned contacts with their account) -----

@@ -1,4 +1,10 @@
-import { activityRecency, getPipelineStages, listCompanies, listDeals } from "@/lib/crm/data";
+import {
+  activityRecency,
+  getPipelineStages,
+  listCompanies,
+  listDeals,
+  listEmailTemplates,
+} from "@/lib/crm/data";
 import { computeForecast } from "@/lib/crm/pipeline";
 import { bustCache } from "@/lib/cache";
 import { PipelineView } from "@/components/pipeline-view";
@@ -10,11 +16,12 @@ export default async function PipelinePage() {
   // stage list without a just-added lane) is very visible. Read fresh every load
   // rather than risk the ~20s instance cache; correctness beats the small cost here.
   bustCache();
-  const [deals, companies, recency, stages] = await Promise.all([
+  const [deals, companies, recency, stages, templates] = await Promise.all([
     listDeals(),
     listCompanies(),
     activityRecency(),
     getPipelineStages(),
+    listEmailTemplates(),
   ]);
   const companyOptions = companies.map((c) => ({ id: c.id, name: c.name }));
   const forecast = computeForecast(deals, stages, { recency });
@@ -25,6 +32,7 @@ export default async function PipelinePage() {
       recency={recency}
       initialStages={stages}
       forecast={forecast}
+      templates={templates}
     />
   );
 }

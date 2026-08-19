@@ -105,6 +105,7 @@ export async function enrollContact(
   await noteLeadNextStep({
     name: contact.name || "",
     companyId: contact.companyId,
+    contactId,
     nextStep:
       firstDelay > 0
         ? `In sequence "${sequence.name}" — email 1 of ${sequence.steps.length} on ${nextSendAt.slice(0, 10)}`
@@ -179,6 +180,7 @@ export async function startDripAfterSend(opts: {
   await noteLeadNextStep({
     name: contact.name || "",
     companyId: opts.companyId ?? contact.companyId,
+    contactId: opts.contactId,
     nextStep: `In drip "${sequence.name}" — intro sent, follow-ups scheduled`,
   }).catch((e) => console.error("[sequence-engine] note next step failed:", e));
 
@@ -387,6 +389,7 @@ async function processEnrollment(
   await advanceNurtureDeal({
     name: contact.name || "",
     companyId: enrollment.companyId,
+    contactId: enrollment.contactId,
     emailNumber: enrollment.stepIndex + 1,
     totalEmails: sequence.steps.length,
   }).catch((e) => console.error("[sequence-engine] nurture advance failed:", e));

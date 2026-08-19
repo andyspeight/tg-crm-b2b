@@ -260,6 +260,7 @@ export const FIELDS = {
     nextStep: "Next Step",
     nextStepDate: "Next Step Date",
     company: "Company",
+    contact: "Contact",
   },
   activities: {
     summary: "Summary",

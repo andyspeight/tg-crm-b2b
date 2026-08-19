@@ -18,9 +18,11 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/client";
 import { STAGE_COLORS, STAGE_KINDS } from "@/lib/crm/config";
-import type { Deal, PipelineStage, StageKind } from "@/lib/crm/types";
+import type { Contact, Deal, EmailTemplate, PipelineStage, StageKind } from "@/lib/crm/types";
 import type { PipelineForecast } from "@/lib/crm/pipeline";
 import { PipelineForecastPanel } from "@/components/pipeline-forecast";
+import { ContactEmailsDrawer } from "@/components/contact-emails-drawer";
+import { SendComposer } from "@/components/send-composer";
 import { dealFlag } from "@/lib/deal-flags";
 import {
   Button,
@@ -78,15 +80,21 @@ export function PipelineView({
   recency,
   initialStages,
   forecast,
+  templates,
 }: {
   initial: Deal[];
   companies: CompanyOption[];
   recency: { byDeal: Record<string, string>; byCompany: Record<string, string> };
   initialStages: PipelineStage[];
   forecast: PipelineForecast;
+  templates: EmailTemplate[];
 }) {
   const [deals, setDeals] = useState<Deal[]>(initial);
   const [stages, setStages] = useState<PipelineStage[]>(initialStages);
+  const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
+  const [emailContact, setEmailContact] = useState<Contact | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
   const [view, setView] = useState<"board" | "table">(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("view") === "table"
@@ -112,16 +120,33 @@ export function PipelineView({
   const colorByName = useMemo(() => new Map(stages.map((s) => [s.name, asColor(s.color)])), [stages]);
   const kindByName = useMemo(() => new Map(stages.map((s) => [s.name, s.kind])), [stages]);
 
+  const owners = useMemo(
+    () => [...new Set(deals.map((d) => d.owner).filter((x): x is string => !!x))].sort(),
+    [deals],
+  );
+  const sources = useMemo(
+    () => [...new Set(deals.map((d) => d.source).filter((x): x is NonNullable<typeof x> => !!x))].sort(),
+    [deals],
+  );
+  const filteredDeals = useMemo(
+    () =>
+      deals.filter(
+        (d) =>
+          (!ownerFilter || d.owner === ownerFilter) && (!sourceFilter || d.source === sourceFilter),
+      ),
+    [deals, ownerFilter, sourceFilter],
+  );
+
   const byStage = useMemo(() => {
     const map = new Map<string, Deal[]>();
     for (const s of stages) map.set(s.name, []);
     const first = stages[0]?.name;
-    for (const d of deals) {
+    for (const d of filteredDeals) {
       if (d.stage && map.has(d.stage)) map.get(d.stage)!.push(d);
       else if (first) map.get(first)!.push(d);
     }
     return map;
-  }, [deals, stages]);
+  }, [filteredDeals, stages]);
 
   async function moveDeal(id: string, stage: string) {
     const deal = deals.find((d) => d.id === id);
@@ -243,7 +268,7 @@ export function PipelineView({
 
       <PipelineForecastPanel forecast={forecast} />
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
         <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-[13px] shadow-card">
           <button
             type="button"
@@ -266,6 +291,53 @@ export function PipelineView({
             <Rows3 size={15} strokeWidth={1.9} /> Table
           </button>
         </div>
+
+        {owners.length > 0 ? (
+          <div className="w-40">
+            <Select
+              value={ownerFilter}
+              onChange={(e) => setOwnerFilter(e.target.value)}
+              aria-label="Filter by owner"
+              className="h-9 text-[13px]"
+            >
+              <option value="">All owners</option>
+              {owners.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {sources.length > 0 ? (
+          <div className="w-44">
+            <Select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              aria-label="Filter by source"
+              className="h-9 text-[13px]"
+            >
+              <option value="">All sources</option>
+              {sources.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {ownerFilter || sourceFilter ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setOwnerFilter("");
+              setSourceFilter("");
+            }}
+          >
+            Clear
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -341,6 +413,10 @@ export function PipelineView({
                           (d.companyId ? recency.byCompany[d.companyId] : undefined) ||
                           d.createdTime
                         }
+                        lastContact={
+                          recency.byDeal[d.id] ||
+                          (d.companyId ? recency.byCompany[d.companyId] : undefined)
+                        }
                         dragging={dragging === d.id}
                         onDragStart={(e) => {
                           e.dataTransfer.setData("text/plain", d.id);
@@ -350,6 +426,7 @@ export function PipelineView({
                         onDragEnd={() => setDragging(null)}
                         onStageChange={(s) => moveDeal(d.id, s)}
                         onEdit={() => setEditing(d)}
+                        onOpenContact={setDrawerContactId}
                       />
                     );
                   })
@@ -362,10 +439,11 @@ export function PipelineView({
       ) : (
         <div className="mt-4">
           <DealsTable
-            deals={deals}
+            deals={filteredDeals}
             stageNames={stageNames}
             onEdit={(d) => setEditing(d)}
             onDelete={removeDeal}
+            onOpenContact={setDrawerContactId}
           />
         </div>
       )}
@@ -406,6 +484,29 @@ export function PipelineView({
         onClose={() => setManaging(false)}
         onSave={saveStages}
       />
+
+      {emailContact ? (
+        <SendComposer
+          onClose={() => setEmailContact(null)}
+          contacts={[emailContact]}
+          templates={templates}
+          defaultContactId={emailContact.id}
+          onSent={async () => {
+            await refreshDeals();
+          }}
+        />
+      ) : null}
+
+      <ContactEmailsDrawer
+        contactId={drawerContactId}
+        companies={companies}
+        onClose={() => setDrawerContactId(null)}
+        onReply={(c) => {
+          setDrawerContactId(null);
+          setEmailContact(c);
+        }}
+        onChanged={refreshDeals}
+      />
     </div>
   );
 }
@@ -417,11 +518,13 @@ function DealCard({
   stageNames,
   isClosed,
   lastActivity,
+  lastContact,
   dragging,
   onDragStart,
   onDragEnd,
   onStageChange,
   onEdit,
+  onOpenContact,
 }: {
   deal: Deal;
   index: number;
@@ -429,13 +532,17 @@ function DealCard({
   stageNames: string[];
   isClosed: boolean;
   lastActivity?: string;
+  lastContact?: string;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onStageChange: (stage: string) => void;
   onEdit: () => void;
+  onOpenContact?: (contactId: string) => void;
 }) {
   const flag = dealFlag(deal, lastActivity, isClosed);
+  const openPerson = deal.contactId && onOpenContact ? () => onOpenContact(deal.contactId!) : null;
+  const isDripNote = !!deal.nextStep && /^(nurture|in sequence|in drip)/i.test(deal.nextStep);
 
   return (
     <div
@@ -452,8 +559,8 @@ function DealCard({
         <div className="min-w-0 flex-1">
           <button
             type="button"
-            onClick={onEdit}
-            title="Edit this deal"
+            onClick={openPerson ?? onEdit}
+            title={openPerson ? "Open this person" : "Edit this deal"}
             className="block w-full truncate text-left text-[13px] font-medium leading-snug text-fg hover:text-accent-strong focus-visible:text-accent-strong focus-visible:outline-none"
           >
             {deal.name || "Untitled"}
@@ -465,7 +572,7 @@ function DealCard({
             >
               {deal.companyName || "Company"}
             </Link>
-          ) : (
+          ) : deal.contactId ? null : (
             <button
               type="button"
               onClick={onEdit}
@@ -474,6 +581,16 @@ function DealCard({
               <Link2 size={12} strokeWidth={2} /> Link company
             </button>
           )}
+          {deal.contactEmail ? (
+            <button
+              type="button"
+              onClick={openPerson ?? onEdit}
+              title={deal.contactEmail}
+              className="mt-0.5 block max-w-full truncate text-left text-[11.5px] text-fg-subtle hover:text-accent-strong"
+            >
+              {deal.contactEmail}
+            </button>
+          ) : null}
         </div>
         <IconButton
           label="Edit deal"
@@ -505,12 +622,19 @@ function DealCard({
       </div>
 
       {deal.nextStep ? (
-        <p className="mt-2 truncate text-[11.5px] text-fg-muted" title={deal.nextStep}>
+        <p
+          className={cn("mt-2 truncate text-[11.5px]", isDripNote ? "text-accent-strong" : "text-fg-muted")}
+          title={deal.nextStep}
+        >
           {deal.nextStep}
           {deal.nextStepDate ? (
             <span className="tnum text-fg-subtle"> · {formatDate(deal.nextStepDate)}</span>
           ) : null}
         </p>
+      ) : null}
+
+      {lastContact ? (
+        <p className="mt-1 text-[11px] text-fg-subtle">Last contact {formatDate(lastContact)}</p>
       ) : null}
 
       <div className="relative mt-2 flex items-center gap-1.5">
@@ -548,11 +672,13 @@ function DealsTable({
   stageNames,
   onEdit,
   onDelete,
+  onOpenContact,
 }: {
   deals: Deal[];
   stageNames: string[];
   onEdit: (d: Deal) => void;
   onDelete: (d: Deal) => void;
+  onOpenContact?: (contactId: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [stageFilter, setStageFilter] = useState("");
@@ -691,7 +817,20 @@ function DealsTable({
                       <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
                       <div className="flex items-center gap-3">
                         <Monogram name={d.companyName || d.name || "Untitled"} size="sm" tone="navy" />
-                        <span className="font-medium text-fg">{d.name || "Untitled"}</span>
+                        {d.contactId && onOpenContact ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenContact(d.contactId!);
+                            }}
+                            className="font-medium text-fg hover:text-accent-strong"
+                          >
+                            {d.name || "Untitled"}
+                          </button>
+                        ) : (
+                          <span className="font-medium text-fg">{d.name || "Untitled"}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
