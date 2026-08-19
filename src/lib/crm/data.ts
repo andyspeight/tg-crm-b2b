@@ -3061,7 +3061,12 @@ export async function loggedGmailMessageIds(): Promise<Set<string>> {
   const records = await listRecords(AIRTABLE_BASE_ID, TABLES.activities, {
     filterByFormula: `NOT({${F.gmailMessageId}}='')`,
     fields: [F.gmailMessageId],
-    maxRecords: 5000,
+    // This IS the inbox sync's duplicate guard, so it must be COMPLETE — any cap
+    // here silently lets every message beyond it be logged again on the next run
+    // (that's exactly how the base grew multiple copies of the same email). Bound
+    // high enough to page the whole activity log; revisit with per-contact dedup
+    // if the log ever approaches this.
+    maxRecords: 1_000_000,
   });
   const out = new Set<string>();
   for (const r of records) {
