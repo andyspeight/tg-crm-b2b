@@ -11,6 +11,7 @@ import {
   Database,
   HeartHandshake,
   Home,
+  Inbox,
   LogOut,
   Mail,
   Moon,
@@ -35,6 +36,7 @@ const WORKSPACE: Item[] = [
 ];
 
 const TOOLS: Item[] = [
+  { href: "/leads", label: "Inbox leads", icon: Inbox },
   { href: "/templates", label: "Email templates", icon: Mail },
   { href: "/meetings", label: "Meeting links", icon: CalendarClock },
   { href: "/sequences", label: "Sequences", icon: Send },

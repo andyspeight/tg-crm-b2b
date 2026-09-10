@@ -48,6 +48,7 @@ import type {
   CompanyInput,
   Contact,
   ContactInput,
+  ContactStatus,
   Deal,
   DealInput,
   EmailAttachment,
@@ -1423,6 +1424,10 @@ export async function quickAddPerson(input: {
   companyName: string;
   packageTier?: string;
   lifecycleStage?: string;
+  /** Provenance for the created contact (e.g. "Gmail" for an inbox lead). */
+  source?: string;
+  /** The person's own lead/customer status. */
+  contactStatus?: ContactStatus;
 }): Promise<{ company: Company; contact: Contact | null }> {
   const companyName = (input.companyName || "").trim();
   if (!companyName) throw new ValidationError("Company name is required");
@@ -1452,6 +1457,8 @@ export async function quickAddPerson(input: {
       email: text(input.email) ?? undefined,
       phone: text(input.phone) ?? undefined,
       companyId: company.id,
+      ...(input.source ? { source: input.source } : {}),
+      ...(input.contactStatus ? { status: input.contactStatus } : {}),
     });
   }
 
@@ -1464,6 +1471,47 @@ export async function quickAddPerson(input: {
     }).catch(() => {});
   }
   return { company, contact };
+}
+
+// --- inbox leads (people you've emailed who aren't in the CRM yet) ----------
+
+/** Every email address already on a contact (primary + merged alternates), lowercased. */
+export async function allContactEmails(): Promise<Set<string>> {
+  const contacts = await listContacts({ limit: 5000 });
+  const set = new Set<string>();
+  for (const c of contacts) {
+    if (c.email) set.add(c.email.trim().toLowerCase());
+    for (const alt of c.alternateEmails ?? []) if (alt) set.add(alt.trim().toLowerCase());
+  }
+  return set;
+}
+
+const DISMISSED_LEADS_KEY = "dismissed_inbox_leads";
+
+/** Addresses the user has dismissed from the inbox-leads queue (so they don't reappear). */
+export async function getDismissedLeadEmails(): Promise<Set<string>> {
+  const raw = await getSetting(DISMISSED_LEADS_KEY).catch(() => null);
+  if (!raw) return new Set();
+  try {
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map((x) => String(x).trim().toLowerCase()).filter(Boolean) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Add addresses to the dismissed set (used on "not a lead" and after "add as lead"). */
+export async function dismissLeadEmails(emails: string[]): Promise<void> {
+  const cur = await getDismissedLeadEmails();
+  let changed = false;
+  for (const e of emails) {
+    const v = (e || "").trim().toLowerCase();
+    if (v && !cur.has(v)) {
+      cur.add(v);
+      changed = true;
+    }
+  }
+  if (changed) await setSetting(DISMISSED_LEADS_KEY, JSON.stringify([...cur]));
 }
 
 async function attachDealCompanyNames(deals: Deal[]): Promise<void> {
