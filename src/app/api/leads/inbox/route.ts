@@ -59,35 +59,57 @@ export async function POST(req: NextRequest) {
     if (action === "add") {
       const email = String(body.email || "").trim();
       const name = String(body.name || "").trim();
+      const linkCompanyId = String(body.companyId || "").trim();
       const companyName = String(body.company || body.companyName || "").trim();
+      // "lead" (default) → Prospect + a pipeline deal; "customer" → a customer
+      // contact, no deal. When linking to an existing company, an omitted `as`
+      // lets the person inherit that account's lifecycle.
+      const as = body.as === "customer" ? "customer" : body.as === "lead" ? "lead" : null;
       if (!email) {
         return NextResponse.json({ error: "An email address is required." }, { status: 400 });
       }
 
       let contactId: string | undefined;
       let companyId: string | undefined;
-      if (companyName) {
-        // Business-domain lead → company + contact + first-stage deal.
+
+      if (linkCompanyId) {
+        // Link to an existing account — inherit its lifecycle unless one was chosen.
+        const contact = await createContact({
+          name: name || email,
+          email,
+          companyId: linkCompanyId,
+          source: "Gmail",
+          ...(as ? { status: as === "customer" ? "Customer" : "Lead" } : {}),
+        });
+        contactId = contact.id;
+        companyId = linkCompanyId;
+        if (as === "lead") {
+          await ensureLeadDeal({ name: name || email, companyId, contactId }).catch(() => {});
+        }
+      } else if (companyName) {
+        // New company by name → company + contact (+ pipeline deal only for a lead).
         const r = await quickAddPerson({
           name: name || undefined,
           email,
           companyName,
-          lifecycleStage: "Prospect",
+          lifecycleStage: as === "customer" ? "Customer" : "Prospect",
           source: "Gmail",
-          contactStatus: "Lead",
+          contactStatus: as === "customer" ? "Customer" : "Lead",
         });
         companyId = r.company.id;
         contactId = r.contact?.id;
       } else {
-        // Free mailbox → company-less contact + a company-less first-stage deal.
+        // Free mailbox, no company → company-less contact (+ deal only for a lead).
         const contact = await createContact({
           name: name || email,
           email,
-          status: "Lead",
+          status: as === "customer" ? "Customer" : "Lead",
           source: "Gmail",
         });
         contactId = contact.id;
-        await ensureLeadDeal({ name: name || email, contactId }).catch(() => {});
+        if (as !== "customer") {
+          await ensureLeadDeal({ name: name || email, contactId }).catch(() => {});
+        }
       }
 
       // Once added, drop it from the queue so it doesn't resurface on the next scan.
