@@ -51,6 +51,7 @@ import type {
   ContactStatus,
   Deal,
   DealInput,
+  MarketingOptIn,
   EmailAttachment,
   EmailTemplate,
   EmailTemplateInput,
@@ -1512,6 +1513,46 @@ export async function dismissLeadEmails(emails: string[]): Promise<void> {
     }
   }
   if (changed) await setSetting(DISMISSED_LEADS_KEY, JSON.stringify([...cur]));
+}
+
+// --- bulk marketing opt-in capture ------------------------------------------
+
+export type OptInSegment = "all" | "customers" | "prospects";
+
+const isCustomerContact = (c: Contact) =>
+  c.status === "Customer" || c.companyLifecycle === "Customer";
+
+/**
+ * Record a marketing opt-in status across a segment of emailable contacts.
+ * Skips no-ops, and — the important safeguard — NEVER flips an explicit
+ * "Opted Out" back to "Opted In": a recorded objection is not ours to undo.
+ * Returns how many contacts were changed.
+ */
+export async function bulkSetMarketingOptIn(
+  segment: OptInSegment,
+  status: MarketingOptIn,
+): Promise<{ updated: number }> {
+  const F = FIELDS.contacts;
+  const contacts = await listContacts({ limit: 5000 });
+  const inSeg = (c: Contact) =>
+    segment === "customers" ? isCustomerContact(c) : segment === "prospects" ? !isCustomerContact(c) : true;
+
+  const targets = contacts.filter(
+    (c) =>
+      c.email &&
+      inSeg(c) &&
+      c.marketingOptIn !== status &&
+      !(status === "Opted In" && c.marketingOptIn === "Opted Out"),
+  );
+  if (targets.length === 0) return { updated: 0 };
+
+  await updateRecords(
+    AIRTABLE_BASE_ID,
+    TABLES.contacts,
+    targets.map((c) => ({ id: c.id, fields: { [F.marketingOptIn]: status } })),
+    { typecast: true },
+  );
+  return { updated: targets.length };
 }
 
 async function attachDealCompanyNames(deals: Deal[]): Promise<void> {
