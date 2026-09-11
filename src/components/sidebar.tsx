@@ -18,6 +18,7 @@ import {
   Radar,
   Send,
   Settings,
+  Share2,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -41,6 +42,7 @@ const TOOLS: Item[] = [
   { href: "/meetings", label: "Meeting links", icon: CalendarClock },
   { href: "/sequences", label: "Sequences", icon: Send },
   { href: "/performance", label: "Email performance", icon: BarChart3 },
+  { href: "/brevo", label: "Sync to Brevo", icon: Share2 },
   { href: "/signals", label: "Signals", icon: Radar },
   { href: "/digest", label: "Weekly digest", icon: Sparkles },
   { href: "/data", label: "Data health", icon: Database },
